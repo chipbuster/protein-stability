@@ -1,6 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
-import Lib
+import ParseProtherm
 
 main :: IO ()
-main = someFunc
+main = undefined

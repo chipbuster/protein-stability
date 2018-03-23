@@ -1,14 +1,15 @@
+{-# LANGUAGE OverloadedStrings #-}
 module ParseProtherm where
 
   import System.IO
   import Data.Text
-  import Text.Regex
+  import Data.Text.ICU
   import qualified Data.Map as Map
 
-
   -- Utility functions for unit-dependent data
-  data Concentration = ConcmM Double | ConcM Double
-  data Temperature = TempC Double | TempK Double
+  data Concentration = ConcmM Double | ConcM Double deriving (Read, Show, Eq)
+  data Temperature = TempC Double | TempK Double deriving (Read, Show, Eq)
+
 
   toC :: Temperature -> Double
   toC (TempC x) = x
@@ -19,7 +20,8 @@ module ParseProtherm where
   tomM (ConcM x) = 1000.0 * x
 
   -- Utility functions for percentages
-  data Percent = Percent Double | Decimal Double
+  data Percent = Percent Double | Decimal Double deriving (Read, Show, Eq)
+
   toDec :: Percent -> Double
   toDec (Percent x) = 0.01 * x
   toDec (Decimal x) = x

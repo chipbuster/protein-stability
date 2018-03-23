@@ -24,6 +24,10 @@ dependencies:
 
 library:
   source-dirs: src
+  dependencies:
+    - text-icu
+    - text
+    - containers
 
 executables:
   ParseProtherm-exe:
@@ -35,6 +39,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - ParseProtherm
+    - regex-compat
 
 tests:
   ParseProtherm-test:
