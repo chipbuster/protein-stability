@@ -1,5 +1,4 @@
-
-# Created by https://www.gitignore.io/api/vim,c++,linux,cmake,emacs,python,jupyternotebook
+# Created by https://www.gitignore.io/api/vim,c++,linux,emacs,cmake,python,haskell,jupyternotebook,visualstudiocode
 
 ### C++ ###
 # Prerequisites
@@ -113,6 +112,27 @@ company-statistics-cache.el
 # anaconda-mode
 anaconda-mode/
 
+### Haskell ###
+dist
+dist-*
+cabal-dev
+*.hi
+*.chi
+*.chs.h
+*.dyn_o
+*.dyn_hi
+.hpc
+.hsenv
+.cabal-sandbox/
+cabal.sandbox.config
+*.prof
+*.aux
+*.hp
+*.eventlog
+.stack-work/
+cabal.project.local
+.HTF/
+
 ### JupyterNotebook ###
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
@@ -175,6 +195,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.pytest_cache/
 nosetests.xml
 coverage.xml
 *.cover
@@ -183,10 +204,6 @@ coverage.xml
 # Translations
 *.mo
 *.pot
-
-# Django stuff:
-*.log
-local_settings.py
 
 # Flask stuff:
 instance/
@@ -207,7 +224,7 @@ target/
 .python-version
 
 # celery beat schedule file
-celerybeat-schedule
+celerybeat-schedule.*
 
 # SageMath parsed files
 *.sage.py
@@ -236,10 +253,8 @@ venv.bak/
 
 ### Vim ###
 # swap
-[._]*.s[a-v][a-z]
-[._]*.sw[a-p]
-[._]s[a-v][a-z]
-[._]sw[a-p]
+.sw[a-p]
+.*.sw[a-p]
 # session
 Session.vim
 # temporary
@@ -247,4 +262,12 @@ Session.vim
 # auto-generated tag files
 tags
 
-# End of https://www.gitignore.io/api/vim,c++,linux,cmake,emacs,python,jupyternotebook
+### VisualStudioCode ###
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history
+
+# End of https://www.gitignore.io/api/vim,c++,linux,emacs,cmake,python,haskell,jupyternotebook,visualstudiocode
