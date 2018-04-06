@@ -36,8 +36,8 @@ module ParseProtherm where
 
     return = pure
 
-  emptyPattern = regex [] "([A-Z]+).*"          -- Match line with no data
-  linePattern = regex [] "([A-Z]+) *([^\\s].*)" -- Match line with data
+  emptyPattern = regex [] "([A-Z_]+).*"          -- Match line with no data
+  linePattern = regex [] "([A-Z_\\.]+) +([^\\s].*)" -- Match line with data
   headerPattern = regex [] "\\*+ .* \\*+"         -- Match section header
 
   -- Clean off trailing commas and any leading/trailing whitespace
@@ -45,8 +45,8 @@ module ParseProtherm where
   clean = strip . dropWhileEnd (==',')
 
   -- Attempt to parse a line and add to an existing PTEntry
-  tryParseEntry :: LineData -> ParseResult PTEntry -> ParseResult PTEntry
-  tryParseEntry (line, text) ptentry = 
+  tryParseLine :: LineData -> ParseResult PTEntry -> ParseResult PTEntry
+  tryParseLine (line, text) ptentry = 
     let lineMatchM = Re.find linePattern text 
     in if isJust lineMatchM
       {- If it matches an important line, parse the data -}
@@ -54,7 +54,7 @@ module ParseProtherm where
            in if groupCount match /= 2 
               then FatalError $ constructBadMatchMessage (line, text)
               else let get n = fromJust . Re.group n
-                   in Map.insert (get 0 match) (get 1 match) <$> ptentry
+                   in Map.insert (get 1 match) (get 2 match) <$> ptentry
 
        {- If it matches a non-important line, we can just return an empty match.
           Otherwise, it matches something unexcpected and an error should be
@@ -62,6 +62,10 @@ module ParseProtherm where
        else if isJust (Re.find emptyPattern text) || isJust (Re.find headerPattern text)
             then return Map.empty
             else FatalError $ constructBadMatchMessage (line,text)
+
+  -- Attempt to parse a full protherm entry
+  tryParseProtherm :: [LineData] -> ParseResult PTEntry
+  tryParseProtherm = Prelude.foldr tryParseLine (return Map.empty)
 
   constructBadMatchMessage :: LineData -> Text
   constructBadMatchMessage (line, text) = 

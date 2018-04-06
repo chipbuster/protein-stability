@@ -40,6 +40,8 @@ executables:
     dependencies:
     - ParseProtherm
     - regex-compat
+    - text
+    - split
 
 tests:
   ParseProtherm-test:
