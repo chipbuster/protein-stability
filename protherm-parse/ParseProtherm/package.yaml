@@ -24,6 +24,9 @@ dependencies:
 
 library:
   source-dirs: src
+  ghc-options:
+  - -Wall
+  - -O1
   dependencies:
     - text-icu
     - text
@@ -37,6 +40,8 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -Wall
+    - -O1
     dependencies:
     - ParseProtherm
     - regex-compat

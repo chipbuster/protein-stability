@@ -1,24 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 module ParseProtherm where
 
-  import System.IO
   import Data.Text as Tx
   import Data.Text.ICU as Re
   import qualified Data.Map as Map
   import Data.Maybe (fromJust, isJust)
-  import Debug.Trace
+  import Debug.Trace (trace)
 
   type PTEntry = Map.Map Text Text
 
-  type LineData = (Integer, Text)
+  type LineData = (Int, Text)
 
   data ParseResult a = FatalError Text
                      | Error Text
                      | Success a deriving (Show, Eq)
 
   instance Functor ParseResult where
-    fmap f (FatalError x) = FatalError x
-    fmap f (Error x) = Error x
+    fmap _ (FatalError x) = FatalError x
+    fmap _ (Error x) = Error x
     fmap f (Success s) = Success (f s)
 
   instance Applicative ParseResult where
@@ -45,13 +44,31 @@ module ParseProtherm where
   isSuccess (Success _) = True
   isSuccess _ = False
 
+  emptyPattern :: Re.Regex 
+  linePattern :: Re.Regex 
+  headerPattern :: Re.Regex 
+  contPattern :: Re.Regex
+
   emptyPattern = regex [] "^([a-zA-Z_]+).*$"          -- Match line with no data
-  linePattern = regex [] "^([a-zA-Z_\\.]+) +([^\\s].*)$" -- Match line with data
-  headerPattern = regex [] "\\*{5}.*\\*+"         -- Match section header
+  linePattern = regex [] "^([a-zA-Z_\\.]+) +([^\\s].*)$"-- Match line with data
+  headerPattern = regex [] "\\*{5}.*\\*+"    -- Match section header
+  contPattern = regex [] "^ +.*"           -- Match continuation line
 
   -- Clean off trailing commas and any leading/trailing whitespace
   clean :: Text -> Text
   clean = strip . dropWhileEnd (==',')
+
+  -- Join together any continuation lines
+  joinContLines :: [LineData] -> [LineData]
+  joinContLines [] = []
+  joinContLines [x] = [x]
+  joinContLines (x:y:xs) = if (isJust $ Re.find contPattern t2)
+                             then joined:(joinContLines (joined:xs))
+                             else x:(joinContLines (y:xs))
+    where
+      (n1,t1) = x
+      (_,t2) = y
+      joined = (n1, t1 `mappend` " " `mappend` clean t2)
 
   -- Attempt to parse a line and add to an existing PTEntry
   tryParseLine :: LineData -> ParseResult PTEntry -> ParseResult PTEntry

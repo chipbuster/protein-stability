@@ -30,19 +30,21 @@ main = do
     h <- openFile filePath ReadMode
     hSetEncoding h char8
     fileContents <- TxIO.hGetContents h
-    let lines = (map clean . Tx.splitOn "\n") fileContents
+    let contents = Tx.splitOn "\n" fileContents
 
-    -- Number lines
-    let lineContents = zipWith (,) [1..] lines
+    -- Number lines and join continuation lines
+    let lineContentsR = zipWith (,) [1..] contents
+    let lineContents = joinContLines lineContentsR
+    let cleanContents = (fmap . fmap) clean lineContents
 
     -- Break into individual entries
-    let entryLines = splitWhen ((==) "//" . snd) lineContents
+    let entryLines = splitWhen ((==) "//" . snd) cleanContents
 
     -- Attempt to parse each entry
     let results = map tryParseProtherm entryLines
 
     -- Display all errors
-    -- print $ filter (not . isSuccess) results
+    (print . take 10 . filter (not . isSuccess)) results
 
     let cleanResults = (filter isJust . map fromSuccess) results
 
