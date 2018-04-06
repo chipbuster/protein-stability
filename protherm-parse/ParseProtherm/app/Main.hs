@@ -13,6 +13,9 @@ import System.Environment (getArgs, getProgName)
 import System.Exit
 import System.IO
 import Control.Monad (when)
+import Data.Aeson
+import Data.Maybe (isJust)
+import qualified Data.ByteString.Lazy as B
 
 main :: IO ()
 main = do
@@ -27,10 +30,10 @@ main = do
     h <- openFile filePath ReadMode
     hSetEncoding h char8
     fileContents <- TxIO.hGetContents h
-    let lines = Tx.splitOn "\n" fileContents
+    let lines = (map clean . Tx.splitOn "\n") fileContents
 
     -- Number lines
-    let lineContents = zipWith (,) [0..] lines
+    let lineContents = zipWith (,) [1..] lines
 
     -- Break into individual entries
     let entryLines = splitWhen ((==) "//" . snd) lineContents
@@ -38,8 +41,14 @@ main = do
     -- Attempt to parse each entry
     let results = map tryParseProtherm entryLines
 
-    print $ take 10 results
-    return ()
+    -- Display all errors
+    -- print $ filter (not . isSuccess) results
 
+    let cleanResults = (filter isJust . map fromSuccess) results
+
+    -- Dump results
+    let outPath = "ProTherm.json"
+    let jsonResults = encode cleanResults
+    B.writeFile outPath jsonResults
 
 

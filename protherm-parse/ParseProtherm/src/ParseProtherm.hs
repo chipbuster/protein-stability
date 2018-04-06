@@ -6,6 +6,7 @@ module ParseProtherm where
   import Data.Text.ICU as Re
   import qualified Data.Map as Map
   import Data.Maybe (fromJust, isJust)
+  import Debug.Trace
 
   type PTEntry = Map.Map Text Text
 
@@ -36,9 +37,17 @@ module ParseProtherm where
 
     return = pure
 
-  emptyPattern = regex [] "([A-Z_]+).*"          -- Match line with no data
-  linePattern = regex [] "([A-Z_\\.]+) +([^\\s].*)" -- Match line with data
-  headerPattern = regex [] "\\*+ .* \\*+"         -- Match section header
+  fromSuccess :: ParseResult a -> Maybe a
+  fromSuccess (Success a) = Just a
+  fromSuccess _ = Nothing
+
+  isSuccess :: ParseResult a -> Bool
+  isSuccess (Success _) = True
+  isSuccess _ = False
+
+  emptyPattern = regex [] "^([a-zA-Z_]+).*$"          -- Match line with no data
+  linePattern = regex [] "^([a-zA-Z_\\.]+) +([^\\s].*)$" -- Match line with data
+  headerPattern = regex [] "\\*{5}.*\\*+"         -- Match section header
 
   -- Clean off trailing commas and any leading/trailing whitespace
   clean :: Text -> Text
@@ -60,7 +69,7 @@ module ParseProtherm where
           Otherwise, it matches something unexcpected and an error should be
           raised -}
        else if isJust (Re.find emptyPattern text) || isJust (Re.find headerPattern text)
-            then return Map.empty
+            then ptentry
             else FatalError $ constructBadMatchMessage (line,text)
 
   -- Attempt to parse a full protherm entry
@@ -70,4 +79,4 @@ module ParseProtherm where
   constructBadMatchMessage :: LineData -> Text
   constructBadMatchMessage (line, text) = 
     "Error on line " `mappend` Tx.pack (show line) `mappend` ": could not match"
-    `mappend` "line to any known pattern, line was " `mappend` text
+    `mappend` " line to any known pattern, line was " `mappend` text

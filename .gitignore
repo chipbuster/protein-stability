@@ -271,3 +271,5 @@ tags
 .history
 
 # End of https://www.gitignore.io/api/vim,c++,linux,emacs,cmake,python,haskell,jupyternotebook,visualstudiocode
+
+*.json

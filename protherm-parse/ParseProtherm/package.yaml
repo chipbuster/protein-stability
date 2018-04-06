@@ -42,6 +42,8 @@ executables:
     - regex-compat
     - text
     - split
+    - aeson
+    - bytestring
 
 tests:
   ParseProtherm-test:
