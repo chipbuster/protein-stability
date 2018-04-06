@@ -2,62 +2,68 @@
 module ParseProtherm where
 
   import System.IO
-  import Data.Text
-  import Data.Text.ICU
+  import Data.Text as Tx
+  import Data.Text.ICU as Re
   import qualified Data.Map as Map
+  import Data.Maybe (fromJust, isJust)
 
-  -- Utility functions for unit-dependent data
-  data Concentration = ConcmM Double | ConcM Double deriving (Read, Show, Eq)
-  data Temperature = TempC Double | TempK Double deriving (Read, Show, Eq)
+  type PTEntry = Map.Map Text Text
 
+  type LineData = (Integer, Text)
 
-  toC :: Temperature -> Double
-  toC (TempC x) = x
-  toC (TempK x) = 273.15 + x
+  data ParseResult a = FatalError Text
+                     | Error Text
+                     | Success a deriving (Show, Eq)
 
-  tomM :: Concentration -> Double
-  tomM (ConcmM x) = x
-  tomM (ConcM x) = 1000.0 * x
+  instance Functor ParseResult where
+    fmap f (FatalError x) = FatalError x
+    fmap f (Error x) = Error x
+    fmap f (Success s) = Success (f s)
 
-  -- Utility functions for percentages
-  data Percent = Percent Double | Decimal Double deriving (Read, Show, Eq)
+  instance Applicative ParseResult where
+    pure = Success
+    _ <*> (FatalError x) = FatalError x
+    (FatalError x) <*> _ = FatalError x
+    Error x <*> _ = Error x
+    _ <*> Error x = Error x
+    (Success f) <*> (Success x) = Success (f x)
 
-  toDec :: Percent -> Double
-  toDec (Percent x) = 0.01 * x
-  toDec (Decimal x) = x
+  instance Monad ParseResult where
+    r1 >>= f = case r1 of
+      (FatalError x) -> FatalError x
+      (Error x) -> Error x
+      (Success s) -> f s
 
-  data SSInf = SSInf { name :: Text
-                     , source :: Text
-                     , length :: Integer
-                     , weight :: Double
-                     , other :: Map.Map Text Text
-  }
+    return = pure
 
-  data ExpCond = ExpCond { measure :: Text
-                         , method :: Text
-                         , temp :: Maybe Temperature
-                         , names :: Map.Map Text Text
-                         , concs :: Map.Map Text Concentration
-                         }
-  
-  data Lit = Lit { kwords :: [Text]
-                 , reference :: Text
-                 , author :: [Text]
-                 , remarks :: [Text]
-                 , related :: [Integer]
-  }
+  emptyPattern = regex [] "([A-Z]+).*"          -- Match line with no data
+  linePattern = regex [] "([A-Z]+) *([^\\s].*)" -- Match line with data
+  headerPattern = regex [] "\\*+ .* \\*+"         -- Match section header
 
-  data ThermData = ThermData { reversibility :: Maybe Text
-                   , state :: Maybe Integer
-                   , activities :: Map.Map Text Percent
-                   , consts :: Map.Map Text Double
-                   }
+  -- Clean off trailing commas and any leading/trailing whitespace
+  clean :: Text -> Text
+  clean = strip . dropWhileEnd (==',')
 
-  data PTEntry = Entry {
-                        id :: Integer 
-                       ,ssInfo :: SSInf 
-                       ,expCond :: ExpCond 
-                       ,thermData :: ThermData
-                       ,litInfo :: Lit
-                       }
+  -- Attempt to parse a line and add to an existing PTEntry
+  tryParseEntry :: LineData -> ParseResult PTEntry -> ParseResult PTEntry
+  tryParseEntry (line, text) ptentry = 
+    let lineMatchM = Re.find linePattern text 
+    in if isJust lineMatchM
+      {- If it matches an important line, parse the data -}
+       then let match = fromJust lineMatchM 
+           in if groupCount match /= 2 
+              then FatalError $ constructBadMatchMessage (line, text)
+              else let get n = fromJust . Re.group n
+                   in Map.insert (get 0 match) (get 1 match) <$> ptentry
 
+       {- If it matches a non-important line, we can just return an empty match.
+          Otherwise, it matches something unexcpected and an error should be
+          raised -}
+       else if isJust (Re.find emptyPattern text) || isJust (Re.find headerPattern text)
+            then return Map.empty
+            else FatalError $ constructBadMatchMessage (line,text)
+
+  constructBadMatchMessage :: LineData -> Text
+  constructBadMatchMessage (line, text) = 
+    "Error on line " `mappend` Tx.pack (show line) `mappend` ": could not match"
+    `mappend` "line to any known pattern, line was " `mappend` text
