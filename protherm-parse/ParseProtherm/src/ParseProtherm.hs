@@ -2,98 +2,91 @@
 module ParseProtherm where
 
   import Data.Text as Tx
-  import Data.Text.ICU as Re
+  import Data.Attoparsec.Text as P
+  
   import qualified Data.Map as Map
-  import Data.Maybe (fromJust, isJust)
-  import Debug.Trace (trace)
+--  import Debug.Trace (trace)
+  import Data.Char (isSpace)
+  import Control.Applicative ((<|>))
 
-  type PTEntry = Map.Map Text Text
+  import Data.Aeson (toJSON)
+  import Data.Aeson.Types (ToJSON)
 
-  type LineData = (Int, Text)
+  type Unit = Text  -- E.g. meters, pounds, millimolar
+  type Label = Text
 
-  data ParseResult a = FatalError Text
-                     | Error Text
-                     | Success a deriving (Show, Eq)
+  data PTValue = VEmpty
+               | VText Text
+               | VNum Double
+               | VRelated [Int]
+               | VId Int
+                 deriving (Show, Ord, Eq)
 
-  instance Functor ParseResult where
-    fmap _ (FatalError x) = FatalError x
-    fmap _ (Error x) = Error x
-    fmap f (Success s) = Success (f s)
+  instance ToJSON PTValue where
+    toJSON (VText a) = toJSON a
+    toJSON (VNum a) = toJSON a
+    toJSON (VRelated a) = toJSON a
+    toJSON (VId a) = toJSON a
+    toJSON (VEmpty) = ""
 
-  instance Applicative ParseResult where
-    pure = Success
-    _ <*> (FatalError x) = FatalError x
-    (FatalError x) <*> _ = FatalError x
-    Error x <*> _ = Error x
-    _ <*> Error x = Error x
-    (Success f) <*> (Success x) = Success (f x)
+  type PTEntry = Map.Map Label PTValue
 
-  instance Monad ParseResult where
-    r1 >>= f = case r1 of
-      (FatalError x) -> FatalError x
-      (Error x) -> Error x
-      (Success s) -> f s
+  getName :: Parser Label
+  getName = P.takeWhile (not . isSpace)
 
-    return = pure
+  getVText :: Parser Text
+  getVText = P.takeWhile isSpace >> P.takeTill isEndOfLine
 
-  fromSuccess :: ParseResult a -> Maybe a
-  fromSuccess (Success a) = Just a
-  fromSuccess _ = Nothing
+  getVNum :: Parser Double
+  getVNum = double <* endOfInput
 
-  isSuccess :: ParseResult a -> Bool
-  isSuccess (Success _) = True
-  isSuccess _ = False
+  vRelH :: Parser [Int]
+  vRelH = getVRelated <|> return []
 
-  emptyPattern :: Re.Regex 
-  linePattern :: Re.Regex 
-  headerPattern :: Re.Regex 
-  contPattern :: Re.Regex
+  getVRelated :: Parser [Int]
+  getVRelated = do
+    first <- decimal
+    _ <- takeWhile1 (== ',')
+    rest <- vRelH
+    return (first : rest)
 
-  emptyPattern = regex [] "^([a-zA-Z_]+).*$"          -- Match line with no data
-  linePattern = regex [] "^([a-zA-Z_\\.]+) +([^\\s].*)$"-- Match line with data
-  headerPattern = regex [] "\\*{5}.*\\*+"    -- Match section header
-  contPattern = regex [] "^ +.*"           -- Match continuation line
+  getVId :: Parser Int
+  getVId = do
+    x <- decimal
+    endOfInput
+    return x
 
-  -- Clean off trailing commas and any leading/trailing whitespace
-  clean :: Text -> Text
-  clean = strip . dropWhileEnd (==',')
+  parseLine :: Parser (Label, PTValue)
+  parseLine = do
+    label <- getName
+    skipSpace
+    value <- (P.takeWhile isSpace >> endOfInput >> return VEmpty)
+             <|> fmap VRelated getVRelated
+             <|> fmap VNum getVNum
+             <|> fmap VText getVText
+             <|> fmap VId getVId
+    return (label, value)
 
-  -- Join together any continuation lines
-  joinContLines :: [LineData] -> [LineData]
-  joinContLines [] = []
-  joinContLines [x] = [x]
-  joinContLines (x:y:xs) = if (isJust $ Re.find contPattern t2)
-                             then joined:(joinContLines (joined:xs))
-                             else x:(joinContLines (y:xs))
-    where
-      (n1,t1) = x
-      (_,t2) = y
-      joined = (n1, t1 `mappend` " " `mappend` clean t2)
+  tryParseLine :: Text -> Either Text (Label, PTValue)
+  tryParseLine x = 
+   case parseOnly parseLine x of
+    Left msg -> Left $ Tx.pack msg
+    Right result -> Right result
 
-  -- Attempt to parse a line and add to an existing PTEntry
-  tryParseLine :: LineData -> ParseResult PTEntry -> ParseResult PTEntry
-  tryParseLine (line, text) ptentry = 
-    let lineMatchM = Re.find linePattern text 
-    in if isJust lineMatchM
-      {- If it matches an important line, parse the data -}
-       then let match = fromJust lineMatchM 
-           in if groupCount match /= 2 
-              then FatalError $ constructBadMatchMessage (line, text)
-              else let get n = fromJust . Re.group n
-                   in Map.insert (get 1 match) (get 2 match) <$> ptentry
+  addLine :: Text -> Either Text PTEntry -> Either Text PTEntry
+  addLine _ (Left err) = Left err
+  addLine line (Right kvmap) = case tryParseLine line of
+    (Left err) -> Left err
+    (Right (name, val)) -> Right $ Map.insert name val kvmap
 
-       {- If it matches a non-important line, we can just return an empty match.
-          Otherwise, it matches something unexcpected and an error should be
-          raised -}
-       else if isJust (Re.find emptyPattern text) || isJust (Re.find headerPattern text)
-            then ptentry
-            else FatalError $ constructBadMatchMessage (line,text)
+  parseEntry :: [Text] -> Either Text PTEntry
+  parseEntry = Prelude.foldr addLine (Right Map.empty)
 
-  -- Attempt to parse a full protherm entry
-  tryParseProtherm :: [LineData] -> ParseResult PTEntry
-  tryParseProtherm = Prelude.foldr tryParseLine (return Map.empty)
-
-  constructBadMatchMessage :: LineData -> Text
-  constructBadMatchMessage (line, text) = 
-    "Error on line " `mappend` Tx.pack (show line) `mappend` ": could not match"
-    `mappend` " line to any known pattern, line was " `mappend` text
+  joinContinuationLines :: [Text] -> [Text]
+  joinContinuationLines []  = []
+  joinContinuationLines [x] = [x]
+  joinContinuationLines (x:y:xs) = 
+    if (isSpace $ Tx.head y) 
+    then (Tx.append x (clean y)) : joinContinuationLines xs
+    else joinContinuationLines (y:xs)
+    where clean = Tx.dropWhile isSpace

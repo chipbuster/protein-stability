@@ -4,18 +4,23 @@ module Main where
 
 import ParseProtherm
 
-import Data.List.Split (splitWhen)
-
 import qualified Data.Text as Tx
 import qualified Data.Text.IO as TxIO
+
+import Data.Aeson
+import qualified Data.ByteString.Lazy as B
+
+import qualified Data.Either as E
+import qualified Data.Map as Map
 
 import System.Environment (getArgs, getProgName)
 import System.Exit
 import System.IO
 import Control.Monad (when)
-import Data.Aeson
-import Data.Maybe (isJust)
-import qualified Data.ByteString.Lazy as B
+
+
+outputFName :: FilePath
+outputFName = "ProTherm.json"
 
 main :: IO ()
 main = do
@@ -30,27 +35,22 @@ main = do
     h <- openFile filePath ReadMode
     hSetEncoding h char8
     fileContents <- TxIO.hGetContents h
-    let contents = Tx.splitOn "\n" fileContents
+    let contents = (fmap (Tx.splitOn "\n") . Tx.splitOn "//\n") fileContents
+    let cleanContents = (fmap) (filter (not . Tx.null)) contents
+    let entries = (fmap (filter (\x -> Tx.take 5 x /= "*****")) . 
+                   fmap (filter (\x -> Tx.length x /= 0)) ) cleanContents
 
-    -- Number lines and join continuation lines
-    let lineContentsR = zipWith (,) [1..] contents
-    let lineContents = joinContLines lineContentsR
-    let cleanContents = (fmap . fmap) clean lineContents
+    let parsedEntries = map parseEntry entries
 
-    -- Break into individual entries
-    let entryLines = splitWhen ((==) "//" . snd) cleanContents
+    -- Show errors
+    mapM_ print $ E.lefts parsedEntries
+    
+    -- Write outputs
+    let outputs1 = E.rights parsedEntries
+    let outputs2 = map (Map.filter ((/=) VEmpty)) outputs1
 
-    -- Attempt to parse each entry
-    let results = map tryParseProtherm entryLines
+    B.writeFile outputFName $ encode outputs2
 
-    -- Display all errors
-    (print . take 10 . filter (not . isSuccess)) results
+    -- Print error messages from 
 
-    let cleanResults = (filter isJust . map fromSuccess) results
-
-    -- Dump results
-    let outPath = "ProTherm.json"
-    let jsonResults = encode cleanResults
-    B.writeFile outPath jsonResults
-
-
+    return ()

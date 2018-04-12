@@ -31,6 +31,8 @@ library:
     - text-icu
     - text
     - containers
+    - aeson
+    - attoparsec
 
 executables:
   ParseProtherm-exe:
@@ -49,6 +51,7 @@ executables:
     - split
     - aeson
     - bytestring
+    - containers
 
 tests:
   ParseProtherm-test:
