@@ -13,6 +13,14 @@ ed_per_pt = 3  # Avg. num. springs per anchor point.
 
 Config = namedtuple("Config", ["pos","edges","restlens"])
 
+def addGrad(c, gradient):
+    """ Add gradient to c.pos """
+    assert np.size(c.pos) == np.size(gradient)
+
+    for i in range(np.shape(c.pos)[0]):
+        c.pos[i,:] += gradient[3*i : 3*i + 3]
+    return
+
 def sampleEdges(npoints) -> List[Tuple[int]]:
     edgeList = []
     nedges = ed_per_pt * npoints
@@ -43,15 +51,15 @@ def compEnergy(c):
                           (np.array)
         - hess  : hessian matrix, all second-order derivatives of energy 
                           w.r.t. point positions (spsp.coo_matrix)
-        - mixd  : mixed derivatives, derivative of edgelengths w.r.t edges 
-                          (spsp.coo_matrix)
+        - mixd  : mixed derivatives, differential of individual edge's energy 
+                          w.r.t endpoints (spsp.coo_matrix)
 
-        in the struct (e, deriv, hess, jacb)
+        in the struct (e, deriv, hess, mixd)
     """
 
     npoints = c.pos.shape[0]
     nedges = c.edges.shape[0]
-    deriv = np.zeros((3 * npoints,1))
+    deriv = np.zeros(3 * npoints)
     hess = spsp.coo_matrix((3 * npoints, 3 * npoints))
     mixd = spsp.coo_matrix((3 * npoints, nedges))
 
@@ -61,24 +69,52 @@ def compEnergy(c):
         idx0 = c.edges[i,0]
         idx1 = c.edges[i,1]
 
-        # Compute contribution to energy
+        # Compute contribution to energy, 0.5 k x^2
         delta = c.pos[idx1,:] - c.pos[idx0,:]
-        energy += 0.5 * (np.linalg.norm(delta) - c.restlens(i)) ** 2
+        energy += 0.5 * (np.linalg.norm(delta) - c.restlens[i]) ** 2
 
         # Compute contrib to deriv from this spring
+        print(delta)
+        localderiv = (np.linalg.norm(delta) - c.restlens[i]) * (delta / np.linalg.norm(delta))  # Need to normalize?
 
+        deriv[3*idx0:3*idx0 + 3] -= localderiv
+        deriv[3*idx1:3*idx1 + 3] += localderiv
 
+        # Compute mixed derivatives (spring-local energy derivative)
+        mixd[3*idx1,i] = localderiv
+        midx[3*idx0,i] = localderiv
 
+        # Compute Hessian
+        
 
-
+    return (energy, deriv, hess, mixd)
 
 def relaxConfig(c):
     pass
 
-
 def main():
-    pass
+    pos = np.array([[2.0,0,0],[-2.0,0,0],[0.0,2.0,0.0]], dtype=float)
+    edges = np.array([[0,1],[1,2],[0,2]], dtype=int)
+    restlens = np.array([1.0,1.0,1.0], dtype=float)
 
+    config = Config(pos,edges,restlens)
+
+    testStruct = compEnergy(config)
+
+    e1 = testStruct[0]
+
+    print(testStruct[0])
+    print(testStruct[1])
+
+    delta = 0.0001
+
+    addGrad(config, delta * testStruct[1])
+
+    print("df.df is " + str(np.dot(testStruct[1], delta * testStruct[1])))
+
+    testStruct = compEnergy(config)
+    print("After addition of " + str(delta) +  " energy is " + str(testStruct[0]))
+    print("Difference is " + str(testStruct[0] - e1))
 
 if __name__ == '__main__':
     main()
