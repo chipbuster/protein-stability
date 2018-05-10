@@ -127,7 +127,7 @@ def compEnergy(c):
 def relaxConfig(c):
     (E, deriv, hess, mixd) = compEnergy(c)
 
-    # Create view of positions as a giant vector
+    # Create view of positions as a giant vector -- shares underlying memory
     posVec = c.pos.view().reshape((pos.size,))
 
     # Relax via Newton's Method
@@ -169,28 +169,6 @@ def alignConfig(dst, src):
     return (R,trans)
 
 def main():
-    pos = np.array([[2.0,0,0],[-2.0,0,0],[0.0,2.0,0.0]], dtype=float)
-    edges = np.array([[0,1],[1,2],[0,2]], dtype=int)
-    restlens = np.array([1.0,1.0,1.0], dtype=float)
-
-    config = Config(pos,edges,restlens)
-
-    testStruct = compEnergy(config)
-
-    e1 = testStruct[0]
-
-    print(testStruct[0])
-    print(testStruct[1])
-
-    delta = 0.000001
-
-    addGrad(config, delta * testStruct[1])
-
-    print("df.df is " + str(np.dot(testStruct[1], delta * testStruct[1])))
-
-    testStruct = compEnergy(config)
-    print("After addition of " + str(delta) +  " energy is " + str(testStruct[0]))
-    print("Difference is " + str(testStruct[0] - e1))
 
 if __name__ == '__main__':
     main()

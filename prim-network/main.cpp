@@ -114,6 +114,12 @@ void relaxConfiguration(Config &c)
         Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>>
                 solver(H);
         Eigen::VectorXd delta = solver.solve(deriv);
+
+
+        if((H * delta - deriv).norm() > 0.001){
+            std::cout << "[WARN]: Solve does not appear to be sane." << std::endl;
+        }
+
         for (int i = 0; i < npoints; i++) {
             for (int j = 0; j < 3; j++) {
                 c.pos(i, j) -= delta[3 * i + j];
@@ -155,6 +161,23 @@ void alignConfig(const Config &dst, Config &src)
     }
 }
 
+std::vector<int> findUnlinked(int npts, std::set<std::pair<int, int>>& edges){
+    std::vector<bool> isLinked;
+    for(int i = 0; i < npts; i++){ isLinked.push_back(true); }
+
+    for(const auto& e : edges){
+        isLinked[e.first] = false;
+        isLinked[e.second] = false;
+    }
+
+    std::vector<int> unlinked;
+    for(int i = 0; i < npts; i++){
+        if(isLinked[i]){ unlinked.push_back(i);  }
+    }
+
+    return unlinked;
+}
+
 int main()
 {
     int npoints = 10;
@@ -177,6 +200,12 @@ int main()
     int nedges = edges.size();
     sampleRestLengths(nedges, c.restlens);
     relaxConfiguration(c);
+
+    // Check for unlinked edges
+    std::vector<int> unlinked = findUnlinked(npoints, edges);
+    for(const auto& n : unlinked){
+        std::cout << "Node " << n << " has no edges" << std::endl;
+    }
 
     Eigen::VectorXd cutdistance(nedges);
     for (int i = 0; i < nedges; i++) {
@@ -211,6 +240,10 @@ int main()
     MD.setFromTriplets(mixed.begin(), mixed.end());
     Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>>
             solver(H);
+
+    Eigen::MatrixXd HDense = Eigen::MatrixXd(H);
+    double Hcond = HDense.norm() * HDense.inverse().norm();
+    std::cout << "Hessian condition number is " << Hcond << std::endl;
 
     Eigen::VectorXd predicteddist(nedges);
 
