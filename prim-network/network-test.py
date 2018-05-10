@@ -3,10 +3,10 @@ import scipy as sp
 import scipy.sparse as spsp
 import math
 import random
+import numba
 
 from typing import List, Tuple
 from collections import namedtuple
-
 
 random.seed(3) # Hooray for consistency!
 ed_per_pt = 3  # Avg. num. springs per anchor point.
@@ -22,6 +22,7 @@ def addGrad(c, gradient):
     return
 
 def sampleEdges(npoints) -> List[Tuple[int]]:
+
     edgeList = []
     nedges = ed_per_pt * npoints
     maxedges = (npoints * (npoints - 1)) / 2
@@ -60,8 +61,13 @@ def compEnergy(c):
     npoints = c.pos.shape[0]
     nedges = c.edges.shape[0]
     deriv = np.zeros(3 * npoints)
-    hess = spsp.coo_matrix((3 * npoints, 3 * npoints))
-    mixd = spsp.coo_matrix((3 * npoints, nedges))
+
+    # Use lists to store triples for coo_matrix construction (basically the
+    # same thing as Eigen's setFromTriplets function)
+    # hess = spsp.coo_matrix((3 * npoints, 3 * npoints))
+    # mixd = spsp.coo_matrix((3 * npoints, nedges))
+    hessList = []
+    mixdList = []
 
     energy = 0.0
 
@@ -81,16 +87,74 @@ def compEnergy(c):
         deriv[3*idx1:3*idx1 + 3] += localderiv
 
         # Compute mixed derivatives (spring-local energy derivative)
-        mixd[3*idx1,i] = localderiv
-        midx[3*idx0,i] = localderiv
+        for j in range(3):
+            mixdList.append((3*idx0 + j, i, -localderiv[j]))
+            mixdList.append((3*idx1 + j, i, localderiv[j]))
 
         # Compute Hessian
-        
+        dOP = np.outer(delta,delta)   # Outerproduct of delta and delta
+        dSN = np.dot(delta,delta)     # squared norm of delta
+        d2N = np.linalg.norm(delta,2) # 2 norm of delta
+        eye = np.identity(3)
+        localHess = dOP / dSN + (d2N - c.restlens[i]) * (eye - (dOP / dSN)) / d2N
+
+        # Mirror copies of Hessian into relevant areas in the global Hessian
+        for j in range(3):
+            for k in range(3):
+                hessList.append((3 * idx0 + j, 3 * idx0 + k, localHess[j,k]))
+                hessList.append((3 * idx1 + j, 3 * idx1 + k, localHess[j,k]))
+                hessList.append((3 * idx0 + j, 3 * idx1 + k, -localHess[j,k]))
+                hessList.append((3 * idx1 + j, 3 * idx0 + k, -localHess[j,k]))
+
+        # Generate sparse matrices from hessList and mixdList
+        hessRows = [x[0] for x in hessList]
+        hessCols = [x[1] for x in hessList]
+        hessEntries = [x[2] for x in hessList]
+
+        mixdRows = [x[0] for x in mixdList]
+        mixdCols = [x[1] for x in mixdList]
+        mixdEntries = [x[2] for x in mixdList]
+
+        hess = spsp.coo_matrix((hessEntries, (hessRows, hessCols)),
+                                shape=(3 * npoints, 3 * npoints)).tocsr()
+        mixd = spsp.coo_matrix((mixdEntries, (mixdRows, mixdCols)),
+                              shape=(3 * npoints, nedges)).tocsr()
 
     return (energy, deriv, hess, mixd)
 
 def relaxConfig(c):
     pass
+
+def alignConfig(dst, src):
+    """ Output (R,t) that aligns dst to src with Orthogonal Procrustes
+
+        Output rotation matrix R that minimizes ||R * src - dst||.
+        This is done by an Orthogonal Procrustes alignment.
+    """
+
+    dPos = dst.pos
+    sPos = src.pos
+
+    dstCentroid = np.sum(dPos, axis=0) / np.shape(dPos)[0]
+    srcCentroid = np.sum(dPos, axis=0) / np.shape(sPos)[0]
+
+    assert np.shape(dstCentroid) == (3,)
+
+    trans = dstCentroid - srcCentroid
+
+    # Compute Procrustes with Scipy's built-in algorithm. If the determinant
+    # is negative (since SP allows this), manually correct it using the SVD.
+    # This is a 3x3 matrix so the computational cost should be minimal
+
+    (R, scaling) = sp.linalg.orthogonal_procrustes(sPos, dPos)
+    if np.linalg.det(R) < 0:
+        (u,s,vt) = np.linalg.svd(R)
+        s[-1] = -s[-1]           # Flip the smallest singular value
+        R = u @ np.diag(s) @ vt  # Reconstruct R
+
+    assert np.linalg.det(R) > 0
+
+    return (R,trans)
 
 def main():
     pos = np.array([[2.0,0,0],[-2.0,0,0],[0.0,2.0,0.0]], dtype=float)
@@ -106,7 +170,7 @@ def main():
     print(testStruct[0])
     print(testStruct[1])
 
-    delta = 0.0001
+    delta = 0.000001
 
     addGrad(config, delta * testStruct[1])
 
