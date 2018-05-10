@@ -44,6 +44,8 @@ def sampleRestLengths(nedges:int) -> List[float]:
     """ Return random lengths in [0.0,1.0) """
     return [ random.random() for j in range(nedges) ]
 
+
+@numba.jit(nopython=True)
 def compEnergy(c):
     """ Given Config c, return a tuple with the following elements:
 
@@ -123,7 +125,17 @@ def compEnergy(c):
     return (energy, deriv, hess, mixd)
 
 def relaxConfig(c):
-    pass
+    (E, deriv, hess, mixd) = compEnergy(c)
+
+    # Create view of positions as a giant vector
+    posVec = c.pos.view().reshape((pos.size,))
+
+    # Relax via Newton's Method
+    while np.linalg.norm(deriv) > 1e-8:
+        newPos = sp.linalg.solve(hess,deriv,sym_pos=True)
+
+        # Map change onto config's positions
+        posVec -= newPos
 
 def alignConfig(dst, src):
     """ Output (R,t) that aligns dst to src with Orthogonal Procrustes
