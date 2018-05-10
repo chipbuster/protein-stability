@@ -11,7 +11,14 @@ from copy import deepcopy
 from typing import List, Tuple
 from collections import namedtuple
 
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+plt.interactive(True)
+
+import sys
+
 ed_per_pt = 3  # Avg. num. springs per anchor point.
+avgdist_unit = 0.661707182 # From https://math.stackexchange.com/q/1976842/120052
 
 debugMode = False
 
@@ -49,9 +56,32 @@ def sampleRestLengths(nedges:int) -> List[float]:
     """ Return random lengths in [0.0,1.0) """
     return np.array([ random.random() for j in range(nedges) ])
 
-
-#@numba.jit(nopython=False)
 def compEnergy(c):
+    """ A wrapper around a JITted energy computation function. """
+
+    npoints = c.pos.shape[0]
+    nedges = c.edges.shape[0]
+
+    (E,d,hessList,mixdList) = compEnergyCore(c)
+
+    hessRows = [x[0] for x in hessList]
+    hessCols = [x[1] for x in hessList]
+    hessEntries = [x[2] for x in hessList]
+
+    mixdRows = [x[0] for x in mixdList]
+    mixdCols = [x[1] for x in mixdList]
+    mixdEntries = [x[2] for x in mixdList]
+
+
+    hess = spsp.coo_matrix((hessEntries, (hessRows, hessCols)), dtype=np.float64,
+                            shape=(3 * npoints, 3 * npoints)).tocsr()
+    mixd = spsp.coo_matrix((mixdEntries, (mixdRows, mixdCols)), dtype=np.float64,
+                          shape=(3 * npoints, nedges)).tocsr()
+
+    return (E, d, hess, mixd)
+
+@numba.jit(cache=True)
+def compEnergyCore(c):
     """ Given Config c, return a tuple with the following elements:
 
         - energy : energy of the configuration (float)
@@ -113,20 +143,8 @@ def compEnergy(c):
                 hessList.append((3 * idx1 + j, 3 * idx0 + k, -localHess[j,k]))
 
         # Generate sparse matrices from hessList and mixdList
-        hessRows = [x[0] for x in hessList]
-        hessCols = [x[1] for x in hessList]
-        hessEntries = [x[2] for x in hessList]
 
-        mixdRows = [x[0] for x in mixdList]
-        mixdCols = [x[1] for x in mixdList]
-        mixdEntries = [x[2] for x in mixdList]
-
-        hess = spsp.coo_matrix((hessEntries, (hessRows, hessCols)), dtype=np.float64,
-                                shape=(3 * npoints, 3 * npoints)).tocsr()
-        mixd = spsp.coo_matrix((mixdEntries, (mixdRows, mixdCols)), dtype=np.float64,
-                              shape=(3 * npoints, nedges)).tocsr()
-
-    return (energy, deriv, hess, mixd)
+    return (energy, deriv, hessList, mixdList)
 
 def relaxConfig(c):
     (E, deriv, hess, mixd) = compEnergy(c)
@@ -136,6 +154,8 @@ def relaxConfig(c):
     posVec = pos.view().reshape((pos.size,))
 
     # Relax via Newton's Method
+    # N.B. I don't have a Sparse QR solver and the direct solver runs into
+    # numerical issues, so I'm using an iterative method here
     while np.linalg.norm(deriv) > 1e-5:
         (newPos, info) = scipy.sparse.linalg.gmres(hess,deriv)
 
@@ -188,8 +208,9 @@ def alignConfig(dst, src):
 
 def main():
 
-#    random.seed(3) # Hooray for consistency!
-#    np.random.seed(3)
+    seed = random.randint(0,2**32)
+    random.seed(seed) # Hooray for consistency!
+    np.random.seed(random.randint(0,2**32))
 
     npoints = 10
 
@@ -199,15 +220,17 @@ def main():
     crest = sampleRestLengths(nedges)
     C = Config(cpos, ced, crest)
 
-
     # Relax this configuration to an equilibrium position
     relaxConfig(C)
 
-    # Use the sharp knife of a short life to sever a spring
+    # Sever each spring, then relax the resultant network. Align each cut
+    # network, then store the distances
     cutDistances = np.zeros(nedges)
     for j in range(nedges):
         # Cut edge j
-        print("Cut edge " + str(j))
+        if debugMode:
+            print("Cut edge " + str(j))
+
         newedges = np.delete(C.edges, j, axis=0)
         newrestlens = np.delete(C.restlens, j)
 
@@ -217,17 +240,57 @@ def main():
 
         (R, t) = alignConfig(C,C2)
 
-        diff = (R @ (C2.pos - t).T).T - C.pos
+        C2posAlign = (R.T @ (C2.pos - t).T).T
+
+        diff = C2posAlign - C.pos
 
         cutDistances[j] = np.linalg.norm(diff, ord='fro')
 
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        plt.title("Spring network with spring " + str(j) + " cut") 
+        ax.scatter(C.pos[:,0], C.pos[:,1], C.pos[:,2], c='blue', s=50)
+        for (e1,e2) in C.edges:
+            xs = [C.pos[e1][0], C.pos[e2][0]]
+            ys = [C.pos[e1][1], C.pos[e2][1]]
+            zs = [C.pos[e1][2], C.pos[e2][2]]
+            ax.plot(xs,ys,zs,c='blue')
+
+        ax.scatter(C2posAlign[:,0], C2posAlign[:,1], C2posAlign[:,2], c='green', s=50)
+        for (e1,e2) in C2.edges:
+            xs = [C2posAlign[e1][0], C2posAlign[e2][0]]
+            ys = [C2posAlign[e1][1], C2posAlign[e2][1]]
+            zs = [C2posAlign[e1][2], C2posAlign[e2][2]]
+            ax.plot(xs,ys,zs,c='green')
+ 
+
+        plt.show(block=True)
+
+
+    # Some configs seem to have *really* big changes. Not sure what causes this
     numBigChange = np.size(cutDistances[cutDistances > 1.0])
     if numBigChange > (nedges / 4):
         print("[WARN]: Got " + str(numBigChange) + " major changes in this config.")
-        print("Not sure if output is sane.")
+        print("Not sure if output is sane. Random seed was " + str(seed))
 
-    print(cutDistances)
+    # Sensitivity analysis
+    predictedDistances = np.zeros(nedges)
+    (E,deriv,hess,mixd) = compEnergy(C)
 
+    for j in range(nedges):
+        springDeriv = mixd[:,j].todense()
+        dQ, status = scipy.sparse.linalg.bicgstab(A=hess,b=springDeriv)
+        predictedDistances[j] = np.linalg.norm(dQ)
+
+    # Strain analysis
+    strain = np.zeros(nedges)
+    for j in range(nedges):
+        (e1,e2) = C.edges[j]
+        springLength = np.linalg.norm(C.pos[e1,:] - C.pos[e2,:])
+        strain[j] = (springLength - C.restlens[j]) / C.restlens[j]
+
+    for j in range(nedges):
+        print("%d %f %f %f" % (j, cutDistances[j], predictedDistances[j], strain[j]))
 
 if __name__ == '__main__':
     main()
