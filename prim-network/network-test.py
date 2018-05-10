@@ -1,15 +1,19 @@
 import numpy as np
 import scipy as sp
 import scipy.sparse as spsp
+import scipy.sparse.linalg
 import math
 import random
 import numba
 
+from copy import deepcopy
+
 from typing import List, Tuple
 from collections import namedtuple
 
-random.seed(3) # Hooray for consistency!
 ed_per_pt = 3  # Avg. num. springs per anchor point.
+
+debugMode = False
 
 Config = namedtuple("Config", ["pos","edges","restlens"])
 
@@ -28,24 +32,25 @@ def sampleEdges(npoints) -> List[Tuple[int]]:
     maxedges = (npoints * (npoints - 1)) / 2
     nedges = nedges if nedges < maxedges else maxedges
    
-    while len(edgeList < nedges):
-        (x,y) = random.randint(0,nedges-1)
+    while len(edgeList) < nedges:
+        x = random.randint(0,npoints-1)
+        y = random.randint(0,npoints-1)
         (x,y) = (x,y) if x < y else (y,x)
 
         if x == y or (x,y) in edgeList:
             continue
         else:
-            edgeList += (x,y)
+            edgeList.append([x,y])
     
-    return edgeList
+    return np.array(edgeList)
 
 # TODO: If we're doing positions on unit cube, is this the right rest length?
 def sampleRestLengths(nedges:int) -> List[float]:
     """ Return random lengths in [0.0,1.0) """
-    return [ random.random() for j in range(nedges) ]
+    return np.array([ random.random() for j in range(nedges) ])
 
 
-@numba.jit(nopython=True)
+#@numba.jit(nopython=False)
 def compEnergy(c):
     """ Given Config c, return a tuple with the following elements:
 
@@ -82,7 +87,6 @@ def compEnergy(c):
         energy += 0.5 * (np.linalg.norm(delta) - c.restlens[i]) ** 2
 
         # Compute contrib to deriv from this spring
-        print(delta)
         localderiv = (np.linalg.norm(delta) - c.restlens[i]) * (delta / np.linalg.norm(delta))  # Need to normalize?
 
         deriv[3*idx0:3*idx0 + 3] -= localderiv
@@ -117,9 +121,9 @@ def compEnergy(c):
         mixdCols = [x[1] for x in mixdList]
         mixdEntries = [x[2] for x in mixdList]
 
-        hess = spsp.coo_matrix((hessEntries, (hessRows, hessCols)),
+        hess = spsp.coo_matrix((hessEntries, (hessRows, hessCols)), dtype=np.float64,
                                 shape=(3 * npoints, 3 * npoints)).tocsr()
-        mixd = spsp.coo_matrix((mixdEntries, (mixdRows, mixdCols)),
+        mixd = spsp.coo_matrix((mixdEntries, (mixdRows, mixdCols)), dtype=np.float64,
                               shape=(3 * npoints, nedges)).tocsr()
 
     return (energy, deriv, hess, mixd)
@@ -128,14 +132,28 @@ def relaxConfig(c):
     (E, deriv, hess, mixd) = compEnergy(c)
 
     # Create view of positions as a giant vector -- shares underlying memory
-    posVec = c.pos.view().reshape((pos.size,))
+    pos = c.pos
+    posVec = pos.view().reshape((pos.size,))
 
     # Relax via Newton's Method
-    while np.linalg.norm(deriv) > 1e-8:
-        newPos = sp.linalg.solve(hess,deriv,sym_pos=True)
+    while np.linalg.norm(deriv) > 1e-5:
+        (newPos, info) = scipy.sparse.linalg.gmres(hess,deriv)
+
+        if debugMode:
+            print(E, info)
+            print(np.linalg.norm(deriv))
+
+        if np.any(np.isnan(newPos)) :
+            print("[ERROR]: Numerical solve lead to NaNs")
+            for r in hess.todense():
+                print(r)
+            return
 
         # Map change onto config's positions
         posVec -= newPos
+
+        # Recompute Hessian
+        (E, deriv, hess, mixd) = compEnergy(c)
 
 def alignConfig(dst, src):
     """ Output (R,t) that aligns dst to src with Orthogonal Procrustes
@@ -148,7 +166,7 @@ def alignConfig(dst, src):
     sPos = src.pos
 
     dstCentroid = np.sum(dPos, axis=0) / np.shape(dPos)[0]
-    srcCentroid = np.sum(dPos, axis=0) / np.shape(sPos)[0]
+    srcCentroid = np.sum(sPos, axis=0) / np.shape(sPos)[0]
 
     assert np.shape(dstCentroid) == (3,)
 
@@ -169,6 +187,47 @@ def alignConfig(dst, src):
     return (R,trans)
 
 def main():
+
+#    random.seed(3) # Hooray for consistency!
+#    np.random.seed(3)
+
+    npoints = 10
+
+    cpos = (np.random.rand(npoints, 3) - 0.5) * 2
+    ced = sampleEdges(npoints)
+    nedges = len(ced)
+    crest = sampleRestLengths(nedges)
+    C = Config(cpos, ced, crest)
+
+
+    # Relax this configuration to an equilibrium position
+    relaxConfig(C)
+
+    # Use the sharp knife of a short life to sever a spring
+    cutDistances = np.zeros(nedges)
+    for j in range(nedges):
+        # Cut edge j
+        print("Cut edge " + str(j))
+        newedges = np.delete(C.edges, j, axis=0)
+        newrestlens = np.delete(C.restlens, j)
+
+        C2 = Config(deepcopy(C.pos), newedges, newrestlens)
+
+        relaxConfig(C2)
+
+        (R, t) = alignConfig(C,C2)
+
+        diff = (R @ (C2.pos - t).T).T - C.pos
+
+        cutDistances[j] = np.linalg.norm(diff, ord='fro')
+
+    numBigChange = np.size(cutDistances[cutDistances > 1.0])
+    if numBigChange > (nedges / 4):
+        print("[WARN]: Got " + str(numBigChange) + " major changes in this config.")
+        print("Not sure if output is sane.")
+
+    print(cutDistances)
+
 
 if __name__ == '__main__':
     main()
