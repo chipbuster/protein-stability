@@ -209,6 +209,7 @@ def alignConfig(dst, src):
 def main():
 
     seed = random.randint(0,2**32)
+    print("System seed is " + str(seed))
     random.seed(seed) # Hooray for consistency!
     np.random.seed(random.randint(0,2**32))
 
@@ -240,31 +241,39 @@ def main():
 
         (R, t) = alignConfig(C,C2)
 
-        C2posAlign = (R.T @ (C2.pos - t).T).T
+        C2posAlign = (R.T @ (C2.pos + t).T).T
 
         diff = C2posAlign - C.pos
 
         cutDistances[j] = np.linalg.norm(diff, ord='fro')
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        plt.title("Spring network with spring " + str(j) + " cut") 
-        ax.scatter(C.pos[:,0], C.pos[:,1], C.pos[:,2], c='blue', s=50)
-        for (e1,e2) in C.edges:
-            xs = [C.pos[e1][0], C.pos[e2][0]]
-            ys = [C.pos[e1][1], C.pos[e2][1]]
-            zs = [C.pos[e1][2], C.pos[e2][2]]
-            ax.plot(xs,ys,zs,c='blue')
+        if cutDistances[j] > 0.5:
 
-        ax.scatter(C2posAlign[:,0], C2posAlign[:,1], C2posAlign[:,2], c='green', s=50)
-        for (e1,e2) in C2.edges:
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            plt.title("Spring network with spring " + str(j) + " cut") 
+            ax.scatter(C.pos[:,0], C.pos[:,1], C.pos[:,2], c='blue', s=50)
+            for (e1,e2) in C.edges:
+                xs = [C.pos[e1][0], C.pos[e2][0]]
+                ys = [C.pos[e1][1], C.pos[e2][1]]
+                zs = [C.pos[e1][2], C.pos[e2][2]]
+                ax.plot(xs,ys,zs,c='blue')
+
+            ax.scatter(C2posAlign[:,0], C2posAlign[:,1], C2posAlign[:,2], c='green', s=50)
+            for (e1,e2) in C2.edges:
+                xs = [C2posAlign[e1][0], C2posAlign[e2][0]]
+                ys = [C2posAlign[e1][1], C2posAlign[e2][1]]
+                zs = [C2posAlign[e1][2], C2posAlign[e2][2]]
+                ax.plot(xs,ys,zs,c='green')
+
+            # Draw cut spring in red
+            (e1,e2) = C.edges[j]
             xs = [C2posAlign[e1][0], C2posAlign[e2][0]]
             ys = [C2posAlign[e1][1], C2posAlign[e2][1]]
             zs = [C2posAlign[e1][2], C2posAlign[e2][2]]
-            ax.plot(xs,ys,zs,c='green')
+            ax.plot(xs,ys,zs,c='red')
  
-
-        plt.show(block=True)
+            plt.show(block=True)
 
 
     # Some configs seem to have *really* big changes. Not sure what causes this
@@ -291,6 +300,15 @@ def main():
 
     for j in range(nedges):
         print("%d %f %f %f" % (j, cutDistances[j], predictedDistances[j], strain[j]))
+
+    # Plot based on (sorted) actual distance
+    dists = [ (cutDistances[j], predictedDistances[j], strain[j]) for j in range(nedges)]
+    sDists = sorted(dists)
+    fig = plt.figure()
+    plt.plot(range(nedges), [x[0] for x in sDists], c='red', marker='o')
+    plt.plot(range(nedges), [x[1] for x in sDists], c='green', marker='o')
+    plt.plot(range(nedges), [x[2] for x in sDists], c='blue', marker='o')
+    plt.show(block=True)
 
 if __name__ == '__main__':
     main()
