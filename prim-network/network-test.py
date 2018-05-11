@@ -1,3 +1,6 @@
+import sys
+import pickle
+
 import numpy as np
 import scipy as sp
 import scipy.sparse as spsp
@@ -12,10 +15,7 @@ from typing import List, Tuple
 from collections import namedtuple
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-plt.interactive(True)
 
-import sys
 
 ed_per_pt = 3  # Avg. num. springs per anchor point.
 avgdist_unit = 0.661707182 # From https://math.stackexchange.com/q/1976842/120052
@@ -206,22 +206,39 @@ def alignConfig(dst, src):
 
     return (R,trans)
 
-def main():
+def dumpConfig(ident, Cref, Ccut):
+    """Dump config pair to a file named by ident"""
+    pickle.dump((Cref, Ccut), open("Config-" + str(ident) + ".pkl", 'wb'))
 
-    seed = random.randint(0,2**32)
+def main(args):
+
+    inpSeed = -1
+
+    if len(args) > 0:
+        try:
+            inpSeed = int(args[1])
+        except ValueError:
+            print("Attempted to set invalid seed.")
+
+    if inpSeed < 0:
+        print("Using randomly-generated seed")
+        seed = random.randint(0,2**32)
+    else:
+        seed = inpSeed
+
     print("System seed is " + str(seed))
     random.seed(seed) # Hooray for consistency!
     np.random.seed(random.randint(0,2**32))
 
     npoints = 10
 
+    # Set up inputs to create our config
     cpos = (np.random.rand(npoints, 3) - 0.5) * 2
     ced = sampleEdges(npoints)
     nedges = len(ced)
     crest = sampleRestLengths(nedges)
     C = Config(cpos, ced, crest)
 
-    # Relax this configuration to an equilibrium position
     relaxConfig(C)
 
     # Sever each spring, then relax the resultant network. Align each cut
@@ -242,39 +259,16 @@ def main():
         (R, t) = alignConfig(C,C2)
 
         C2posAlign = (R.T @ (C2.pos + t).T).T
+        Caligned = Config(C2posAlign, newedges, newrestlens)
 
-        diff = C2posAlign - C.pos
+        diff = C2.pos - C.pos
 
         cutDistances[j] = np.linalg.norm(diff, ord='fro')
 
-        if cutDistances[j] > 0.5:
-
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            plt.title("Spring network with spring " + str(j) + " cut") 
-            ax.scatter(C.pos[:,0], C.pos[:,1], C.pos[:,2], c='blue', s=50)
-            for (e1,e2) in C.edges:
-                xs = [C.pos[e1][0], C.pos[e2][0]]
-                ys = [C.pos[e1][1], C.pos[e2][1]]
-                zs = [C.pos[e1][2], C.pos[e2][2]]
-                ax.plot(xs,ys,zs,c='blue')
-
-            ax.scatter(C2posAlign[:,0], C2posAlign[:,1], C2posAlign[:,2], c='green', s=50)
-            for (e1,e2) in C2.edges:
-                xs = [C2posAlign[e1][0], C2posAlign[e2][0]]
-                ys = [C2posAlign[e1][1], C2posAlign[e2][1]]
-                zs = [C2posAlign[e1][2], C2posAlign[e2][2]]
-                ax.plot(xs,ys,zs,c='green')
-
-            # Draw cut spring in red
-            (e1,e2) = C.edges[j]
-            xs = [C2posAlign[e1][0], C2posAlign[e2][0]]
-            ys = [C2posAlign[e1][1], C2posAlign[e2][1]]
-            zs = [C2posAlign[e1][2], C2posAlign[e2][2]]
-            ax.plot(xs,ys,zs,c='red')
- 
-            plt.show(block=True)
-
+        if cutDistances[j] > 0.75:
+            ident = str(seed) + "-" + str(j)
+            dumpConfig(ident, C, C2)
+            print("Pickled configuration with spring " + str(j) + " cut")
 
     # Some configs seem to have *really* big changes. Not sure what causes this
     numBigChange = np.size(cutDistances[cutDistances > 1.0])
@@ -307,8 +301,8 @@ def main():
     fig = plt.figure()
     plt.plot(range(nedges), [x[0] for x in sDists], c='red', marker='o')
     plt.plot(range(nedges), [x[1] for x in sDists], c='green', marker='o')
-    plt.plot(range(nedges), [x[2] for x in sDists], c='blue', marker='o')
+#    plt.plot(range(nedges), [x[2] for x in sDists], c='blue', marker='o')
     plt.show(block=True)
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
