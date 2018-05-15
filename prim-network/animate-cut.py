@@ -15,6 +15,35 @@ Config = namedtuple("Config", ["pos","edges","restlens"])
 FPS = 60
 ms_per_s = 1000
 
+# Time functions taken from https://stackoverflow.com/a/49382421/2914377
+
+def update_time():
+    t_min = 0.0
+    t = 0.0
+    t_max = 1.0
+
+    while t<=t_max and t>=t_min:
+        t += 1.0/FPS * anim.direction
+        if t < 0:
+            t = t_max
+        yield t
+
+def on_press(event):
+    if event.key.isspace():
+        if anim.running:
+            anim.event_source.stop()
+        else:
+            anim.event_source.start()
+        anim.running ^= True
+    elif event.key == 'left':
+        anim.direction = -1
+    elif event.key == 'right':
+        anim.direction = +1
+
+    # Manually update the plot
+    if event.key in ['left','right']:
+        pass # Figure this out later
+
 def loadConfigs(fname):
     """ Load (ref, cut) from picklefile """
     with open(fname,'rb') as infile:
@@ -39,8 +68,9 @@ def genLinesData(pos, edges):
 
     return data
 
-def updateLines(num, lines, defVector1, Cref, Ccut):
-    defVector = (num / FPS) * defVector1
+def updateLines(time, lines, defVector1, Cref, Ccut):
+    print(time)
+    defVector = time * defVector1
 
     refLineData = genLinesData(Cref.pos, Cref.edges)
     cutLineData = genLinesData(Cref.pos + defVector, Ccut.edges)
@@ -69,43 +99,42 @@ def getBB(Cpair):
 
     return np.array([mins,maxs])
 
-def main(args):
-    fig = plt.figure()
-    ax = p3.Axes3D(fig)
+fig = plt.figure()
+ax = p3.Axes3D(fig)
 
-    (Cref, Ccut) = loadConfigs(args[0])
+(Cref, Ccut) = loadConfigs(sys.argv[1])
 
-    refData = genLinesData(Cref.pos, Cref.edges)
-    cutData = genLinesData(Ccut.pos, Ccut.edges)
+refData = genLinesData(Cref.pos, Cref.edges)
+cutData = genLinesData(Ccut.pos, Ccut.edges)
 
-    allData = np.concatenate((refData,cutData), axis=0)
+allData = np.concatenate((refData,cutData), axis=0)
 
-    lines = []
-    for (i, data) in enumerate(allData):
-        color = 'red' if i < np.shape(refData)[0] else 'blue'
-        lines.append(ax.plot(data[:,0], data[:,1], data[:,2], c=color)[0])
+lines = []
+for (i, data) in enumerate(allData):
+    color = 'red' if i < np.shape(refData)[0] else 'blue'
+    lines.append(ax.plot(data[:,0], data[:,1], data[:,2], c=color)[0])
 
-    # Deformation vector from Reference to Cut positions
-    defVectorRC = Ccut.pos - Cref.pos
+# Deformation vector from Reference to Cut positions
+defVectorRC = Ccut.pos - Cref.pos
 
-    # Setting the axes properties
-    bounds = getBB((Cref, Ccut))
-    ax.set_xlim3d(bounds[:,0])
-    ax.set_xlabel('X')
+# Setting the axes properties
+bounds = getBB((Cref, Ccut))
+ax.set_xlim3d(bounds[:,0])
+ax.set_xlabel('X')
 
-    ax.set_ylim3d(bounds[:,1])
-    ax.set_ylabel('Y')
+ax.set_ylim3d(bounds[:,1])
+ax.set_ylabel('Y')
 
-    ax.set_zlim3d(bounds[:,2])
-    ax.set_zlabel('Z')
+ax.set_zlim3d(bounds[:,2])
+ax.set_zlabel('Z')
 
-    ax.set_title('Network Cut Test')
+ax.set_title('Network Cut Test')
 
-    line_ani = animation.FuncAnimation(fig, updateLines, FPS, 
-                              fargs=(lines, defVectorRC, Cref, Ccut),
-                              interval=(ms_per_s // FPS), blit=False)
+fig.canvas.mpl_connect('key_press_event', on_press)
+anim = animation.FuncAnimation(fig, updateLines, frames=update_time, 
+                          fargs=(lines, defVectorRC, Cref, Ccut),
+                          interval=(ms_per_s // FPS), blit=False)
+anim.running = True
+anim.direction = +1
 
-    plt.show()
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+plt.show()
