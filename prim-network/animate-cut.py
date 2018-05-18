@@ -42,7 +42,7 @@ def on_press(event):
 
     # Manually update the plot
     if event.key in ['left','right']:
-        pass # Figure this out later
+        anim._step()
 
 def loadConfigs(fname):
     """ Load (ref, cut) from picklefile """
