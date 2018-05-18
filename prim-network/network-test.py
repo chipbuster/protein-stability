@@ -16,9 +16,10 @@ from collections import namedtuple
 
 import matplotlib.pyplot as plt
 
-
+npts = 10
 ed_per_pt = 3  # Avg. num. springs per anchor point.
-avgdist_unit = 0.661707182 # From https://math.stackexchange.com/q/1976842/120052
+avgdist_unit = 1.0
+#avgdist_unit = 0.661707182 # From https://math.stackexchange.com/q/1976842/120052
 
 debugMode = False
 
@@ -230,7 +231,7 @@ def main(args):
     random.seed(seed) # Hooray for consistency!
     np.random.seed(random.randint(0,2**32))
 
-    npoints = 10
+    npoints = npts
 
     # Set up inputs to create our config
     cpos = (np.random.rand(npoints, 3) - 0.5) * 2
