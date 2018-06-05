@@ -1,3 +1,1 @@
 A list of seeds that have caused interesting networks to arise
-
-1431840749  -- Large number of cuts that drastically change shape
