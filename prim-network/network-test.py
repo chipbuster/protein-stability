@@ -45,10 +45,12 @@ def sampleEdges(npoints) -> List[Tuple[int]]:
         y = random.randint(0,npoints-1)
         (x,y) = (x,y) if x < y else (y,x)
 
-        if x == y or (x,y) in edgeList:
+        if x == y or [x,y] in edgeList:
             continue
         else:
             edgeList.append([x,y])
+
+    assert len(set([ (x[0],x[1]) for x in edgeList])) == len(edgeList)
     
     return np.array(edgeList)
 
@@ -215,7 +217,7 @@ def main(args):
 
     inpSeed = -1
 
-    if len(args) > 0:
+    if len(args) > 1:
         try:
             inpSeed = int(args[1])
         except ValueError:
@@ -262,7 +264,7 @@ def main(args):
         C2posAlign = (R.T @ (C2.pos + t).T).T
         Caligned = Config(C2posAlign, newedges, newrestlens)
 
-        diff = C2.pos - C.pos
+        diff = Caligned.pos - C.pos
 
         cutDistances[j] = np.linalg.norm(diff, ord='fro')
 
@@ -306,4 +308,4 @@ def main(args):
     plt.show(block=True)
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main(sys.argv)
