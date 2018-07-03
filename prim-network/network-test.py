@@ -16,9 +16,10 @@ from collections import namedtuple
 
 import matplotlib.pyplot as plt
 
-
+npts = 10
 ed_per_pt = 3  # Avg. num. springs per anchor point.
-avgdist_unit = 0.661707182 # From https://math.stackexchange.com/q/1976842/120052
+avgdist_unit = 1.0
+#avgdist_unit = 0.661707182 # From https://math.stackexchange.com/q/1976842/120052
 
 debugMode = False
 
@@ -44,10 +45,12 @@ def sampleEdges(npoints) -> List[Tuple[int]]:
         y = random.randint(0,npoints-1)
         (x,y) = (x,y) if x < y else (y,x)
 
-        if x == y or (x,y) in edgeList:
+        if x == y or [x,y] in edgeList:
             continue
         else:
             edgeList.append([x,y])
+
+    assert len(set([ (x[0],x[1]) for x in edgeList])) == len(edgeList)
     
     return np.array(edgeList)
 
@@ -214,7 +217,7 @@ def main(args):
 
     inpSeed = -1
 
-    if len(args) > 0:
+    if len(args) > 1:
         try:
             inpSeed = int(args[1])
         except ValueError:
@@ -230,7 +233,7 @@ def main(args):
     random.seed(seed) # Hooray for consistency!
     np.random.seed(random.randint(0,2**32))
 
-    npoints = 10
+    npoints = npts
 
     # Set up inputs to create our config
     cpos = (np.random.rand(npoints, 3) - 0.5) * 2
@@ -261,7 +264,7 @@ def main(args):
         C2posAlign = (R.T @ (C2.pos + t).T).T
         Caligned = Config(C2posAlign, newedges, newrestlens)
 
-        diff = C2.pos - C.pos
+        diff = Caligned.pos - C.pos
 
         cutDistances[j] = np.linalg.norm(diff, ord='fro')
 
@@ -305,4 +308,4 @@ def main(args):
     plt.show(block=True)
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main(sys.argv)
