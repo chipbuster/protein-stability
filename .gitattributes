@@ -9,3 +9,4 @@ prim-network/picklejar/Config-976248467-7.pkl filter=lfs diff=lfs merge=lfs -tex
 prim-network/picklejar/Config-976248467-10.pkl filter=lfs diff=lfs merge=lfs -text
 prim-network/picklejar/Config-976248467-11.pkl filter=lfs diff=lfs merge=lfs -text
 prim-network/picklejar/Config-976248467-18.pkl filter=lfs diff=lfs merge=lfs -text
+*.gz filter=lfs diff=lfs merge=lfs -text
