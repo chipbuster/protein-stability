@@ -27,7 +27,7 @@ module ParseProtherm where
     toJSON (VNum a) = toJSON a
     toJSON (VRelated a) = toJSON a
     toJSON (VId a) = toJSON a
-    toJSON (VEmpty) = ""
+    toJSON VEmpty = ""
 
   type PTEntry = Map.Map Label PTValue
 
@@ -86,7 +86,7 @@ module ParseProtherm where
   joinContinuationLines []  = []
   joinContinuationLines [x] = [x]
   joinContinuationLines (x:y:xs) = 
-    if (isSpace $ Tx.head y) 
-    then (Tx.append x (clean y)) : joinContinuationLines xs
+    if isSpace $ Tx.head y
+    then Tx.append x (clean y) : joinContinuationLines xs
     else joinContinuationLines (y:xs)
     where clean = Tx.dropWhile isSpace

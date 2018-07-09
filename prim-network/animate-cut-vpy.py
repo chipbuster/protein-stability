@@ -17,7 +17,7 @@ FPS = 60
 ms_per_s = 1000
 
 strain_color = matplotlib.cm.get_cmap('bwr')
-max_color_strain = 1.0
+max_color_strain = 0.5
 
 def loadConfigs(fname):
     """ Load (ref, cut) from picklefile """
@@ -62,8 +62,6 @@ def configGenGen(Cref, Ccut):
 (Cref, Ccut) = loadConfigs(sys.argv[1])
 interpFunc = configGenGen(Cref, Ccut)
 
-print(Cref.edges)
-
 # Parse info out of filename
 parts = splitext(basename(sys.argv[1]))[0].split("-")
 missingSpring = int(parts[-1])
@@ -90,16 +88,36 @@ for (ctr, (e1,e2)) in enumerate(Cref.edges):
 
 scene.lights = []
 scene.ambient = vector(0.8,0.8,0.8)
-## CUTOFF
-sys.exit(0)
 
 t = 0.0
 dt = 1.0 / FPS # Time between frames
-while t < 2:
+running = True
+
+def keyCallback(evt):
+    s = evt.key
+    global running
+    global t
+    global dt
+    if s == ' ':
+        running = not running
+    if s == 'left':
+        dt = - 1.0 / FPS
+        t += dt
+    if s == 'right':
+        dt = 1.0 / FPS
+        t += dt
+scene.bind('keydown', keyCallback)
+
+while True:
     if t > 1.0:
         t = 0.0
+    if t < 0.0:
+        t = 1.0
 
     Ccur = interpFunc(t)
+    rate(60) #Limit VPython to 60 FPS
+
+#    print(Ccur.pos)
 
     for (ctr, (e1,e2)) in enumerate(Ccur.edges):
         start = Ccur.pos[e1,:]
@@ -107,13 +125,15 @@ while t < 2:
         axis = end - start
         restlen = Ccur.restlens[ctr]
 
-        Cstrain = (np.linalg.norm(axis) - restlen) / restlen
-        Ccoef = Cstrain if Cstrain < 1.0 else 1.0 / Cstrain
-        Ccol = (1.0 - Ccoef) * (compression_color if Ccoef < 1 else tension_color)
+        Ccol = calcColor(np.linalg.norm(axis), restlen)
 
         rods[ctr].pos   = vector(*start)
         rods[ctr].axis  = vector(*axis)
-        rods[ctr].color = vector(*Ccol)
 
         if ctr == missingSpring:
             rod.color = vector(0.0,1.0,0.0)
+        else:
+            rods[ctr].color = vector(*Ccol)
+
+    if running:
+        t += dt
