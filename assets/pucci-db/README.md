@@ -34,6 +34,12 @@ tr '/' ' ' <Pucci2016-r2.csv >Pucci2016-r3.csv
 This leaves a few issues where dashes in organism names are replaced by capital
 U--however, I think this is unlikely to be significant for this work.
 
+# Deleted entries
+
+There were three entries with PDB code `2a01`. These have been deleted since the
+PDB is no longer available as of May 2018 in response to
+US Office of Research Integrity Notice 2018-07782.
+
 # Data Download
 
 Downloads were accomplished by using `javaws` on the files resulting from the
