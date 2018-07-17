@@ -31,7 +31,7 @@ class ProtParams(object):
         out += str(self.pH) + ","
         out += str(self.temp) + ","
         out += str(self.ddT) + ","
-        out += str(self.ddG) + ","
+        out += str(self.ddG)
         return out
 
     def set_from_pucci_row(self, args: List[str]):
