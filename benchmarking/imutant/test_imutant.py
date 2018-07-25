@@ -4,12 +4,12 @@ import sys, os, csv, subprocess
 from typing import List, Tuple
 from multiprocessing import Pool
 import pickle
+import pandas
 
 from test_utils import *
 
 imut_progname = "/opt/proteins/imutant/I-Mutant2.0.7/I-Mutant2.0.py"
 pucci_datapath = "/home/chipbuster/Spinny/pucci-db"
-
 
 def process_results(input: str) -> Tuple[float, float, float]:
     """Parse out ddT, ddG, and RSA from results"""
@@ -78,24 +78,20 @@ def main(args):
     params = []
     results = []
     with open(os.path.join(pucci_datapath, "Pucci2016-r3.csv"), 'r') as infile:
-        for _ in range(3):
-            next(infile)  # Skip the header rows for this file
+        data = pandas.read_csv(infile)
+        for i in range(data.shape[0]):
+            try:
+                p = ProtParams()#Cannot call mutator inline or will get None
+                p.set_from_pucci_row(data.iloc[i])
+                if p is not None:
+                    params.append(p)
+            except ValueError as e:
+                print("Error on line " + str(i))
+                print(e)
 
-        lineno = 3
-        for line in infile:
-            lineno += 1
-            if (line[0] == ","):
-                continue  # Line has no data
-            else:
-                try:
-                    p = ProtParams()#Cannot call mutator inline or will get None
-                    p.set_from_pucci_row(line.split(","))
-                    if p is not None:
-                        params.append(p)
-                except ValueError as e:
-                    print("Error on line " + str(lineno))
-                    print(e)
-
+    # If the length of the PDB ID is not one, this is a mutated protein. Exclude
+    # it to avoid ceaseless error dumps from not having the mutations
+    params = [ x for x in params if len(x.pdbid) == 4 ]
 
     with Pool(processes=16) as pool:
         results = list(pool.map(run_imutant_once_with_catch, params))

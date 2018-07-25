@@ -34,27 +34,27 @@ class ProtParams(object):
         out += str(self.ddG)
         return out
 
-    def set_from_pucci_row(self, args: List[str]):
-        self.pdbid = args[1]
-        self.chain = args[2]
-        self.resid = int(args[3])
-        self.reswt = to_one_letter(args[4])
-        self.resmut = to_one_letter(args[5])
-        self.pH = float(args[19].strip('[]'))
+    def set_from_pucci_row(self, args):
+        self.pdbid = args['PDBid']
+        self.chain = args['Chain']
+        self.resid = args['RESN']
+        self.reswt = to_one_letter(args['RESwt'])
+        self.resmut = to_one_letter(args['RESmut'])
+        self.pH = float(args['pH'].strip('[]'))
 
         # These arguments are sometimes missing in the data.
         try:
-            self.temp = float(args[13])
+            self.temp = float(args['T'])
         except:
             self.temp = None
 
         try:
-            self.ddT = float(args[6])
+            self.ddT = float(args['Tmexp'])
         except:
             self.ddT = None
 
         try:
-            self.ddG = float(args[12])
+            self.ddG = float(args['Gexp(T)'])
         except:
             self.ddG = None
 
