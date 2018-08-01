@@ -9,7 +9,7 @@ import pandas
 from test_utils import *
 
 imut_progname = "/opt/proteins/imutant/I-Mutant2.0.7/I-Mutant2.0.py"
-pucci_datapath = "/home/chipbuster/Spinny/pucci-db"
+pucci_datapath = "/home/chipbuster/NAS3/PDBStorage/puccidb/"
 
 def process_results(input: str) -> Tuple[float, float, float]:
     """Parse out ddT, ddG, and RSA from results"""
@@ -51,12 +51,14 @@ def run_imutant_once(protParams: ProtParams) -> ProtResults:
         universal_newlines=True,
         timeout=30)
 
-    if results.returncode != 0:
-        print(results.stderr)
+    try:
+        (ddG, rsa) = process_results(results.stdout)
+    except Exception as e:
+        print("Something went wrong with this IMutant Run")
+        print(e)
         raise RuntimeError("Call to IMutant2.0 failed. Call arguments were " +
-                           str(callArray))
-
-    (ddG, rsa) = process_results(results.stdout)
+                           " ".join(callArray))
+ 
 
     return ProtResults(protParams, ddG, rsa)
 
