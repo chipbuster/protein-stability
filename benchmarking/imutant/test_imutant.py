@@ -9,7 +9,8 @@ import pandas
 from test_utils import *
 
 imut_progname = "/opt/proteins/imutant/I-Mutant2.0.7/I-Mutant2.0.py"
-pucci_datapath = "/home/chipbuster/NAS3/PDBStorage/puccidb/"
+pucci_datafile = "/home/chipbuster/NAS3/PDBStorage/puccidb/Pucci2016-r3.csv"
+pdb_datapath = "/home/chipbuster/NAS3/PDBStorage/puccidb/"
 
 def process_results(input: str) -> Tuple[float, float, float]:
     """Parse out ddT, ddG, and RSA from results"""
@@ -36,8 +37,8 @@ def run_imutant_once(protParams: ProtParams) -> ProtResults:
     callArray = ["python2", "-O"]
     callArray.append(imut_progname)
     callArray.append("-pdbv")
-    callArray.append(genPDBpath(protParams.pdbid, pucci_datapath))
-    callArray.append(genDSSPpath(protParams.pdbid, pucci_datapath))
+    callArray.append(genPDBpath(protParams.pdbid, pdb_datapath))
+    callArray.append(genDSSPpath(protParams.pdbid, pdb_datapath))
     callArray.append(protParams.chain)
     callArray.append(str(protParams.resid))
     callArray.append(protParams.resmut)
@@ -79,7 +80,7 @@ def main(args):
 
     params = []
     results = []
-    with open(os.path.join(pucci_datapath, "Pucci2016-r3.csv"), 'r') as infile:
+    with open(pucci_datafile, 'r') as infile:
         data = pandas.read_csv(infile)
         for i in range(data.shape[0]):
             try:
