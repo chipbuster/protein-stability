@@ -10,7 +10,7 @@ from test_utils import *
 
 imut_progname = "/opt/proteins/imutant/I-Mutant2.0.7/I-Mutant2.0.py"
 pucci_datafile = "/home/chipbuster/NAS3/PDBStorage/puccidb/Pucci2016-r3.csv"
-pdb_datapath = "/home/chipbuster/NAS3/PDBStorage/puccidb/"
+pdb_datapath = "/home/chipbuster/NAS3/PDBStorage/pdbredo/"
 
 def process_results(input: str) -> Tuple[float, float, float]:
     """Parse out ddT, ddG, and RSA from results"""
