@@ -6,6 +6,7 @@ from multiprocessing import Pool
 import pickle
 import pandas
 
+sys.path.append("../common/")
 from test_utils import *
 
 imut_progname = "/opt/proteins/imutant/I-Mutant2.0.7/I-Mutant2.0.py"

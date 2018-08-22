@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import sys
+sys.path.append("../common/")
+
 from test_utils import *
 import pickle
 import numpy as np
