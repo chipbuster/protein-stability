@@ -1,6 +1,10 @@
 from typing import List, Tuple
 import Bio.SeqUtils
 import os
+from dataclasses import dataclass
+
+# Default name: can be overridden by later modules
+imut_progname = "/opt/proteins/imutant/I-Mutant2.0.7/I-Mutant2.0.py"
 
 def to_one_letter(name: str) -> str:
     """Convert a three-letter AA code to one letter using Biopython"""
@@ -9,7 +13,7 @@ def to_one_letter(name: str) -> str:
     name = name[0].upper() + name[1:]
     return Bio.SeqUtils.IUPACData.protein_letters_3to1[name.strip()]
 
-
+@dataclass
 class ProtParams(object):
     pdbid: str  #PDB ID: 4char alphanum
     chain: str  #Chain ID: single letter
@@ -58,7 +62,7 @@ class ProtParams(object):
         except:
             self.ddG = None
 
-
+@dataclass
 class ProtResults:
     params: ProtParams
     ddG: float  # change in delta G
@@ -69,12 +73,6 @@ class ProtResults:
         out += "," + str(self.ddG)
         out += "," + str(self.rsa)
         return out
-
-    def __init__(self, p, g, r):
-        self.params = p
-        self.ddG = g
-        self.rsa = r
-
 
 def genPDBpath(name: str, datapath: str) -> str:
     return os.path.join(datapath, "pdb", name) + ".pdb"

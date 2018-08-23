@@ -85,10 +85,11 @@ def main(args):
         data = pandas.read_csv(infile)
         for i in range(data.shape[0]):
             try:
-                p = ProtParams()#Cannot call mutator inline or will get None
+                p = ProtParams(*([None] * 9))#Cannot call mutator inline or will get None
                 p.set_from_pucci_row(data.iloc[i])
                 if p is not None:
                     params.append(p)
+                    print(p)
             except ValueError as e:
                 print("Error on line " + str(i))
                 print(e)
