@@ -10,6 +10,7 @@ import subprocess
 from multiprocessing import Pool
 from typing import List, Tuple
 from Bio.PDB.PDBParser import PDBParser
+from Bio.PDB.PDBExceptions import PDBException
 
 from test_utils import *
 
@@ -19,12 +20,9 @@ aas = [
     "Glu", "Arg", "His", "Lys", "Ser", "Thr", "Cys", "Met", "Asn", "Gln"
 ]
 
-# TODO:
-# Read protein file in
-# Generate all mutations from sequence -- DONE!
-# Call imutant once per sequence (run_imutant_once)
-# Pickle results
-
+def get_pdb_id(fname):
+    """Generate PDB ID from file name of PDB"""
+    return os.path.basename(fname).split('.')[0]
 
 def gen_mutation_sequence(fname):
     """Read a given PDB file and return a list of ProtParams that describe the
@@ -34,7 +32,7 @@ def gen_mutation_sequence(fname):
     strictParser = PDBParser(PERMISSIVE=0)
     laxParser = PDBParser(PERMISSIVE=1)
 
-    pdbName = os.path.basename(fname).split('.')[0]
+    pdbName = get_pdb_id(fname)
     try:
         pdbStructure = strictParser.get_structure(pdbName, fname)
     except PDBException as pe:
@@ -111,14 +109,13 @@ def run_imutant_once_with_catch(inp):
     except RuntimeError as e:
         print(e)
         print("Caught runtime error. Continuing...")
-        return None
     except Exception as e:
         print("Unknown error occured with " + inp.pdbid)
         print(e)
+    finally:
         return None
 
-
-def process_results(input: str) -> Tuple[float, float, float]:
+def process_results(input: str) -> Tuple[float, float]:
     """Parse out ddT, ddG, and RSA from results"""
     input = input.splitlines()
 
@@ -155,12 +152,14 @@ if __name__ == "__main__":
 
     progArgs = [(param, pdbPath, dsspPath) for param in candidates]
 
-    with Pool(processes=16) as pool:
+    with Pool(processes=15) as pool:
         results = list(pool.map(run_imutant_once_with_catch, progArgs))
 
     t2 = time.perf_counter()
 
-    with open("results.pkl", 'wb') as picklefile:
+    pklfname = get_pdb_id(pdbPath) + "_results.pkl"
+
+    with open(pklfname, 'wb') as picklefile:
         pickle.dump(results, picklefile)
 
     print("Finished! Took %f seconds to run %d mutations." % (t2 - t1,
