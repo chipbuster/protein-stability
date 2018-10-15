@@ -70,5 +70,3 @@ def create_coarse_grain_model(pdbStructure):
                     cgmodel[ident] = calc_residue_location(residue)
 
     return cgmodel
-
-

@@ -48,6 +48,9 @@ Downloads were accomplished by using `javaws` on the files resulting from the
 `pdb+sf` contains PDB files with structure factor info. `pdb` contains no
 structure factors.
 
+# Auxilliary Files
+"subneg5.csv" contains all mutations below negative 5 ddG (strongly stabilizing)
+
 # Publication
 
 https://www.biorxiv.org/content/early/2016/01/10/036301
