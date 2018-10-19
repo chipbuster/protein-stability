@@ -2,11 +2,14 @@ package require autoionize
 package require autopsf
 package require mutator
 
-set pdbname "1csp"
-set targnum "3"
-set targres "ARG"
+# Usage: vmd -dispdev text -e automutate.tcl -args <pdbid> <mutation id string> <target res num> <target residue 3-letter>
+# Places dimensional info in file dimensions.out
+
+set pdbname [lindex $argv 0]
+set mutid   [lindex $argv 1]
+set targnum [lindex $argv 2]
+set targres [lindex $argv 3]
 mol new $pdbname.pdb
-set crys [atomselect top "all"]
 
 # Script loads a molecule in, applies transformations:
 #      - Generate PSF
@@ -38,12 +41,23 @@ file copy $pdbname-fep.fep $pdbname-fep.pdb
 ## Ionize to neutralize
 # -sc 0.15: neutralize and set salt concentration to 0.15M
 # -o ${pdbname}_prepared: set prefix to prepared
-autoionize -psf $pdbname-fep.fep.psf -pdb $pdbname-fep.pdb -sc 0.15
+autoionize -psf $pdbname-fep.fep.psf -pdb $pdbname-fep.pdb -sc 0.15 
 
-## Print coordinate data
+## Move all files to some sane default names
+file mkdir prepared
+file copy $pdbname-fep.fep prepared/$pdbname-$mutid.fep
+file copy ionized.pdb prepared/$pdbname-$mutid.pdb
+file copy ionized.psf prepared/$pdbname-$mutid.psf
+
+## Print coordinate data to file
+set outfile [open "dimensions.out" w]
+
 set sel [atomselect top "all"]
 
-puts -nonewline "DIMENSIONS MINMAX: "
-measure minmax $sel
-puts -nonewline "DIMENSIONS CENTER: "
-measure center $sel
+puts -nonewline $outfile "DIMENSIONS MINMAX: "
+puts $outfile [measure minmax $sel]
+puts -nonewline $outfile "DIMENSIONS CENTER: "
+puts $outfile [measure center $sel]
+close $outfile
+
+exit
