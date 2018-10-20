@@ -45,7 +45,7 @@ autoionize -psf $pdbname-fep.fep.psf -pdb $pdbname-fep.pdb -sc 0.15
 
 ## Move all files to some sane default names
 file mkdir prepared
-file copy $pdbname-fep.fep prepared/$pdbname-$mutid.fep
+file copy ionized.pdb prepared/$pdbname-$mutid.fep
 file copy ionized.pdb prepared/$pdbname-$mutid.pdb
 file copy ionized.psf prepared/$pdbname-$mutid.psf
 
