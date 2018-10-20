@@ -32,3 +32,4 @@ for file in "*.namd"; do
 done
 
 mv *.namd prepared
+cp namd-templates/*.slurm prepared
