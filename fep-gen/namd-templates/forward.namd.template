@@ -1,0 +1,143 @@
+###################################################
+# Y2A FORWARD DECOUPLE ON
+###################################################
+
+
+# INPUT
+
+set name                MUTNAME
+set temp                300.0
+set paramdir                PARAMETER_DIR
+
+paraTypeCharmm on
+parameters $paramdir/par_all36_prot.prm
+mergeCrossterms yes
+parameters $paramdir/par_all36_lipid.prm
+parameters $paramdir/par_all36_carb.prm
+parameters $paramdir/par_all36_na.prm
+parameters $paramdir/par_all36_cgenff.prm
+parameters $paramdir/toppar_water_ions_namd.str
+
+exclude                 scaled1-4
+1-4scaling              1.0
+
+
+# TOPOLOGY
+
+structure               $name.psf
+
+# INITIAL CONDITIONS
+
+coordinates             $name.pdb
+bincoordinates          $name-equil.coor
+binvelocities           $name-equil.vel
+extendedsystem          $name-equil.xsc
+
+# OUTPUT FREQUENCIES
+
+outputenergies          100
+outputtiming            100
+outputpressure          100
+restartfreq             100
+XSTFreq                 100
+
+
+# OUTPUT AND RESTART
+
+outputname              $name-forward
+restartname             $name-forward
+
+binaryoutput            yes
+binaryrestart           yes
+
+# CONSTANT-T
+langevin                on
+langevinTemp            $temp
+langevinDamping         1.0
+
+# PME
+
+PME                     yes
+PMETolerance            10e-6
+PMEInterpOrder          4
+
+PMEGridSpacing          1.0
+
+# Periodic Boundary Conditions
+#cellBasisVector1    30.0    0.   0.
+#cellBasisVector2     0.    30.0   0.
+#cellBasisVector3     0.    0    30.0
+#cellOrigin          0.0 0.0 0.0
+
+
+# WRAP WATER FOR OUTPUT
+
+wrapAll                 on
+
+# CONSTANT-P
+
+LangevinPiston          on
+LangevinPistonTarget    1
+LangevinPistonPeriod    100
+LangevinPistonDecay     100
+LangevinPistonTemp      $temp
+
+StrainRate              0.0 0.0 0.0
+useGroupPressure        yes
+
+useFlexibleCell         no
+
+# SPACE PARTITIONING
+
+stepspercycle           20
+margin                  1.0
+
+# CUT-OFFS
+
+switching               on
+switchdist              10.0
+cutoff                  11.0
+pairlistdist            12.0
+
+
+# RESPA PROPAGATOR
+
+timestep                1.0
+fullElectFrequency      4
+nonbondedFreq           2
+
+
+# SHAKE
+
+rigidbonds              all
+rigidtolerance          0.000001
+rigiditerations         400
+
+
+# COM
+
+ComMotion            no
+
+
+# FEP PARAMETERS
+
+source                 /work/02711/chipbus/stampede2/data/namd-auxfiles/utils/fep.tcl
+
+alch                    on
+alchType                FEP
+alchFile                $name.fep
+alchCol                 B
+alchOutFile             $name-forward.fepout
+alchOutFreq             10
+
+alchVdwLambdaEnd        1.0
+alchElecLambdaStart     0.5
+alchVdWShiftCoeff       4.0
+alchDecouple            on
+
+alchEquilSteps          100
+set numSteps            10000
+
+runFEP 0.0 1.0 0.05 $numSteps
+
+
