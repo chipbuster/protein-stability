@@ -50,7 +50,8 @@ ccstring  = "cellOrigin           %f %f %f"%(xcent,ycent,zcent)
 #print cb3string
 #print ccstring
 
-for fprefix in ['equilibrate','forward','backward']:
+for fprefix in ['equilibrate']:
+#for fprefix in ['equilibrate','forward','backward']:
     fname = os.path.join('namd-templates', fprefix + ".namd.template")
     outfname = fprefix + ".namd"
     f = open(outfname,'w')

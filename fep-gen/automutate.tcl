@@ -29,7 +29,7 @@ autopsf -mol top -protein -include water -solvate -top [list\
            /opt/proteins/ffparams/c36_18/top_all36_lipid.rtf\
            /opt/proteins/ffparams/c36_18/top_all36_na.rtf\
            /opt/proteins/ffparams/c36_18/top_all36_prot.rtf\
-           /opt/proteins/ffparams/c36_18/toppar_water_ions_namd.str\
+           /opt/proteins/ffparams/c36_18/toppar_water_ions.str\
            ]
 
 ## Mutate and generate files
