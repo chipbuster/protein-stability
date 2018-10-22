@@ -16,7 +16,7 @@ parameters $paramdir/par_all36_lipid.prm
 parameters $paramdir/par_all36_carb.prm
 parameters $paramdir/par_all36_na.prm
 parameters $paramdir/par_all36_cgenff.prm
-parameters $paramdir/toppar_water_ions_na
+parameters $paramdir/toppar_water_ions_namd.str
 
 exclude                 scaled1-4
 1-4scaling              1.0
@@ -132,5 +132,3 @@ alchEquilSteps          100
 set numSteps            500
 
 runFEP 1.0 0.0 -0.05 $numSteps 
-
-
