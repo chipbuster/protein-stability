@@ -7,7 +7,7 @@ set -euo pipefail
 
 
 # Change this to change parameter location
-PARAMDIR="/opt/proteins/ffparams/c36_18"
+PARAMDIR="/work/02711/chipbus/stampede2/data/namd-auxfiles/c36_params"
 
 if [ -z  "${4-}" ]; then
     echo "Usage: $0 <pdbid> <mutid string> <residue number> <mutation 3let code>"
