@@ -31,16 +31,17 @@ def sample_states(states, T, nsamp):
     stateProbs = calc_probabilities(states, T)
     # instead of sampling the energy level, sample the energy level index.
     sample = common.parallel_choice(list(range(len(states))), size=int(nsamp)
-                            , p=stateProbs, nprocs=16)
+                            , p=stateProbs)
     return sample
 
 def main():
     data = sample_states(exampleRatios, 1000.0, int(1e7))
-    CDataObj = CompressionData(data, len(exampleRatios), 0, len(exampleRatios),
-                               np.int8)
+    CDataObj = CompressionData(data, len(exampleRatios), 1,
+                               0, len(exampleRatios), np.int32)
     print("Compressed size is " + str(CDataObj.size_data()))
     print("Zero size is " + str(CDataObj.size_zeros()))
     print("Random size is " + str(CDataObj.size_random()))
+    print("Compression ratio is " + str(CDataObj.get_compression_ratios()))
 
 if __name__ == "__main__":
     main()
