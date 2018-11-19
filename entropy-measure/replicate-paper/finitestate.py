@@ -3,6 +3,9 @@
 
 import numpy as np
 
+import common
+from compressstate import *
+
 kB = 1
 
 # A system with energy states at 1e, 2e, 30e, and 70e
@@ -27,6 +30,17 @@ def sample_states(states, T, nsamp):
 
     stateProbs = calc_probabilities(states, T)
     # instead of sampling the energy level, sample the energy level index.
-    sample = np.random.choice(list(range(len(states))), size=int(nsamp)
-                            , p=stateProbs)
+    sample = common.parallel_choice(list(range(len(states))), size=int(nsamp)
+                            , p=stateProbs, nprocs=16)
     return sample
+
+def main():
+    data = sample_states(exampleRatios, 1000.0, int(1e7))
+    CDataObj = CompressionData(data, len(exampleRatios), 0, len(exampleRatios),
+                               np.int8)
+    print("Compressed size is " + str(CDataObj.size_data()))
+    print("Zero size is " + str(CDataObj.size_zeros()))
+    print("Random size is " + str(CDataObj.size_random()))
+
+if __name__ == "__main__":
+    main()
