@@ -54,11 +54,11 @@ def main():
 
     data = sample_states_all(exampleRatios, T, D)
     CDataObj = CompressionData(data, len(exampleRatios), 1,
-                               0, len(exampleRatios), np.uint8)
-    print("Compressed size is " + str(CDataObj.size_data()))
-    print("Zero size is " + str(CDataObj.size_zeros()))
-    print("Random size is " + str(CDataObj.size_random()))
-    print("Compression ratio is " + str(CDataObj.get_compression_ratios()))
+                               0, len(exampleRatios)-1, np.uint8)
+    # print("Compressed size is " + str(CDataObj.size_data()))
+    # print("Zero size is " + str(CDataObj.size_zeros()))
+    # print("Random size is " + str(CDataObj.size_random()))
+    # print("Compression ratio is " + str(CDataObj.get_compression_ratios()))
 
     eta = CDataObj.get_compression_ratios()
     entropy_estimate = eta * D * np.log(n_s)
@@ -67,7 +67,11 @@ def main():
 
     print("Estimated entropy is " + str(entropy_estimate) + 
                 ", while real entropy (NVT) is " + str(entropy_real))
-    print("Overestimate is " + str(entropy_estimate - entropy_real))
+
+    overestimate = entropy_estimate - entropy_real
+    percent_overestimate = overestimate / entropy_real
+    print("Overestimate is " + str(overestimate) + ", or "
+          + str(percent_overestimate * 100) + "%")
 
 if __name__ == "__main__":
     main()

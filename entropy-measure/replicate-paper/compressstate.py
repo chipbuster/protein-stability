@@ -1,6 +1,7 @@
 # This module determines the compression ratio of a given state.
 import numpy as np
 import lzma
+import struct
 
 import common
 
@@ -26,7 +27,7 @@ class CompressionData:
     def bin_states(self):
         """Bin floating point states into integers based off of supplied values"""
         bins = np.linspace(self.minval, self.maxval, num=self.nbins)
-        return np.digitize(self.states, bins)
+        return np.digitize(self.states, bins, right=True)
 
     def gen_zeros_data(self):
         """Generate the all-zeros string for compression ratio measurements"""
@@ -41,7 +42,6 @@ class CompressionData:
         if self.cachedCd is None:
             print("Compressing Sample Data...please be patient")
             self.cachedCd = self.compressed_data_size(self.bindata)
-#            print("Sample Data compresed.")
         return self.cachedCd
 
     def size_zeros(self):
@@ -73,7 +73,3 @@ class CompressionData:
         eta = (C_d - C_0) / (C_1 - C_0)
 
         return eta
-
-    def get_entropy(self):
-        eta = self.get_compression_ratios()
-        return eta * nbins
