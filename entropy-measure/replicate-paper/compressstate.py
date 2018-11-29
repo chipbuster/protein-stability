@@ -5,7 +5,7 @@ import lzma
 import common
 
 lzmaFilters = [
-    {"id": lzma.FILTER_LZMA2, "preset": 7 | lzma.PRESET_EXTREME},
+    {"id": lzma.FILTER_LZMA2}, #, "preset": 7 | lzma.PRESET_EXTREME},
 ]
 
 # A class for keeping track of state info for compression
@@ -30,27 +30,31 @@ class CompressionData:
 
     def gen_zeros_data(self):
         """Generate the all-zeros string for compression ratio measurements"""
-        if self.cachedC0 is None:
-            self.cachedC0 = np.zeros(np.shape(self.bindata), dtype = self.dtype)
-        return self.cachedC0
+        return np.zeros(np.shape(self.bindata), dtype = self.dtype)
 
     def gen_random_data(self):
         """Generate the random string for compression ratio measurements"""
-        if self.cachedC1 is None:
-            self.cachedC1 = common.parallel_choice(self.nbins, size=np.size(self.bindata),
+        return common.parallel_choice(self.nbins, size=np.size(self.bindata),
                                       p=None)
-        return self.cachedC1
 
     def size_data(self):
         if self.cachedCd is None:
+            print("Compressing Sample Data...please be patient")
             self.cachedCd = self.compressed_data_size(self.bindata)
+#            print("Sample Data compresed.")
         return self.cachedCd
 
     def size_zeros(self):
-        return self.compressed_data_size(self.gen_zeros_data())
+        if self.cachedC0 is None:
+            self.cachedC0 = self.compressed_data_size(self.gen_zeros_data())
+        return self.cachedC0
 
     def size_random(self):
-        return self.compressed_data_size(self.gen_random_data())
+        if self.cachedC1 is None:
+            print("Compressing Random Data...please be patient")
+            self.cachedC1 = self.compressed_data_size(self.gen_random_data())
+#            print("Random Data compressed.")
+        return self.cachedC1
 
     def compressed_data_size(self, obj):
         """Get size of compressed data. Input needs to be a bytearray."""
@@ -63,12 +67,9 @@ class CompressionData:
 
     def get_compression_ratios(self):
         """Compute compression ratio of data in system."""
-        print("Computing compression ratios. Please be patient!")
         C_d = self.size_data()
-        print("Completed phase data compression")
         C_0 = self.size_zeros()
         C_1 = self.size_random()
-        print("Completed random data compression")
         eta = (C_d - C_0) / (C_1 - C_0)
 
         return eta
