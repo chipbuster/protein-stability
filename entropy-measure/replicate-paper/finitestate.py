@@ -6,8 +6,11 @@
 # For any system where ambiguity is possible, the suffix _one or _all will
 # clarify whether this is for one or all particles.
 
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
+import pickle
 
 import common
 from compressstate import *
@@ -36,7 +39,7 @@ def sample_states_all(states, T, nsamp):
 
     stateProbs = calc_probabilities_one(states, T)
     # instead of sampling the energy level, sample the energy level index.
-    sample = common.parallel_choice(list(range(len(states))), size=int(nsamp)
+    sample = np.random.choice(list(range(len(states))), size=int(nsamp)
                             , p=stateProbs)
     return sample
 
@@ -47,10 +50,14 @@ def calc_entropy_one(states, T):
     P = calc_probabilities_one(states, T)
     return -kB * np.sum(P * np.log(P))
 
-def main():
-    T = 100
+def calc_entropy_for_states(states,n,T):
+    """For a set of states, calculate entropy for n particles at temperature T
+    
+       Returns a tuple of (exact, estimated) values
+    """
+
     D = int(1e7)
-    n_s = 4
+    n_s = len(states)
 
     data = sample_states_all(exampleRatios, T, D)
     CDataObj = CompressionData(data, len(exampleRatios), 1,
@@ -64,14 +71,24 @@ def main():
     entropy_estimate = eta * D * np.log(n_s)
 
     entropy_real = calc_entropy_one(exampleRatios, T) * D
-
-    print("Estimated entropy is " + str(entropy_estimate) + 
-                ", while real entropy (NVT) is " + str(entropy_real))
-
-    overestimate = entropy_estimate - entropy_real
-    percent_overestimate = overestimate / entropy_real
-    print("Overestimate is " + str(overestimate) + ", or "
-          + str(percent_overestimate * 100) + "%")
+   
+    return (entropy_real, entropy_estimate)
 
 if __name__ == "__main__":
-    main()
+    states = exampleRatios
+    n = int(1e7)
+
+    temps = np.exp(np.linspace(-1.898,7.60,2000)) #temperatures of 0.15 to 2000
+
+    pool = Pool(16)
+
+    args = [(states, n, t) for t in temps]
+
+    entropylists = pool.starmap(calc_entropy_for_states, args)
+
+    (entropy_list_real, entropy_list_estimate) = zip(*entropylists)
+
+    # Information we'll need to see if this is working
+    masterinfo = zip(temps, entropy_list_real, entropy_list_estimate)
+    with open('results.pkl','wb') as pklfile:
+        pickle.dump(masterinfo, pklfile)

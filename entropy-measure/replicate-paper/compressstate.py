@@ -6,7 +6,7 @@ import struct
 import common
 
 lzmaFilters = [
-    {"id": lzma.FILTER_LZMA2}, #, "preset": 7 | lzma.PRESET_EXTREME},
+    {"id": lzma.FILTER_LZMA2, "preset": 7 | lzma.PRESET_EXTREME},
 ]
 
 # A class for keeping track of state info for compression
@@ -35,7 +35,7 @@ class CompressionData:
 
     def gen_random_data(self):
         """Generate the random string for compression ratio measurements"""
-        return common.parallel_choice(self.nbins, size=np.size(self.bindata),
+        return np.random.choice(self.nbins, size=np.size(self.bindata),
                                       p=None)
 
     def size_data(self):
