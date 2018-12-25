@@ -1,5 +1,6 @@
 #!/opt/anaconda/anaconda3/bin/python
 import numpy as np
+import pickle
 from numba import jit, stencil
 
 # Ising Model simulator with both single-state and Wolf cluster flips. No
@@ -41,6 +42,12 @@ def spingrid_size(spingrid):
     """Utility function for calculating the "real" size of the spingrid."""
     (x,y) = np.shape(spingrid)
     return (x-2, y-2)
+
+@jit
+def discard_borders(spingrid):
+    """Discard the spingrid's borders and return an array of size (n-2,m-2)"""
+    (x,y) = np.shape(spingrid)
+    return spingrid[1:x-1,1:y-1]
 
 @stencil(cval=0)
 def calc_energy_site(spingrid):
@@ -124,7 +131,27 @@ def run_ising_model(initial_grid, nsamps, step, burnin):
         statelist.append(state)
 
     return statelist
+
+def linearize_frames(frames, layout, size=8):
+    """Create a raw data buffer from a series of frames.
+
+    layout describes the process for turning a 2D sequence into a 1D sequence.
+
+        Possible values:
+           - random: Create a random (but consistent per-frame) mapping
+           - row: map by row-major order
+           - col: map by column-major order
+           - spacefill: use a space filling curve
+           - temporal: not yet implemented
+    """"
+    (width,height) = spingrid_size(frames[0])
+    numEntries = np.size(frames)
+    linearized = np.empty(numEntries)
+    cur = 0    # Index into linearized array that indicates current write loc
+    for frame in (discard_borders(f) for f in frames):
         
+
+
 
 x = create_spingrid(50)
 energy = calc_energy_grid(x)
