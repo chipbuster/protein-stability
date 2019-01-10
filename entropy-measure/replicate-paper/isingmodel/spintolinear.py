@@ -1,5 +1,8 @@
 import numpy as np
 import pdb
+import sys
+
+import isingmodelrect
 
 def gen_random_map(shape):
     """Generate a random mapping for randomized linearization, as a dict
@@ -37,10 +40,6 @@ def random_linearize(frame, mapping):
     for (i,j) in rectIndices:
         linBuf[mapping[i,j]] = frame[i,j]
     return linBuf
-
-def rowmajor_linearize(frame):
-    """Linearize the frame in row-major order"""
-    return np.ravel(frame,order="C")
 
 def colmajor_linearize(frame):
     """Linearize the frame in column-major order"""
@@ -103,3 +102,98 @@ def spacefill_linearize(frame, curveMap):
         linear[linIndex] = frame[x,y]
 
     return linear
+
+# adapted from https://stackoverflow.com/a/36889800
+def spiral(width, height):
+    NORTH, S, W, E = (0, -1), (0, 1), (-1, 0), (1, 0) # directions
+    turn_right = {NORTH: E, E: S, S: W, W: NORTH} # old -> new direction
+
+    if width < 1 or height < 1:
+        raise ValueError
+    x, y = 0,0 # start near the center
+    dx, dy = NORTH # initial direction
+    matrix = [[None] * width for _ in range(height)]
+    count = 0
+
+    def inbounds(x,y):
+        return x >= 0 and x < width and y >= 0 and y < height
+
+    while True:
+        count += 1
+        matrix[y][x] = count # visit
+        # try to turn right
+        new_dx, new_dy = turn_right[dx,dy]
+        turn_x, turn_y = x + new_dx, y + new_dy
+        straight_x, straight_y = x + dx, y + dy
+
+        if inbounds(straight_x,straight_y) and matrix[straight_y][straight_x] is None:
+            x,y = straight_x, straight_y
+        elif inbounds(turn_x,turn_y) and matrix[turn_y][turn_x] is None:
+            x,y = turn_x,turn_y
+            dx, dy = new_dx, new_dy
+        else:
+            return matrix
+
+def linearize_frames(frames, layout):
+    """Create a linear (numpy) data buffer from a series of frames.
+
+    layout describes the process for turning a 2D sequence into a 1D sequence.
+
+        Possible values:
+           - random: Create a random (but consistent per-frame) mapping
+           - row: map by row-major order
+           - col: map by column-major order
+           - spacefill: use a space filling curve (must be a square grid)
+           - spiral: spiral from top left corner to right, then down, then cw in
+           - temporal: not yet implemented
+    """
+    (width,height) = isingmodelrect.spingrid_size(frames[0])
+    frameSize = width * height
+    numEntries = frameSize * len(frames)
+
+    if layout == "random":
+        linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
+        mapping = gen_random_map((width,height))
+        for (frameNum, rawFrame) in enumerate(frames):
+            frame = isingmodelrect.discard_borders(rawFrame)
+            startIndex = frameNum * frameSize
+            endIndex = (frameNum+1) * frameSize
+            linearized[startIndex:endIndex] = random_linearize(frame,mapping)
+        return linearized
+
+    elif layout == "spacefill":
+        linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
+        if width != height:
+            raise ValueError("Grid must square to use spacefilling linearization!")
+        mapping = gen_hcurve(width)
+        for (frameNum, rawFrame) in enumerate(frames):
+            frame = isingmodelrect.discard_borders(rawFrame)
+            startIndex = frameNum * frameSize
+            endIndex = (frameNum+1) * frameSize
+            linearized[startIndex:endIndex] = spacefill_linearize(frame,mapping)
+
+        return linearized
+
+    elif layout == "temporal":
+        raise NotImplementedError("Temporal mapping is not yet implemented")
+
+    elif layout == "row":
+        return np.ravel(frame,order="C")
+
+    elif layout == "col":
+        return np.ravel(frame,order="F")
+
+    elif layout == "spiral":
+        linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
+        mapping = np.array(spiral(width,height))
+        for (frameNum,frame) in enumerate((isingmodelrect.discard_borders(f)\
+                                             for f in frames)):
+            it = np.nditer(frame, flags=['multi_index'])
+            while not it.finished:
+                (i,j) = it.multi_index
+                localLinearIndex = mapping[i,j]
+                globalLinearIndex = localLinearIndex + frameNum * frameSize
+                linearized[globalLinearIndex] = frame[i,j]
+                it.iternext()
+        return linearized
+

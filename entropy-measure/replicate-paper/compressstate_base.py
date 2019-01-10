@@ -11,32 +11,19 @@ lzmaFilters = [
 
 # A class for keeping track of state info for compression
 class CompressionData:
-    def __init__(self,states, nbins, ndof, minval, maxval, dtype):
-        self.states = states
-        self.nbins = nbins
-        self.ndof = ndof
-        self.minval = minval
-        self.maxval = maxval
-        self.bindata = self.bin_states()
-        self.dtype = dtype
+    def __init__(self):
+        pass #Initialization code specialized per-site
 
-        self.cachedCd = None
-        self.cachedC0 = None
-        self.cachedC1 = None
-
-    def bin_states(self):
-        """Bin floating point states into integers based off of supplied values"""
-        bins = np.linspace(self.minval, self.maxval, num=self.nbins)
-        return np.digitize(self.states, bins, right=True)
+    def gen_bin_data(self):
+        """Generate binary form of input data"""
 
     def gen_zeros_data(self):
         """Generate the all-zeros string for compression ratio measurements"""
-        return np.zeros(np.shape(self.bindata), dtype = self.dtype)
+        pass
 
     def gen_random_data(self):
         """Generate the random string for compression ratio measurements"""
-        return np.random.choice(self.nbins, size=np.size(self.bindata),
-                                      p=None)
+        pass
 
     def size_data(self):
         if self.cachedCd is None:
@@ -53,7 +40,6 @@ class CompressionData:
         if self.cachedC1 is None:
             print("Compressing Random Data...please be patient")
             self.cachedC1 = self.compressed_data_size(self.gen_random_data())
-#            print("Random Data compressed.")
         return self.cachedC1
 
     def compressed_data_size(self, obj):
