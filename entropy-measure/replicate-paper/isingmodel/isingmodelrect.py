@@ -3,8 +3,7 @@ import numpy as np
 import pickle
 from numba import jit, stencil
 import pickle
-
-import spintolinear
+from multiprocessing import Pool
 
 # Ising Model simulator with both single-state and Wolf cluster flips. No
 # external magnetic field accounted for.
@@ -15,7 +14,6 @@ import spintolinear
 
 J = 1      # For now
 kB = 1     # Okay this is getting silly
-T = (-2 * J) / (kB * np.log(0.5)) * 0.8      # what convenient numbers!
 
 @stencil(cval=0)
 def zero_borders(spingrid):
@@ -66,7 +64,7 @@ def calc_energy_grid(spingrid):
     return np.sum(calc_energy_site(spingrid))
 
 @jit
-def ising_site_flip(spingrid, grid_energy,return_copy=False):
+def ising_site_flip(spingrid, T, grid_energy,return_copy=False):
     """Attempt to flip a site in the Ising grid.
     
        Returns the new spins, whether the flip was successful or not,
@@ -125,7 +123,7 @@ def gen_neighbors(maxes, site):
         yield (x,y-1)
 
 @jit
-def wolff_cluster_find(spingrid, site):
+def wolff_cluster_find(spingrid, T, site):
     """Execute the Wolff cluster-growth algorithm by flipping the site and
     potentially aggregating its neighbors."""
 
@@ -162,7 +160,7 @@ def wolff_cluster_find(spingrid, site):
     return old_toflip
 
 @jit
-def ising_wolff_flip(spingrid, grid_energy,return_copy=False):
+def ising_wolff_flip(spingrid, T, grid_energy,return_copy=False):
     """Flip an entire cluster via the Wolff algorithm.
     
        Returns the new spins (may or may not be a full copy), 
@@ -172,7 +170,7 @@ def ising_wolff_flip(spingrid, grid_energy,return_copy=False):
     x_seed = np.random.randint(1,x_max+1)
     y_seed = np.random.randint(1,y_max+1)
 
-    cluster = wolff_cluster_find(spingrid,(x_seed,y_seed))
+    cluster = wolff_cluster_find(spingrid, T, (x_seed,y_seed))
 
 #    print("Flipping " + str(len(cluster)) +  " spins")
 
@@ -186,7 +184,7 @@ def ising_wolff_flip(spingrid, grid_energy,return_copy=False):
     else:
         return final_energy
 
-def run_ising_model(initial_grid, nsamps, step, burnin, method):
+def run_ising_model(initial_grid, T, nsamps, step, burnin, method):
     """Run a single-flip Ising model for on <initial_grid>.
     Generate <nsamps> samples that are <step> apart in a single-site-flip
     MCMC simulation 
@@ -201,74 +199,56 @@ def run_ising_model(initial_grid, nsamps, step, burnin, method):
     # Burn the MCMC in so that we're not dealing with initialization effects
     print("Burning in Ising Grid...")
     for _ in range(burnin):
-        energy = ising_site_flip(grid, energy, return_copy=False)
+        energy = ising_site_flip(grid, T, energy, return_copy=False)
 
     print("Sampling Ising Model...")
     # Sample from grid
-    if method == "ising":
+    if method == "site":
         for i in range(nsamps):
             # Run <step> steps to get an independent sample
             for _ in range(step):
-                energy = ising_site_flip(grid, energy, return_copy=False)
+                energy = ising_site_flip(grid, T, energy, return_copy=False)
             
             # Get a sample and store it in our statelist
-            (state, energy) = ising_site_flip(grid, energy, return_copy=True)
+            (state, energy) = ising_site_flip(grid, T, energy, return_copy=True)
             statelist.append(state)
     elif method == "wolff":
         for i in range(nsamps):
             # Run <step> steps to get an independent sample
             for _ in range(step):
-                energy = ising_wolff_flip(grid, energy, return_copy=False)
+                energy = ising_wolff_flip(grid, T, energy, return_copy=False)
             
             # Get a sample and store it in our statelist
-            (state, energy) = ising_wolff_flip(grid, energy, return_copy=True)
+            (state, energy) = ising_wolff_flip(grid, T, energy, return_copy=True)
             statelist.append(state)
     else:
-        raise ValueError("Valid methods for Ising model are 'ising' and 'wolff'")
+        raise ValueError("Valid methods for Ising model are 'site' and 'wolff'")
 
     return statelist
 
-def linearize_frames(frames, layout, size=8):
-    """Create a raw data buffer from a series of frames.
+def run_ising_and_write(temperature):
+    g = create_spingrid(64)
 
-    layout describes the process for turning a 2D sequence into a 1D sequence.
+    # Avinery et. al. do some clever tricks with plotting autocorrelation times,
+    # then using this information to dynamically decide whether to use an Ising
+    # or a Wolff flip. Since I don't have the time or information to implement
+    # this, I'm doing something a little more crude: Avinery claims that the
+    # critical temperature is 2.6 kB/J, so I'm going to say anything with a
+    # window of 2.0 to 3.5 uses Wolff, and everything else uses siteflips
 
-        Possible values:
-           - random: Create a random (but consistent per-frame) mapping
-           - row: map by row-major order
-           - col: map by column-major order
-           - spacefill: use a space filling curve (must be a square grid)
-           - temporal: not yet implemented
-    """
-    (width,height) = spingrid_size(frames[0])
-    numEntries = np.size(frames)
-    linearized = np.empty(numEntries)
-    cur = 0    # Index into linearized array that indicates current write loc
+    if temperature < 3.5 and temperature > 2.0:
+        states = run_ising_model(g,temperature,5000,10000,5000,"wolff")
+    else:
+        states = run_ising_model(g,temperature,5000,10000,5000,"site")
 
-    # If we need a custom mapping, create it here.
-    if layout == "random":
-        mapping = spintolinear.gen_random_map((width,height))
-    elif layout == "spacefill":
-        if width != height:
-            raise ValueError("Grid must square to use spacefilling linearization!")
-        mapping = spintolinear.gen_hcurve(width) #Width = height here
-    elif layout == "temporal":
-        raise NotImplementedError("Temporal mapping is not yet implemented")
-
-    for frame in (discard_borders(f) for f in frames):
-        pass
-
-    pass
+    fname = "isingmodel-" + str(temperature) + ".pkl"
+    with open(fname,'wb') as pklfile:
+        pickle.dump(states,pklfile)
 
 if __name__ == '__main__':
-    print(T)
 
-    x = create_spingrid(50)
-    states = run_ising_model(x,5000,10000,100000,'ising')
-    with open("isingmodel-site.pkl",'wb') as pklfile:
-        pickle.dump(states,pklfile)
+    temps = np.linspace(0.015, 5, 100)
 
-    x = create_spingrid(50)
-    states = run_ising_model(x,5000,1000,10000,'wolff')
-    with open("isingmodel-wolff.pkl",'wb') as pklfile:
-        pickle.dump(states,pklfile)
+    p = Pool(10)
+
+    p.map(run_ising_and_write, temps)
