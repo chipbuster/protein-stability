@@ -2,6 +2,9 @@
 import numpy as np
 import pickle
 from numba import jit, stencil
+import pickle
+
+import spintolinear
 
 # Ising Model simulator with both single-state and Wolf cluster flips. No
 # external magnetic field accounted for.
@@ -11,8 +14,8 @@ from numba import jit, stencil
 # numba stencils--the outer edge of values is always zeroed.
 
 J = 1      # For now
-T = 1      # what convenient numbers!
 kB = 1     # Okay this is getting silly
+T = (-2 * J) / (kB * np.log(0.5)) * 0.8      # what convenient numbers!
 
 @stencil(cval=0)
 def zero_borders(spingrid):
@@ -66,12 +69,15 @@ def calc_energy_grid(spingrid):
 def ising_site_flip(spingrid, grid_energy,return_copy=False):
     """Attempt to flip a site in the Ising grid.
     
-       Returns a copy of the new spins, whether the flip was successful or not,
-       along with the energy of the "new" spingrid.
+       Returns the new spins, whether the flip was successful or not,
+       along with the energy of the "new" spingrid. The new spins may or may
+       not be a copy, depending on the return_copy parameter.
     """
     (x_max, y_max) = spingrid_size(spingrid)
-    x = np.random.randint(0,x_max)
-    y = np.random.randint(0,y_max)
+    x = np.random.randint(1,x_max+1)
+    y = np.random.randint(1,y_max+1)
+
+    assert spingrid[x,y] == 1 or spingrid[x,y] == -1
 
     spingrid[x,y] = -spingrid[x,y]
 
@@ -102,7 +108,85 @@ def ising_site_flip(spingrid, grid_energy,return_copy=False):
     else:
         return final_energy
 
-def run_ising_model(initial_grid, nsamps, step, burnin):
+@jit
+def gen_neighbors(maxes, site):
+    """Generate valid neighbors for a spingrid site given the size of the 
+       spingrid (not size of backing array)"""
+    (xmax,ymax) = maxes
+    (x,y) = site
+
+    if x + 1 <= xmax:
+        yield (x+1,y)
+    if y + 1 <= ymax:
+        yield (x,y+1)
+    if x - 1 >= 1:
+        yield (x-1,y)
+    if y - 1 >= 1:
+        yield (x,y-1)
+
+@jit
+def wolff_cluster_find(spingrid, site):
+    """Execute the Wolff cluster-growth algorithm by flipping the site and
+    potentially aggregating its neighbors."""
+
+    # Note: assume cluster flip index is in (with border) coordinates, e.g.
+    # site = (1,1) corresponds to corner of actual spingrid
+    (x,y) = site
+    sg_max = spingrid_size(spingrid)
+
+    # A set of sites that need to flip and were discovered more than one iter ago
+    old_toflip = set()
+    new_toflip = set()
+    new_toflip.add(site)
+
+    # While we still have eligible sites
+    while new_toflip:
+        for s in list(new_toflip):
+            old_toflip.add(s)
+            new_toflip.remove(s)
+            for (xn,yn) in gen_neighbors(sg_max,s):
+                n = (xn,yn)
+                # We've already flipped this cluster
+                if n in old_toflip or n in new_toflip:     
+                    continue
+                #This spin not eligible under Wolff
+                if spingrid[xn,yn] != spingrid[x,y]: 
+                    continue
+                pr = np.random.rand()
+                # Spin rejected by MC algorithm
+                if pr > 1 - np.exp(-2*J / (kB * T)):
+                    continue
+                # Spin added to cluster
+                new_toflip.add(n)
+
+    return old_toflip
+
+@jit
+def ising_wolff_flip(spingrid, grid_energy,return_copy=False):
+    """Flip an entire cluster via the Wolff algorithm.
+    
+       Returns the new spins (may or may not be a full copy), 
+       along with the energy of the "new" spingrid.
+    """
+    (x_max, y_max) = spingrid_size(spingrid)
+    x_seed = np.random.randint(1,x_max+1)
+    y_seed = np.random.randint(1,y_max+1)
+
+    cluster = wolff_cluster_find(spingrid,(x_seed,y_seed))
+
+#    print("Flipping " + str(len(cluster)) +  " spins")
+
+    for(xs,ys) in cluster:
+        spingrid[xs,ys] = -spingrid[xs,ys]
+
+    final_energy = calc_energy_grid(spingrid)
+
+    if return_copy:
+        return (np.copy(spingrid), final_energy)
+    else:
+        return final_energy
+
+def run_ising_model(initial_grid, nsamps, step, burnin, method):
     """Run a single-flip Ising model for on <initial_grid>.
     Generate <nsamps> samples that are <step> apart in a single-site-flip
     MCMC simulation 
@@ -121,14 +205,26 @@ def run_ising_model(initial_grid, nsamps, step, burnin):
 
     print("Sampling Ising Model...")
     # Sample from grid
-    for i in range(nsamps):
-        # Run <step> steps to get an independent sample
-        for _ in range(step):
-            energy = ising_site_flip(grid, energy, return_copy=False)
-        
-        # Get a sample and store it in our statelist
-        (state, energy) = ising_site_flip(grid, energy, return_copy=True)
-        statelist.append(state)
+    if method == "ising":
+        for i in range(nsamps):
+            # Run <step> steps to get an independent sample
+            for _ in range(step):
+                energy = ising_site_flip(grid, energy, return_copy=False)
+            
+            # Get a sample and store it in our statelist
+            (state, energy) = ising_site_flip(grid, energy, return_copy=True)
+            statelist.append(state)
+    elif method == "wolff":
+        for i in range(nsamps):
+            # Run <step> steps to get an independent sample
+            for _ in range(step):
+                energy = ising_wolff_flip(grid, energy, return_copy=False)
+            
+            # Get a sample and store it in our statelist
+            (state, energy) = ising_wolff_flip(grid, energy, return_copy=True)
+            statelist.append(state)
+    else:
+        raise ValueError("Valid methods for Ising model are 'ising' and 'wolff'")
 
     return statelist
 
@@ -141,20 +237,38 @@ def linearize_frames(frames, layout, size=8):
            - random: Create a random (but consistent per-frame) mapping
            - row: map by row-major order
            - col: map by column-major order
-           - spacefill: use a space filling curve
+           - spacefill: use a space filling curve (must be a square grid)
            - temporal: not yet implemented
-    """"
+    """
     (width,height) = spingrid_size(frames[0])
     numEntries = np.size(frames)
     linearized = np.empty(numEntries)
     cur = 0    # Index into linearized array that indicates current write loc
+
+    # If we need a custom mapping, create it here.
+    if layout == "random":
+        mapping = spintolinear.gen_random_map((width,height))
+    elif layout == "spacefill":
+        if width != height:
+            raise ValueError("Grid must square to use spacefilling linearization!")
+        mapping = spintolinear.gen_hcurve(width) #Width = height here
+    elif layout == "temporal":
+        raise NotImplementedError("Temporal mapping is not yet implemented")
+
     for frame in (discard_borders(f) for f in frames):
-        
+        pass
 
+    pass
 
+if __name__ == '__main__':
+    print(T)
 
-x = create_spingrid(50)
-energy = calc_energy_grid(x)
-print("Energy is ",energy)
+    x = create_spingrid(50)
+    states = run_ising_model(x,5000,10000,100000,'ising')
+    with open("isingmodel-site.pkl",'wb') as pklfile:
+        pickle.dump(states,pklfile)
 
-states = run_ising_model(x,50,1000,10000)
+    x = create_spingrid(50)
+    states = run_ising_model(x,5000,1000,10000,'wolff')
+    with open("isingmodel-wolff.pkl",'wb') as pklfile:
+        pickle.dump(states,pklfile)
