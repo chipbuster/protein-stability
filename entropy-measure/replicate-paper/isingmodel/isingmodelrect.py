@@ -184,6 +184,7 @@ def ising_wolff_flip(spingrid, T, grid_energy,return_copy=False):
     else:
         return final_energy
 
+@jit
 def run_ising_model(initial_grid, T, nsamps, step, burnin, method):
     """Run a single-flip Ising model for on <initial_grid>.
     Generate <nsamps> samples that are <step> apart in a single-site-flip
@@ -236,8 +237,10 @@ def run_ising_and_write(temperature):
     # critical temperature is 2.6 kB/J, so I'm going to say anything with a
     # window of 2.0 to 3.5 uses Wolff, and everything else uses siteflips
 
+    print("Sampling Ising model for T=" + str(temperature))
+
     if temperature < 3.5 and temperature > 2.0:
-        states = run_ising_model(g,temperature,5000,10000,5000,"wolff")
+        states = run_ising_model(g,temperature,5000,1000,5000,"wolff")
     else:
         states = run_ising_model(g,temperature,5000,10000,5000,"site")
 
@@ -245,10 +248,11 @@ def run_ising_and_write(temperature):
     with open(fname,'wb') as pklfile:
         pickle.dump(states,pklfile)
 
-if __name__ == '__main__':
+    printf("Finished Ising model for T=" + str(temperature))
 
+if __name__ == '__main__':
     temps = np.linspace(0.015, 5, 100)
 
-    p = Pool(10)
+    p = Pool(14)
 
     p.map(run_ising_and_write, temps)

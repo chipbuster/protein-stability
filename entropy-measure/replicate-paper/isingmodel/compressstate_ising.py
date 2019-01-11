@@ -112,9 +112,9 @@ if __name__ == '__main__':
     T = infile[11:-4]
 
     with open("ratio"+T+linType+packType+".txt",'w') as outfile:
-        outfile.write("T (J/kB) = " + T + "\n")
-        outfile.write("Linearization layout = " + linType + "\n")
-        outfile.write("Bit/Byte per site = " + packType + "\n")
+        outfile.write("T (J/kB) = " + T + ", ")
+        outfile.write("Linearization layout = " + linType + ", ")
+        outfile.write("Bit/Byte per site = " + packType + ", ")
         outfile.write("Resulting compression ratio = " + str(ratio) + "\n")
 
     print("Results: T=" + T + ", layout=" + linType + ", bb=" + packType + ", ratio=" + str(ratio))
