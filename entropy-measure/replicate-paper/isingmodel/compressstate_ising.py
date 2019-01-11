@@ -3,6 +3,7 @@ import numpy as np
 import lzma
 import bitstring
 import pickle
+import pdb
 
 import spintolinear
 
@@ -16,13 +17,13 @@ class CompressionData:
     def __init__(self, trace, layout, packingType):
         self.frameshape = np.shape(trace[0])
         self.numFrames = len(trace)
-        self.numel = self.frameshape[0] * self.frameshape[1] * self.numFrames
         if packingType == "bit" or packingType == "byte":
             self.packingType = packingType
         else:
             raise ValueError("packingType is invalid, must be 'bit' or 'byte'")
         self.layout = layout
         self.bindata = self.gen_bin_data(trace)
+        self.nbytes = len(self.bindata)
 
         self.cachedCd = None
         self.cachedC0 = None
@@ -38,22 +39,23 @@ class CompressionData:
 
     def gen_zeros_data(self):
         """Generate the all-zeros string for compression ratio measurements"""
-        if self.packingType == "bit":
-            return np.zeros(self.numel//8 + 1).tobytes()
-        else:
-            return np.zeros(self.numel).tobytes()
+        item = np.zeros(self.nbytes,dtype=np.int8).tobytes()
+        assert len(item) == len(self.bindata)
+        return item
 
     def gen_random_data(self):
         """Generate the random string for compression ratio measurements"""
-        rand = np.random.randint(2,size=self.numel)
         if self.packingType == "bit":
-            return bitstring.Bits(rand).tobytes()
+            rand = np.random.randint(2,size=8*self.nbytes ,dtype=np.int8)
+            item = bitstring.Bits(rand).tobytes()
         else:
-            return rand.tobytes()
+            rand = np.random.randint(2,size=self.nbytes,dtype=np.int8)
+            item = rand.tobytes()
+        assert len(item) == len(self.bindata)
+        return item
 
     def size_data(self):
         if self.cachedCd is None:
-            print("Compressing Sample Data...please be patient")
             self.cachedCd = self.compressed_data_size(self.bindata)
         return self.cachedCd
 
@@ -64,7 +66,6 @@ class CompressionData:
 
     def size_random(self):
         if self.cachedC1 is None:
-            print("Compressing Random Data...please be patient")
             self.cachedC1 = self.compressed_data_size(self.gen_random_data())
 #            print("Random Data compressed.")
         return self.cachedC1
@@ -101,7 +102,21 @@ if __name__ == '__main__':
         sys.exit(1)
     
     with open(infile,'rb') as pklfile:
-        trace = pklfile.load()
+        trace = pickle.load(pklfile)
 
     compressor = CompressionData(trace, linType, packType)
-    print("With input of " + infile + ", compression ratio is " + compressor.get_compression_ratios())
+
+    ratio = compressor.get_compression_ratios()
+
+    # A hardcoded filename parsing to get temperatures (sloppy)
+    T = infile[11:-4]
+
+    with open("ratio"+T+linType+packType+".txt",'w') as outfile:
+        outfile.write("T (J/kB) = " + T + "\n")
+        outfile.write("Linearization layout = " + linType + "\n")
+        outfile.write("Bit/Byte per site = " + packType + "\n")
+        outfile.write("Resulting compression ratio = " + str(ratio) + "\n")
+
+    print("Results: T=" + T + ", layout=" + linType + ", bb=" + packType + ", ratio=" + str(ratio))
+    print("Raw data size=" + str(len(compressor.bindata)), ",Cd =" + str(compressor.size_data()) +\
+            ",C0 = " + str(compressor.size_zeros()) + ",C1 = " + str(compressor.size_random()) )

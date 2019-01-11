@@ -119,8 +119,8 @@ def spiral(width, height):
         return x >= 0 and x < width and y >= 0 and y < height
 
     while True:
-        count += 1
         matrix[y][x] = count # visit
+        count += 1
         # try to turn right
         new_dx, new_dy = turn_right[dx,dy]
         turn_x, turn_y = x + new_dx, y + new_dy
@@ -195,5 +195,6 @@ def linearize_frames(frames, layout):
                 globalLinearIndex = localLinearIndex + frameNum * frameSize
                 linearized[globalLinearIndex] = frame[i,j]
                 it.iternext()
+
         return linearized
 
