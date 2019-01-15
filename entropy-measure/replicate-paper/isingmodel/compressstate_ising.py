@@ -117,11 +117,11 @@ if __name__ == '__main__':
 
     ratio = compressor.get_compression_ratios()
 
-    with open("ratio"+"-"+T+"-"+linType+"-"+packType+".txt",'w') as outfile:
-        outfile.write("T (J/kB) = " + T + ", ")
-        outfile.write("Linearization layout = " + linType + ", ")
-        outfile.write("Bit/Byte per site = " + packType + ", ")
-        outfile.write("Resulting compression ratio = " + str(ratio) + "\n")
+    with open("ratio"+"-"+T+"-"+linType+"-"+packType+".tsv",'w') as outfile:
+        outfile.write(T + "\t")
+        outfile.write(linType + "\t")
+        outfile.write(packType + "\t")
+        outfile.write(str(ratio) + "\n")
 
     print("Results: T=" + T + ", layout=" + linType + ", bb=" + packType + ", ratio=" + str(ratio))
     print("Raw data size=" + str(len(compressor.bindata)), ",Cd =" + str(compressor.size_data()) +\
