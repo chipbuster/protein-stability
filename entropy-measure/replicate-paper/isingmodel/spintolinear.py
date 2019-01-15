@@ -1,6 +1,12 @@
 import numpy as np
 import pdb
 import sys
+import random
+import copy
+
+from numba import jit, stencil
+
+import pdb
 
 import isingmodelrect
 
@@ -15,25 +21,29 @@ def gen_random_map(shape):
     xInd,yInd = np.meshgrid(list(range(x)), list(range(y)))
     rectIndices = list(zip(np.ravel(xInd),np.ravel(yInd)))
 
-    randomIndices = np.random.shuffle(linearIndices)
+    randomIndices = copy.copy(linearIndices)
+    random.shuffle(randomIndices)
+
     assert len(randomIndices) == len(rectIndices)
 
-    randMap = np.empty(shape,dtype=np.int32)
-    i = 0
+    randMap = np.empty(shape, dtype=int)
+    z = 0
     for (i,j) in rectIndices:
-        randMap[i,j] = randomIndices[i]
-        i += 1
+        randMap[i,j] = randomIndices[z]
+        z += 1
     return randMap
 
 # A.k.a cache destroyer (?)
+# THIS IS BUGGED YOU IMBECILE
+@jit
 def random_linearize(frame, mapping):
     """Apply a random mapping to a frame to get a linear numpy array
     
     Random mapping is an array of the same size as frame with integer entries
     that tell which linear entry the 
     """
-    linBuf = np.empty(len(mapping))
     (x,y) = np.shape(frame)
+    linBuf = np.empty(x * y)
     xInd,yInd = np.meshgrid(list(range(x)), list(range(y)))
     rectIndices = list(zip(np.ravel(xInd),np.ravel(yInd)))
 
@@ -82,6 +92,7 @@ def gen_hcurve(size):
             herp[x,y] = d
     return herp
 
+@jit
 def spacefill_linearize(frame, curveMap):
     """Linearize the frame with a Hilbert Curve.
 
@@ -98,7 +109,6 @@ def spacefill_linearize(frame, curveMap):
     linear = np.empty(np.size(frame))
 
     for (x,y),linIndex in np.ndenumerate(curveMap):
-        print(linIndex,x,y)
         linear[linIndex] = frame[x,y]
 
     return linear

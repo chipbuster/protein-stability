@@ -4,6 +4,7 @@ import lzma
 import bitstring
 import pickle
 import pdb
+import re
 
 import spintolinear
 
@@ -104,14 +105,19 @@ if __name__ == '__main__':
     with open(infile,'rb') as pklfile:
         trace = pickle.load(pklfile)
 
+    # A hardcoded filename parsing to get temperatures (sloppy)
+    # Note: get T before compression so that we know before doing work if this
+    # is going to screw up or not
+    match = re.search("-(\d+\.\d+)",infile)
+    if match is None:
+        raise ValueError("Could not parse temperature from filename.")
+    T = match.group(1)
+
     compressor = CompressionData(trace, linType, packType)
 
     ratio = compressor.get_compression_ratios()
 
-    # A hardcoded filename parsing to get temperatures (sloppy)
-    T = infile[11:-4]
-
-    with open("ratio"+T+linType+packType+".txt",'w') as outfile:
+    with open("ratio"+"-"+T+"-"+linType+"-"+packType+".txt",'w') as outfile:
         outfile.write("T (J/kB) = " + T + ", ")
         outfile.write("Linearization layout = " + linType + ", ")
         outfile.write("Bit/Byte per site = " + packType + ", ")

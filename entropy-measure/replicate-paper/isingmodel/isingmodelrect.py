@@ -248,7 +248,7 @@ def run_ising_and_write(temperature):
     with open(fname,'wb') as pklfile:
         pickle.dump(states,pklfile)
 
-    printf("Finished Ising model for T=" + str(temperature))
+    print("Finished Ising model for T=" + str(temperature))
 
 if __name__ == '__main__':
     temps = np.linspace(0.015, 5, 100)
