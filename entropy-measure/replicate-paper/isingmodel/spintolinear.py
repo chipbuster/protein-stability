@@ -160,16 +160,15 @@ def linearize_frames(frames, layout):
     (width,height) = isingmodelrect.spingrid_size(frames[0])
     frameSize = width * height
     numEntries = frameSize * len(frames)
+    linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
 
     if layout == "random":
-        linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
         mapping = gen_random_map((width,height))
         for (frameNum, rawFrame) in enumerate(frames):
             frame = isingmodelrect.discard_borders(rawFrame)
             startIndex = frameNum * frameSize
             endIndex = (frameNum+1) * frameSize
             linearized[startIndex:endIndex] = random_linearize(frame,mapping)
-        return linearized
 
     elif layout == "spacefill":
         linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
@@ -182,16 +181,22 @@ def linearize_frames(frames, layout):
             endIndex = (frameNum+1) * frameSize
             linearized[startIndex:endIndex] = spacefill_linearize(frame,mapping)
 
-        return linearized
-
     elif layout == "temporal":
         raise NotImplementedError("Temporal mapping is not yet implemented")
 
     elif layout == "row":
-        return np.ravel(frame,order="C")
+        for (frameNum, rawFrame) in enumerate(frames):
+            frame = isingmodelrect.discard_borders(rawFrame)
+            startIndex = frameNum * frameSize
+            endIndex = (frameNum+1) * frameSize
+            linearized[startIndex:endIndex] = np.ravel(frame,order="C")
 
     elif layout == "col":
-        return np.ravel(frame,order="F")
+        for (frameNum, rawFrame) in enumerate(frames):
+            frame = isingmodelrect.discard_borders(rawFrame)
+            startIndex = frameNum * frameSize
+            endIndex = (frameNum+1) * frameSize
+            linearized[startIndex:endIndex] = np.ravel(frame,order="F")
 
     elif layout == "spiral":
         linearized = np.ones(numEntries, dtype=np.int8) * 5 # Dummy value for testing
@@ -206,5 +211,5 @@ def linearize_frames(frames, layout):
                 linearized[globalLinearIndex] = frame[i,j]
                 it.iternext()
 
-        return linearized
+    return linearized
 
