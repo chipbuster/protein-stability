@@ -9,6 +9,7 @@ parallel -P 8 python compressstate_ising.py ::: ${layoutTypes[@]} ::: ${packType
 
 echo "temp\tlayout\tbb\tratio" > aaaa.tsv
 
+rm -f ratios.tsv  # delete existing ratios to avoid double data in file
 cat *.tsv > ratios.tmp
 rm *.tsv
 mv ratios.tmp ratios.tsv

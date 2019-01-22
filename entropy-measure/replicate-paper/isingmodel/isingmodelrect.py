@@ -239,10 +239,7 @@ def run_ising_and_write(temperature):
 
     print("Sampling Ising model for T=" + str(temperature))
 
-    if temperature < 3.5 and temperature > 2.0:
-        states = run_ising_model(g,temperature,5000,1000,5000,"wolff")
-    else:
-        states = run_ising_model(g,temperature,5000,10000,5000,"site")
+    states = run_ising_model(g,temperature,5000,100000,5000,"site")
 
     fname = "isingmodel-" + str(temperature) + ".pkl"
     with open(fname,'wb') as pklfile:
