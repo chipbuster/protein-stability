@@ -6,15 +6,11 @@ package require mutator
 # Places dimensional info in file dimensions.out
 
 set pdbname [lindex $argv 0]
-set mutid   [lindex $argv 1]
-set targnum [lindex $argv 2]
-set targres [lindex $argv 3]
 mol new $pdbname.pdb
 
 # Script loads a molecule in, applies transformations:
 #      - Generate PSF
 #      - Solvate
-#      - Mutate
 #      - Ionize
 #      - Output cell parameters
 
@@ -32,22 +28,15 @@ autopsf -mol top -protein -include water -solvate -top [list\
            /opt/proteins/ffparams/c36_18/toppar_water_ions.str\
            ]
 
-## Mutate and generate files
-# mutator -psf ${pdbname}_autopsf.psf -pdb ${pdbname}_autopsf.pdb -o MUTATED -resid $targnum -mut $targres -FEP $pdbname-fep
-
-## Before continuting, we need a PDB file for future steps to use.
-file copy $pdbname-fep.fep $pdbname-fep.pdb
-
 ## Ionize to neutralize
 # -sc 0.15: neutralize and set salt concentration to 0.15M
 # -o ${pdbname}_prepared: set prefix to prepared
-autoionize -psf $pdbname-fep.fep.psf -pdb $pdbname-fep.pdb -sc 0.15 
+autoionize -psf ${pdbname}_autopsf.pdb -pdb ${pdbname}_autopsf.pdb -sc 0.15 
 
 ## Move all files to some sane default names
 file mkdir prepared
-file copy ionized.pdb prepared/$pdbname-$mutid.fep
-file copy ionized.pdb prepared/$pdbname-$mutid.pdb
-file copy ionized.psf prepared/$pdbname-$mutid.psf
+file copy ionized.pdb prepared/$pdbname-prepared.pdb
+file copy ionized.psf prepared/$pdbname-prepared.psf
 
 ## Print coordinate data to file
 set outfile [open "dimensions.out" w]
