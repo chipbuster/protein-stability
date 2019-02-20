@@ -3,6 +3,7 @@
 from MDAnalysis import Universe
 from copy import copy
 from compressstate_ic import *
+from multiprocessing import Pool
 
 try:
     topofile = sys.argv[1]
@@ -31,14 +32,20 @@ windowSize = 2000
 numStates = 11
 usPerFrame = 0.2 * 1e-3 #0.2 nanoseconds and 1/1000 us per ns
 
-with open("arxiv-output.txt",'w') as outfile:
-    for startFrame in range(0,maxFrame-startEvery, startEvery):
+startFrameList = list(range(0,maxFrame-startEvery, startEvery))
+outputList = [None] * len(startFrameList)
 
-        univ = copy(univPrime)
-        univ.trajectory = univ.trajectory[startFrame:startFrame+windowSize]
+def runCompressorInstance(index):
+    startFrame = startFrameList[index]
+    c = CompressionData(univPrime, numStates, keepEvery, 
+                        start = startFrame, stop = startFrame+windowSize)
+    ratio = c.get_compression_ratios()
+    frameTime = startFrame * usPerFrame
+    outputList[index] = (frameTime, ratio)
 
-        c = CompressionData(univ, numStates, keepEvery)
-        ratio = c.get_compression_ratios()
-        frameTime = startFrame * usPerFrame
+p = Pool()
+p.map(runCompressorInstance, range(len(startFrameList)))
 
-        outfile.write(str(frameTime) + "\t" + str(ratio))
+with open("arxivoutput.txt","w") as outf:
+    for (time, ratio) in outputList:
+        outf.write(str(time) + "\t" + str(ratio))

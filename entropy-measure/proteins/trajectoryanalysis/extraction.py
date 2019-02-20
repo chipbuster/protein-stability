@@ -6,6 +6,51 @@ from MDAnalysis.analysis.dihedrals import Dihedral
 
 import pdb
 
+# DESRES DCD parsing is broken. Workaround: do this thing.
+def phi_selection(residue):
+    """AtomGroup corresponding to the phi protein backbone dihedral
+    C'-N-CA-C.
+
+    Returns
+    -------
+    AtomGroup
+        4-atom selection in the correct order. If no C' found in the
+        previous residue (by resid) then this method returns ``None``.
+    """
+    # TODO: maybe this can be reformulated into one selection string without
+    # the additions later
+    sel_str = "segid {} and resid {}:{} and name C".format(
+        residue.segment.segid, residue.resid - 1, residue.resid)
+    sel = (residue.universe.select_atoms(sel_str) +
+            residue.atoms.select_atoms('name N', 'name CA', 'name C'))
+
+    # select_atoms doesnt raise errors if nothing found, so check size
+    if len(sel) == 4:
+        return sel
+    else:
+        return None
+
+def psi_selection(residue):
+    """AtomGroup corresponding to the psi protein backbone dihedral
+    N-CA-C-N'.
+
+    Returns
+    -------
+    AtomGroup
+        4-atom selection in the correct order. If no N' found in the
+        following residue (by resid) then this method returns ``None``.
+    """
+    sel_str = "segid {} and resid {}:{} and name N".format(
+        residue.segment.segid, residue.resid + 1, residue.resid + 2)
+
+    sel = (residue.atoms.select_atoms('name N', 'name CA', 'name C') +
+            residue.universe.select_atoms(sel_str))
+
+    if len(sel) == 4:
+        return sel
+    else:
+        return None
+
 # Note: return type from Dihedral in 0.19.3 is a numpy array of size 
 # nframes x natoms-1. This contains all the dihedral angles for the full
 # trajectory, not just the current frame (which is sort of counter to how)
@@ -14,18 +59,18 @@ import pdb
 def get_phi(univ):
     """Given MDAnalysis Universe, return sequence of phi angles."""
     prot = univ.select_atoms("protein")
-    phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
+    phiAtms = [ phi_selection(r) for r in prot.residues[1:] ]
 
     s = len(univ.trajectory)
     print(str(s) +  " frames in trajectory")
     R = Dihedral(phiAtms).run(start=0,stop=s,step=1,verbose=True)
-    print(str(np.shape(R.angles)) + " is shape of output")
+#    print(str(np.shape(R.angles)) + " is shape of output")
     return R.angles
 
 def get_psi(univ):
     """Given MDAnalysis Universe, return sequence of psi angles."""
     prot = univ.select_atoms("protein")
-    psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
+    psiAtms = [ psi_selection(r) for r in prot.residues[:-1] ]
     # Need to filter out beginning residue?
     R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
     return R.angles
