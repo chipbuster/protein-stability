@@ -4,6 +4,8 @@ import numpy as np
 from MDAnalysis import Universe 
 from MDAnalysis.analysis.dihedrals import Dihedral
 
+import pdb
+
 # Note: return type from Dihedral in 0.19.3 is a numpy array of size 
 # nframes x natoms-1. This contains all the dihedral angles for the full
 # trajectory, not just the current frame (which is sort of counter to how)
@@ -13,8 +15,11 @@ def get_phi(univ):
     """Given MDAnalysis Universe, return sequence of phi angles."""
     prot = univ.select_atoms("protein")
     phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
-    # Need to filter out beginning residue?
-    R = Dihedral(phiAtms).run()
+
+    s = len(univ.trajectory)
+    print(str(s) +  " frames in trajectory")
+    R = Dihedral(phiAtms).run(start=0,stop=s,step=1,verbose=True)
+    print(str(np.shape(R.angles)) + " is shape of output")
     return R.angles
 
 def get_psi(univ):
@@ -22,7 +27,7 @@ def get_psi(univ):
     prot = univ.select_atoms("protein")
     psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
     # Need to filter out beginning residue?
-    R = Dihedral(psiAtms).run()
+    R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
     return R.angles
 
 def convert_IC(univ):
@@ -32,6 +37,7 @@ def convert_IC(univ):
     i is in retval[i,:], and for a protein with N frames and M residues, the
     total size should be (N, 2M).
     """
+
     phiVals = get_phi(univ)
     psiVals = get_psi(univ)
 
