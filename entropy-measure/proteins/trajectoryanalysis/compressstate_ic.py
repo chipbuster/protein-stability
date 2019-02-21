@@ -14,10 +14,10 @@ lzmaFilters = [
 
 # A class for keeping track of state info for compression
 class CompressionData:
-    def __init__(self, univ, bincount, skip, start=None, stop=None):
+    def __init__(self, frames, bincount, skip, start=None, stop=None):
         self.dtype = self.calc_min_data_type(bincount)
 
-        allframes = extraction.convert_IC(univ)
+        allframes = frames
 
         if start is None:
             start = 0

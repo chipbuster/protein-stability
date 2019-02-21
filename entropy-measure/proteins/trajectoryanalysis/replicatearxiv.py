@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import pickle as pkl,os
+from multiprocessing import Pool
 from MDAnalysis import Universe
 from copy import copy
 from compressstate_ic import *
-from multiprocessing import Pool
+from extraction import *
 
 try:
     topofile = sys.argv[1]
@@ -33,19 +35,28 @@ numStates = 11
 usPerFrame = 0.2 * 1e-3 #0.2 nanoseconds and 1/1000 us per ns
 
 startFrameList = list(range(0,maxFrame-startEvery, startEvery))
-outputList = [None] * len(startFrameList)
+
+cacheName = "./cachedTrajectoryParse.pkl"
+
+#if os.path.exists(cacheName):
+#    allframes = pkl.load(open(cacheName, 'rb'))
+#else:
+allframes = extraction.convert_IC(univPrime)
+#    pkl.dump(allframes,open(cacheName,'wb'))
+
 
 def runCompressorInstance(index):
     startFrame = startFrameList[index]
-    c = CompressionData(univPrime, numStates, keepEvery, 
+    c = CompressionData(allframes, numStates, keepEvery, 
                         start = startFrame, stop = startFrame+windowSize)
     ratio = c.get_compression_ratios()
     frameTime = startFrame * usPerFrame
-    outputList[index] = (frameTime, ratio)
+    return (frameTime, ratio)
 
-p = Pool()
-p.map(runCompressorInstance, range(len(startFrameList)))
+p = Pool(14)
+outputList = p.map(runCompressorInstance, range(len(startFrameList)))
+print(outputList)
 
 with open("arxivoutput.txt","w") as outf:
     for (time, ratio) in outputList:
-        outf.write(str(time) + "\t" + str(ratio))
+        outf.write(str(time) + "\t" + str(ratio) + "\n")
