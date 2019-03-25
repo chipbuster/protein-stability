@@ -14,15 +14,25 @@ def get_phi(univ):
     prot = univ.select_atoms("protein")
     phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
     # Need to filter out beginning residue?
-    R = Dihedral(phiAtms).run()
+    try:
+        R = Dihedral(phiAtms).run()
+    except AttributeError:
+        phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
+        R = Dihedral(phiAtms).run(start=0,stop=len(univ.trajectory),step=1)
     return R.angles
 
 def get_psi(univ):
     """Given MDAnalysis Universe, return sequence of psi angles."""
     prot = univ.select_atoms("protein")
     psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
-    # Need to filter out beginning residue?
-    R = Dihedral(psiAtms).run()
+    try:
+        # Need to filter out beginning residue?
+        R = Dihedral(psiAtms).run()
+    except AttributeError:
+        psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
+        # Need to filter out beginning residue?
+        R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+
     return R.angles
 
 def convert_IC(univ):

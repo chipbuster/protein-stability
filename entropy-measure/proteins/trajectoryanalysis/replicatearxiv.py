@@ -6,8 +6,9 @@ from compressstate_ic import *
 
 
 try:
-    topofile = sys.argv[1]
-    trajfile = sys.argv[2:]
+    outName = sys.argv[1]
+    topofile = sys.argv[2]
+    trajfile = sys.argv[3:]
 except:
     print("Usage:%s <#bins> <#frameskip> <path-to-topo> <path-to-traj> [additional traj]")
     print("Topo file: describes connectivity of molecule, e.g. PSF, PDB")
@@ -16,5 +17,8 @@ except:
 
 univ = MDAnalysis.Universe(topofile, trajfile)
 #univ.trajectory = univ.trajectory[0:2000:100]
+print("Loaded trajectory with " + str(maxFrame) + " frames")
 
-c = CompressionData(univ, 360, 100)
+with open(outName,"w") as outf:
+    for (time, ratio) in outputList:
+        outf.write(str(time) + "\t" + str(ratio) + "\n")
