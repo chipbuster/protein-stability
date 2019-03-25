@@ -59,20 +59,28 @@ def psi_selection(residue):
 def get_phi(univ):
     """Given MDAnalysis Universe, return sequence of phi angles."""
     prot = univ.select_atoms("protein")
-    phiAtms = [ phi_selection(r) for r in prot.residues[1:] ]
 
-    s = len(univ.trajectory)
-    print(str(s) +  " frames in trajectory")
-    R = Dihedral(phiAtms).run(start=0,stop=s,step=1,verbose=True)
-#    print(str(np.shape(R.angles)) + " is shape of output")
+    try:
+        phiAtms = [ phi_selection(r) for r in prot.residues[1:] ]
+        R = Dihedral(phiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+    except AttributeError:
+        phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
+        R = Dihedral(phiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+
     return R.angles
 
 def get_psi(univ):
     """Given MDAnalysis Universe, return sequence of psi angles."""
     prot = univ.select_atoms("protein")
-    psiAtms = [ psi_selection(r) for r in prot.residues[:-1] ]
-    # Need to filter out beginning residue?
-    R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+    try:
+        psiAtms = [ psi_selection(r) for r in prot.residues[:-1] ]
+        # Need to filter out beginning residue?
+        R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+    except AttributeError:
+        psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
+        # Need to filter out beginning residue?
+        R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+
     return R.angles
 
 def convert_IC(univ):

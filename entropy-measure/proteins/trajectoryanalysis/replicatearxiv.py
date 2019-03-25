@@ -8,10 +8,11 @@ from compressstate_ic import *
 from extraction import *
 
 try:
-    topofile = sys.argv[1]
-    trajfile = sys.argv[2:]
+    outName = sys.argv[1]
+    topofile = sys.argv[2]
+    trajfile = sys.argv[3:]
 except:
-    print("Usage:%s <path-to-topo> <path-to-traj> [additional traj]")
+    print("Usage:%s <path-to-output> <path-to-topo> <path-to-traj> [additional traj]")
     print("Topo file: describes connectivity of molecule, e.g. PSF, PDB")
     print("Traj file: describes positions of atoms, e.g. DCD, TRJ")
     sys.exit(1)
@@ -19,6 +20,7 @@ except:
 # Univ prime is the original input data--it should never be edited
 univPrime = MDAnalysis.Universe(topofile, trajfile)
 maxFrame = len(univPrime.trajectory)
+print("Loaded trajectory with " + str(maxFrame) + " frames")
 
 # From paper: 
 #   - need to define sliding windows of 2000 frames (0.4 us)
@@ -55,8 +57,7 @@ def runCompressorInstance(index):
 
 p = Pool(14)
 outputList = p.map(runCompressorInstance, range(len(startFrameList)))
-print(outputList)
 
-with open("arxivoutput.txt","w") as outf:
+with open(outName,"w") as outf:
     for (time, ratio) in outputList:
         outf.write(str(time) + "\t" + str(ratio) + "\n")

@@ -11,7 +11,7 @@ find $DATADIR -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d $'
     FULLPATH="$DATADIR/$PROTNAME/$STAGE1/$STAGE2"
     cd "$FULLPATH"
 
-    $SCRIPT $PROTNAME-protein.pdb $PROTNAME-*.dcd
+    echo "Running compression test for $PROTNAME"
 
-    mv "$SCRIPTDIR/arxivoutput.txt" $SCRIPTDIR/$PROTNAME.txt
+    $SCRIPT "$SCRIPTDIR/$PROTNAME-output.txt" $PROTNAME-protein.pdb $PROTNAME-*.dcd
 done
