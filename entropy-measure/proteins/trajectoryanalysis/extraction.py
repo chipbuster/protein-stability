@@ -1,64 +1,53 @@
 #!/usr/bin/env python3
 
 import numpy as np
-from MDAnalysis import Universe 
-from MDAnalysis.analysis.dihedrals import Dihedral
+import mdtraj as md
 
-# Note: return type from Dihedral in 0.19.3 is a numpy array of size 
-# nframes x natoms-1. This contains all the dihedral angles for the full
-# trajectory, not just the current frame (which is sort of counter to how)
-# the rest of the library works.
+def interleave_angles(a,b):
+    """Interleave two arrays rowwise.
 
-def get_phi(univ):
-    """Given MDAnalysis Universe, return sequence of phi angles."""
-    prot = univ.select_atoms("protein")
-    phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
-    # Need to filter out beginning residue?
-    try:
-        R = Dihedral(phiAtms).run()
-    except AttributeError:
-        phiAtms = [ r.phi_selection() for r in prot.residues[1:] ]
-        R = Dihedral(phiAtms).run(start=0,stop=len(univ.trajectory),step=1)
-    return R.angles
+    Given arrays
+          a11 a12 a13           b11 b12 b13
+    a =   a21 a22 a23      b =  b21 b22 b33
+          a31 a32 a33           b31 b32 b33
 
-def get_psi(univ):
-    """Given MDAnalysis Universe, return sequence of psi angles."""
-    prot = univ.select_atoms("protein")
-    psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
-    try:
-        # Need to filter out beginning residue?
-        R = Dihedral(psiAtms).run()
-    except AttributeError:
-        psiAtms = [ r.psi_selection() for r in prot.residues[:-1] ]
-        # Need to filter out beginning residue?
-        R = Dihedral(psiAtms).run(start=0,stop=len(univ.trajectory),step=1)
+    return the array
+        a11 b11 a12 b12 a13 b13
+   c =  a21 b21 a22 b22 a23 b23
+        a31 b31 a32 b32 a33 b33
 
-    return R.angles
 
-def convert_IC(univ):
+    """
+    (ax,ay) = np.shape(a)
+    (bx,by) = np.shape(b)
+
+    if ax != bx:
+        raise ValueError("Inputs to interleave_angles() must have same size in "
+                        +"first dimension. Got a with shape " + str(np.shape(a))
+                        +" and b with shape " + str(np.shape(b)))
+
+    c = np.empty((ax, ay + by), dtype=a.dtype)
+    for j in range(ax):
+        c[j,0::2] = a[j,:]
+        c[j,1::2] = b[j,:]
+
+    return c
+
+def convert_IC(traj):
     """Extract a series of frames from an MD trace in internal coordinates.
     
     Returns a numpy array of internal-coordinate traces. The trace at interval
     i is in retval[i,:], and for a protein with N frames and M residues, the
     total size should be (N, 2M).
     """
-    phiVals = get_phi(univ)
-    psiVals = get_psi(univ)
+
+    # Return values from calls are np.ndarray of shape (n_frames, n_phi)
+    (_,phiVals) = md.compute_phi(traj)
+    (_,psiVals) = md.compute_psi(traj)
 
     # Weave into double array of phi/psi timesteps. Layout should be
     #[[ psi0, phi1, psi1, phi2, psi2, ......, phiN-2, psiN-2, phiN-1 ] for t = 0
     # [ psi0, phi1, psi1, phi2, psi2, ......, phiN-2, psiN-2, phiN-1 ] for t = 1
     #] etc. etc.
 
-    assert np.shape(phiVals) == np.shape(psiVals)
-    (nframes, nres) = np.shape(psiVals)
-
-    configs = []
-    for frameN in range(nframes):
-        frameConf = []
-        for resN in range(nres):
-            frameConf.append(psiVals[frameN,resN])
-            frameConf.append(phiVals[frameN,resN])
-        configs.append(frameConf)
-
-    return np.array(configs)
+    return interleave_angles(psiVals,phiVals)

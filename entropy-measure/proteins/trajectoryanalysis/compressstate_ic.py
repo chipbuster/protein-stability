@@ -14,12 +14,11 @@ lzmaFilters = [
 
 # A class for keeping track of state info for compression
 class CompressionData:
-    def __init__(self, univ, bincount, skip):
-        print(len(univ.trajectory))
+    def __init__(self, univ, bincount):
         self.dtype = self.calc_min_data_type(bincount)
 
         allframes = extraction.convert_IC(univ)
-        self.frames = np.array([x for x in allframes[0::skip]])
+        self.frames = np.array([x for x in allframes])
         self.binned = np.digitize(self.frames,
                                   np.linspace(-180,180,num=bincount),
                                   right=True)
