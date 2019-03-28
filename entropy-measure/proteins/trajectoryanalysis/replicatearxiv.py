@@ -55,6 +55,8 @@ def runCompressorInstance(index):
     frameTime = startFrame * usPerFrame
     return (frameTime, ratio)
 
+print("Frames extracted, running compression")
+
 p = Pool(14)
 outputList = p.map(runCompressorInstance, range(len(startFrameList)))
 
