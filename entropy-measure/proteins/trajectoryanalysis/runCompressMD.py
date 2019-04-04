@@ -66,4 +66,4 @@ c = CompressionData(slicedtraj, bincount)
 print("Compression ratio is: " + str(c.get_compression_ratios()))
 
 with open('ratio.txt','w') as outf:
-    outf.write(str(c.get_compression_ratios()))
+    outf.write(str(c.get_entropy()))

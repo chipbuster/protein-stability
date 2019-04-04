@@ -22,7 +22,9 @@ class CompressionData:
         self.binned = np.digitize(self.frames,
                                   np.linspace(-180,180,num=bincount),
                                   right=True)
-        print(np.shape(self.binned))
+        self.ndof = np.size(self.frames[0])
+        self.bincount = bincount
+        print("System with nDOF = " + str(self.ndof))
 
         self.cachedCd = None
         self.cachedC0 = None
@@ -90,3 +92,10 @@ class CompressionData:
         eta = (C_d - C_0) / (C_1 - C_0)
 
         return eta
+
+
+    def get_entropy(self, mapping = "linear"):
+        """Compute entropy with given mapping from compression ratio to value."""
+
+        if mapping == "linear":
+            return self.get_compression_ratios() * self.ndof * np.log2(self.bincount)
