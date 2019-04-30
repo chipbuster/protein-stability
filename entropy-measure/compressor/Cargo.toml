@@ -1,0 +1,12 @@
+[package]
+name = "compressor"
+version = "0.1.0"
+authors = ["Kevin Song <chipbuster@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+bitvec = "0.10.1"
+
+[dev-dependencies]
+quickcheck = "0.8"
+quickcheck_macros = "0.8"
