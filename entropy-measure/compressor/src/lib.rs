@@ -70,7 +70,6 @@ where
                 tree_base = &self.hufftree;
             }
         } 
-
         decoded
     }
 

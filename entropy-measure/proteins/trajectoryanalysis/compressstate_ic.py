@@ -24,7 +24,6 @@ class CompressionData:
                                   right=True)
         self.ndof = np.size(self.frames[0])
         self.bincount = bincount
-        print("System with nDOF = " + str(self.ndof))
 
         self.cachedCd = None
         self.cachedC0 = None
@@ -60,7 +59,6 @@ class CompressionData:
 
     def size_data(self):
         if self.cachedCd is None:
-            print("Compressing Sample Data...please be patient")
             self.cachedCd = self.compressed_data_size(self.gen_bin_data())
         return self.cachedCd
 
@@ -71,7 +69,6 @@ class CompressionData:
 
     def size_random(self):
         if self.cachedC1 is None:
-            print("Compressing Random Data...please be patient")
             self.cachedC1 = self.compressed_data_size(self.gen_random_data())
         return self.cachedC1
 

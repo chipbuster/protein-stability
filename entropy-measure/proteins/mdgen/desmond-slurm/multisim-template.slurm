@@ -55,17 +55,38 @@ fi
 DESMOND_JOBNAME="$(basename %WORKDIR%)"
 SCRIPTFILE="%WORKDIR%/${DESMOND_JOBNAME}.sh"
 CMDSTRING="$(< "$SCRIPTFILE")"
+TMPOUTFILE="$(mktemp)"
 
 # To do: Maverick multigpu?
 
 # The base command is now inside CMDSTRING. We need to add the appropriate
-# modifier flags based on what the request is and execute it
+# modifier flags based on what the request is and execute it. We also need a
+# way to 
 cd "%WORKDIR%"
 if [ "%CONTINUE%" = "true" ]; then
     exit 1 # Deal with this later
 else
-    #Without the -WAIT flag, multisim will exit, killing the SLURM session and,
-    #by extension, the Desmond jobs running in background.
-    CMDSTRING="$CMDSTRING -WAIT"
-    eval $CMDSTRING
+    eval $CMDSTRING &> "$TMPOUTFILE"
 fi
+
+
+while read -r line; do
+    if [[ $line =~ JobId:\ *(.+) ]]; then
+        JOBID="${BASH_REMATCH[1]}"
+    else
+        >&2 echo "Could not parse a JobID. File was: "
+        >&2 cat $TMPOUTFILE
+        exit 1
+    fi
+done
+
+TIME_IN_SECONDS="$(echo "%JOBTIME%" | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')"
+
+# Time with a 30 minute safety margin, or 90% of the runtime
+SAFE_TIME=$((TIME_IN_SECONDS - 1800))
+if ((SAFE_TIME < 0)); then
+    SAFE_TIME=$((TIME_IN_SECONDS * 9 / 10 ))
+fi
+
+sleep $SAFE_TIME
+$SCHRODINGER/jobcontrol -stop $JOBID

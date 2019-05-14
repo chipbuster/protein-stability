@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+## For replicating the results seen in the arxiv paper on villin headpiece
+
 import pickle as pkl,os
 from multiprocessing import Pool
 from copy import copy

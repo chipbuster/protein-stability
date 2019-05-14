@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+## Calculate the sliding-window autocorrelation over a trace
+
 import sys
 import os
 import subprocess
