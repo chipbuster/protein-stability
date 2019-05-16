@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH -J %JOBNAME%                         # Job name
-#SBATCH -o %JOBNAME%.%j.out                  # Name of stdout output file (%j expands to jobId)
-#SBATCH -e %JOBNAME%.%j.err
+#SBATCH -o %WORKDIR%/%JOBNAME%.%j.out                  # Name of stdout output file (%j expands to jobId)
+#SBATCH -e %WORKDIR%/%JOBNAME%.%j.err
 #SBATCH -p %QUEUE%                                  # Queue name
 #SBATCH -N 1                                    # Total number of nodes requested
 #SBATCH -n 1                                    # Total number of mpi tasks requested
@@ -19,6 +19,7 @@ set -euo pipefail
 #     %WORKDIR%         Directory of the input/output files and calculations
 #     %CONTINUE%        Whether to continue a previously aborted run or not
 #     %HOSTNAME%        Which TACC host this is being launched from
+#     %NEWTIME%         Optional: only needed if extending a simulation
 
 ## General set up: This script is meant to be used as a skeleton script from
 ## another script, which replaces the text names in the section at the top of
@@ -53,40 +54,43 @@ if [ ! -d %WORKDIR% ]; then
 fi
 
 DESMOND_JOBNAME="$(basename %WORKDIR%)"
-SCRIPTFILE="%WORKDIR%/${DESMOND_JOBNAME}.sh"
+SCRIPTFILE="%WORKDIR%/%JOBNAME%.sh"
 CMDSTRING="$(< "$SCRIPTFILE")"
 TMPOUTFILE="$(mktemp)"
 
 # To do: Maverick multigpu?
 
 # The base command is now inside CMDSTRING. We need to add the appropriate
-# modifier flags based on what the request is and execute it. We also need a
-# way to 
+# modifier flags based on what the request is and execute it.
 cd "%WORKDIR%"
 if [ "%CONTINUE%" = "true" ]; then
-    exit 1 # Deal with this later
+    $SCHRODINGER/desmond -JOBNAME %JOBNAME% -HOST localhost:1 -gpu -restore %JOBNAME%.cpt -in %JOBNAME%-in.cms -cfg mdsim.last_time=%NEWTIME% &> "$TMPOUTFILE"
 else
     eval $CMDSTRING &> "$TMPOUTFILE"
 fi
 
-
+found_job=false
 while read -r line; do
+    echo "LINE: $line"
     if [[ $line =~ JobId:\ *(.+) ]]; then
         JOBID="${BASH_REMATCH[1]}"
-    else
-        >&2 echo "Could not parse a JobID. File was: "
-        >&2 cat $TMPOUTFILE
-        exit 1
-    fi
-done
+        found_job=true
+   fi
+done < "$TMPOUTFILE"
 
-TIME_IN_SECONDS="$(echo "%JOBTIME%" | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')"
-
-# Time with a 30 minute safety margin, or 90% of the runtime
-SAFE_TIME=$((TIME_IN_SECONDS - 1800))
-if ((SAFE_TIME < 0)); then
-    SAFE_TIME=$((TIME_IN_SECONDS * 9 / 10 ))
+if [ $found_job = false ]; then
+    >&2 echo "Could not parse a JobID. File was: "
+    >&2 cat $TMPOUTFILE
+    exit 1
 fi
 
-sleep $SAFE_TIME
-$SCHRODINGER/jobcontrol -stop $JOBID
+echo "JOBID is $JOBID"
+
+#JOBSECONDS="$(date +'%s' -d "%JOBTIME%")"
+#WAITSECONDS="$(( JOBSECONDS - 600))"
+
+
+#sleep $WAITSECONDS
+$SCHRODINGER/jobcontrol -wait $JOBID
+touch %WORKDIR%/COMPLETE
+exit 0
