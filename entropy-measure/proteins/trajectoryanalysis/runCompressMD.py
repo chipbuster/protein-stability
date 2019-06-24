@@ -95,4 +95,4 @@ if __name__ == '__main__':
     print("Ratio is " + str(d.get_compression_ratios()))
 
     with open('ratio.txt','w') as outf:
-        outf.write(str(d.get_entropy()))
+        outf.write(str(d.get_entropy()) + " " + str(d.get_compression_ratios()))
