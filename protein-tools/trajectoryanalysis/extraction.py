@@ -51,3 +51,17 @@ def convert_IC(traj):
     #] etc. etc.
 
     return interleave_angles(psiVals,phiVals)
+
+#def get_phi_psi_from_cartesian(mat)
+a =   """Convert a series of 3D snapshots into phi-psi angles
+
+    Sometimes it is impossible (or very difficult) to get an actual MDTraj
+    trace (e.g. when we're doing ENM simulations). To solve this problem, we
+    provide this alternate function which takes in a set of 3D points in a
+    3xNxtimesteps array and returns a set of phi-psi angles consistent with
+    convert_IC
+    """
+    
+
+
+

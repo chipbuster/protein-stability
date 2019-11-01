@@ -17,7 +17,7 @@ class CompressionData:
     def __init__(self, univ, bincount):
         self.dtype = self.calc_min_data_type(bincount)
 
-        allframes = extraction.convert_IC(univ)
+        allframes = univ
         self.frames = np.array([x for x in allframes])
         self.binned = np.digitize(self.frames,
                                   np.linspace(-180,180,num=bincount),
@@ -39,7 +39,7 @@ class CompressionData:
         elif bincout < 2**64:
             return np.uint64
         else:
-            raise ValueError("Requested more than 2^64 bins--you might be fucked.")
+            raise ValueError("Requested more than 2^64 bins--you might be hosed.")
 
     def gen_bin_data(self):
         """Generate binary form of input data"""

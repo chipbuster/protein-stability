@@ -84,6 +84,6 @@ if __name__ == '__main__':
     # normalize_desmond_data(sys.argv[1], sys.argv[2], compress=True)  # To generate compressed tarballs
     name = normalize_topofile(sys.argv[1])
     dst = sys.argv[1][:-4] + '.pdb'
-    shutil.move(name, dst)
+    shutil.copy(name, dst)
     print("Created file " + dst)
     
