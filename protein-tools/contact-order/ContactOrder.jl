@@ -47,7 +47,14 @@ function contact_order_from_contacts(contacts::Vector{Contact}, nresidues::Int)
     # Variable names from paper or see (https://en.wikipedia.org/wiki/Contact_order)
     L = nresidues
     N = length(contacts)
+
+    if N == 0
+        println("No contacts found!")
+        return 0.0
+    end
+
     bbdists = [ c.bbdist for c in contacts ]
+    println(contacts)
     return sum(bbdists) / (N * L)
 end
 

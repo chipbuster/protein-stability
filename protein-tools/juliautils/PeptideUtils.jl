@@ -1,7 +1,7 @@
 """A library of useful helper functions when working with protein structures in Julia"""
 module PeptideUtils
 
-export AMINO_MASS, get_pdb_calpha
+export AMINO_MASS, get_pdb_calpha, parse_pdb_subrange
 
 using BioStructures
 using Bio
@@ -81,5 +81,32 @@ function get_pdb_calpha(struc; span=nothing::Union{Nothing, Tuple{Int,Int}})
 
     (positions, masses)
 end
+
+"""Parse the input name, possibly splitting it for subselection
+
+Broom's DB has contiguous protein subranges in it, e.g. "1EN2, residues 15-37".
+These are encoded in our case names as part of the name, e.g. 1en2-15-37, using
+either dashes (-) or underscores (_). This function parses such a name out to
+the PDB name + (start, end) if it exists, or pdbname + nothing if the input
+was a raw 4-char pdb name.
+"""
+function parse_pdb_subrange(name)                                                           
+    # Base PDBs have no characters                                                          
+    if length(name) == 4                                                                    
+        return (name, nothing)                                                              
+    end                                                                                     
+                                                                                            
+    # We have a subset range specified in the name. Split on the allowed chars              
+    toks = split(name, ['-','_'])                                                           
+    if length(toks) != 3                                                                    
+        println("PDB name is not 4 chars, but has wrong form for subrange!")                
+        exit(1)                                                                             
+    end                                                                                     
+                                                                                            
+    (pdbname, start, fini) = toks                                                              
+    s = parse(Int, start)                                                                   
+    e = parse(Int, fini)                                                                    
+    (pdbname, (s,e))                                                                           
+end      
 
 end # End module PeptideUtils

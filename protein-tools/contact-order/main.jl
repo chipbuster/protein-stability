@@ -12,9 +12,12 @@ if length(ARGS) < 2
     exit(1)
 end
 
-name = ARGS[1]
+rawname = ARGS[1]
 cutoff = parse(Float64, ARGS[2])
 
+(name, span) = parse_pdb_subrange(rawname)
+
 pdbstruct = retrievepdb(name)
-(pos, _) = get_pdb_calpha(pdbstruct)
-@printf("Contact order of %s is %f\n", name, contact_order(pos, cutoff))
+(pos, _) = get_pdb_calpha(pdbstruct; span=span)
+println(pos)
+@printf("Contact order of %s is %f\n", rawname, contact_order(pos, cutoff))
