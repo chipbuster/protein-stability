@@ -72,13 +72,17 @@ function iip3(i::Int)
     return first:last
 end
 
-"""Read file and return list of calpha atoms and masses of residues.
+
+"""Read protein structure and return list of calpha atoms and masses of residues.
 
 Returns a tuple (positions,masses), where positions is a 3xN matrix with positions
 of calpha atoms in the columns, and masses is an N-vector with the mass of residue
 i at the i-th index.
+
+span is used for taking subspans of the calpha trace to match protein fragments
+published in BroomDB (Broom et. al. 2015).
 """
-function get_pdb_calpha(struc)
+function get_pdb_calpha(struc; span=nothing::Union{Nothing, Tuple{Int,Int}})
     residues = Bio.Structure.collectresidues(struc)
 
     # I'm not sure what the cleanest way to build up a matrix in Julia is...for
@@ -105,6 +109,14 @@ function get_pdb_calpha(struc)
         positions = hcat(positions, atom_pos)
         push!(masses, mass)
     end
+
+    # We might only want a subset-range of the protein for Broom's calc
+    if span !== nothing
+        (b, e) = span    # Type assertion in argument makes this safe
+        positions = positions[:,b:e]
+        masses = masses[b:e]
+    end
+
     (positions, masses)
 end
 
@@ -243,8 +255,8 @@ function take_timestep(state::SimState, params::SimParameters)
     state.positions += update
 end
 
-"""Run a simulation on the specified PDB file"""
-function run_sim(pdbname; params = nothing, temp = -1.0)
+"""Run a simulation on the specified PDB name"""
+function run_sim(pdbname::AbstractString; params::Union{Nothing,SimParameters}=nothing, temp::Float64=1.0, subrange::Union{Nothing, Tuple{Int,Int}}=nothing)
 
     if(length(pdbname) != 4)
         println(pdbname * " does not appear to be a valid PDB name, skipping")
@@ -262,7 +274,7 @@ function run_sim(pdbname; params = nothing, temp = -1.0)
     struc = BS.retrievepdb(pdbname; pdb_dir = download_dir)
 
     # println("Generating C-Alpha structure for " * pdbname)
-    (positions, masses) = get_pdb_calpha(struc)
+    (positions, masses) = get_pdb_calpha(struc; span=subrange)
     simstate = generate_simstate(positions)
 
     # Add a random perturbation to the initial positions
@@ -340,6 +352,7 @@ function compute_histogram(simoutput; name = nothing)
     end
 end
 
+"""Get a list of pdbnames from a file"""
 function get_pdbnames(filename)
     names = Vector{String}()
     open(filename) do file
@@ -350,3 +363,22 @@ function get_pdbnames(filename)
     return names
 end
 
+"""Parse the input name, possibly splitting it for subselection"""
+function parse_pdb_subrange(name)
+    # Base PDBs have no characters
+    if length(name) == 4
+        return (name, nothing)
+    end
+    
+    # We have a subset range specified in the name. Split on the allowed chars
+    toks = split(name, ['-','_'])
+    if length(toks) != 3
+        println("PDB name is not 4 chars, but has wrong form for subrange!")
+        exit(1)
+    end
+
+    (name, start, fini) = toks
+    s = parse(Int, start)
+    e = parse(Int, fini)
+    (name, (s,e))
+end
