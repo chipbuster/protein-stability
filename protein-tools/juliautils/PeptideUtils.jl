@@ -40,8 +40,11 @@ const AMINO_MASS = Dict{String,Float64}("ALA" => 71.0779,
 Returns a tuple (positions,masses), where positions is a 3xN matrix with positions
 of calpha atoms in the columns, and masses is an N-vector with the mass of residue
 i at the i-th index.
+
+span is used for taking subspans of the calpha trace to match protein fragments
+published in BroomDB (Broom et. al. 2015).
 """
-function get_pdb_calpha(struc)
+function get_pdb_calpha(struc; span=nothing::Union{Nothing, Tuple{Int,Int}})
     residues = Bio.Structure.collectresidues(struc)
 
     # I'm not sure what the cleanest way to build up a matrix in Julia is...for
@@ -68,7 +71,15 @@ function get_pdb_calpha(struc)
         positions = hcat(positions, atom_pos)
         push!(masses, mass)
     end
+
+    # We might only want a subset-range of the protein for Broom's calc
+    if span !== nothing
+        (b, e) = span    # Type assertion in argument makes this safe
+        positions = positions[:,b:e]
+        masses = masses[b:e]
+    end
+
     (positions, masses)
 end
 
-end # end module PeptideUtils
+end # End module PeptideUtils
