@@ -47,11 +47,20 @@ published in BroomDB (Broom et. al. 2015).
 function get_pdb_calpha(struc; span=nothing::Union{Nothing, Tuple{Int,Int}})
     residues = Bio.Structure.collectresidues(struc)
 
-    # I'm not sure what the cleanest way to build up a matrix in Julia is...for
-    # now I'll just make an empty matrix and hcat to it.
     positions = zeros(3, 0)
     masses = Vector{Float64}()
     for res in residues
+        # We cannot simply use indices to identify residues because the first
+        # residue in a PDB file might not be 1 (e.g. in 1e41, the first residue
+        # is residue 89. Here, we check to see if the residue is in range
+        # of the span we want--if not, we skip it pre-emptively.
+        if span !== nothing
+            (b, e) = span
+            if resnumber(res) < b || resnumber(res) > e
+                continue
+            end
+        end
+
         c_alpha_set = BS.collectatoms(res, BS.calphaselector)
         if isempty(c_alpha_set)
             # println(BS.resname(res))  # If we're worried about the ignored res
@@ -70,13 +79,6 @@ function get_pdb_calpha(struc; span=nothing::Union{Nothing, Tuple{Int,Int}})
 
         positions = hcat(positions, atom_pos)
         push!(masses, mass)
-    end
-
-    # We might only want a subset-range of the protein for Broom's calc
-    if span !== nothing
-        (b, e) = span    # Type assertion in argument makes this safe
-        positions = positions[:,b:e]
-        masses = masses[b:e]
     end
 
     (positions, masses)
