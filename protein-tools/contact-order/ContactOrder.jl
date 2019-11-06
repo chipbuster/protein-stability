@@ -1,6 +1,6 @@
 module ContactOrder
-
 using LinearAlgebra
+using BioStructures
 
 export contact_order
 
@@ -23,19 +23,22 @@ Input: a 3xN array corresponding to C-alpha atom positions in a PDB. The atoms
 should be ordered in backbone ordering in default PDB order (N-terminus to 
 C-terminus), so that backbone distance can be calculated correctly.
 """
-function find_contacts(positions::AbstractArray{Float64,2}, cutoff::Float64)::AbstractVector{Contact}
+function find_contacts(protein, cutoff::Float64)::AbstractVector{Contact}
     contacts = Vector{Contact}()
-
-    (dim, N) = size(positions)
+    aminos = collectresidues(protein, standardselector)
+    N = length(aminos)
     for i = 1:N
         for j = i + 1:N
-            dist = norm(positions[:,i] - positions[:,j])
-            if dist >= cutoff
-                c = make_contact(dist, i, j)
+            aa_i = aminos[i]
+            aa_j = aminos[j]
+            d = distance(aminos[i], aminos[j])
+            if d < cutoff
+                c = make_contact(d, resnumber(aa_i), resnumber(aa_j))
                 push!(contacts, c)
             end
         end
     end
+
     return contacts
 end
 
@@ -59,8 +62,8 @@ function contact_order_from_contacts(contacts::Vector{Contact}, nresidues::Int)
 end
 
 """Compute the contact order given the Ca positions"""
-function contact_order(positions::AbstractArray{Float64,2}, cutoff::Float64)
-    (_, nresidues) = size(positions)
+function contact_order(protein, cutoff::Float64)
+    (_, nresidues) =
     contacts = find_contacts(positions, cutoff)
     return contact_order_from_contacts(contacts, nresidues)
 end
