@@ -31,4 +31,4 @@ else
     end
 end
 
-@printf("Contact order of %s is %f\n", rawname, contact_order(targetres, cutoff))
+@printf("%s: %f\n", rawname, contact_order(targetres, cutoff))

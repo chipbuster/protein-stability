@@ -28,18 +28,21 @@ C-terminus), so that backbone distance can be calculated correctly.
 function find_contacts(aminos::Vector{AbstractResidue}, cutoff::Float64)::AbstractVector{Contact}
     contacts = Vector{Contact}()
     N = length(aminos)
-    for i = 1:N
-        for j = i + 1:N
+    for i in 1:N
+        for j in i+1:N
             aa_i = aminos[i]
             aa_j = aminos[j]
-            d = distance(aminos[i], aminos[j])
-            if d < cutoff
-                c = make_contact(d, resnumber(aa_i), resnumber(aa_j))
-                push!(contacts, c)
+            for a_i in collectatoms(aa_i, heavyatomselector)
+                for a_j in collectatoms(aa_j, heavyatomselector)
+                    d = sqdistance(a_i, a_j)
+                    if d < cutoff^2
+                        c = make_contact(d, resnumber(aa_i), resnumber(aa_j))
+                        push!(contacts, c)
+                    end
+                end
             end
         end
     end
-
     return contacts
 end
 
