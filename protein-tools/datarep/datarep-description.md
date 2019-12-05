@@ -1,0 +1,65 @@
+Description of Data Representation/Transformations
+==================================================
+
+# Summary
+
+There are three general stages that a dataset passes through in the Avinery
+procedure:
+   1. Input-Raw
+   2. Parameterized
+   3. Binned
+
+The stage 3 data is compressed to get the compression ratio. In addition, each
+representation has associated with it some units and some additional ancilliary
+information about how this data was generated.
+
+The core algorithms are mostly implemented in Julia, for improved speed and memory
+usage. However, some parts of this pipeline (notably, the actual compression and
+the reading from MD traces) rely on libraries that do not exist in the Julia
+ecosystem and thus must be done in Python.
+
+The `core` source code contains the code to construct/manipulate each representation.
+
+<--! More file overviews here -->
+
+# Data Representations
+
+### Input-Raw
+
+This is as close to the input data as we can achieve without just using the raw
+data. It consists of the representation of the system as output by the simulation
+program. For example, in an MD trace, it is an array of (3,N,T) floats, where
+N is the number of Ca atoms and T is the number of timesteps. It is the same for
+a Langevin simulation an elastic network model. In principle, if a simulation
+worked on Ramachandran angles, it could be a (2,N,T) array of floats for phi-psi
+angles, though this is unlikely.
+
+The input data might also contain some metadata describing how the simulation was
+run: for example, the parameters/program for an MD trace, or the temperature and
+damping parameters for a Langevin simulation.
+
+Examples of data form:
+   - R3 Cartesian trace (3,N,T)
+   - R2 Cartesian trace (2,N,T)
+   - R1 Cartesian trace (1,N,T)
+   - Phi-Psi trace      (2,N,T)
+   - Other              (??)
+
+### Parameterized
+
+This is a data format that is ready for binning. Ideally, it should be completely
+translation and rotation invariant, while still capturing all the important
+information in the simulation. The metadata for this format should contain unit
+and bound info (for example, limits, mapping functions, and units)
+
+Examples of forms:
+  - Phi-Psi angles (degrees)
+  - Phi-Psi angles (radians)
+  - Angle from point on offset-axis
+  - Remapped points (e.g. via cotan inverse)
+
+### Binned
+
+This form is ready to compress. It is a 1D sequence of integer datatypes
+corresponding to bins. Metadata should include the binning and linearization
+strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
