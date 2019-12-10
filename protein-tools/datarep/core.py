@@ -39,16 +39,16 @@ class SimData:
 
 
 class InputData(SimData):
-    def parameterize(scheme):
-        """Parametrize according to the provided scheme"""
-
-    def parameterize_phipsi():
-        pass
-
+    def __init__(self, filepath, datapath):
+        SimData.__init__(self, filepath, datapath)
+        self.datapath = self.datapath + "/inputdata"
 
 class ParameterizedData(SimData):
-    pass
-
+    def __init__(self, filepath, datapath):
+        SimData.__init__(self, filepath, datapath)
+        self.datapath = self.datapath + "/parameterized"
 
 class BinnedData(SimData):
-    pass
+    def __init__(self, filepath, datapath):
+        SimData.__init__(self, filepath, datapath)
+        self.datapath = self.datapath + "/binned"
