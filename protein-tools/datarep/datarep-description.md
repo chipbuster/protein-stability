@@ -69,6 +69,10 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 # Common Keys
 
 ### General Keys
-- Temperature: the temperature value of the simulation
-- nsteps: the total number of timesteps in the simulation
-- dt: the size of each timestep (context-sensitive units)
+- `temperature`: the temperature value of the simulation
+- `nsteps`: the total number of timesteps in the simulation
+- `dt`: the size of each timestep (context-sensitive units)
+
+### Parameterization Data
+- `maxval`: the maximum positive value of parameterized data. Data should be in
+            range `[-maxval, maxval]`
