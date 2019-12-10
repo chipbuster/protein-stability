@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+from transposed_data_view import *
 
 # See markdown file in this folder for descriptions of these datatypes
 
@@ -29,6 +30,7 @@ class AbstractSimData:
     def finalize(self):
         self.h5File.close()
 
+    ## Used for working with the `with` statement
     def __enter__(self):
         # If the file is already opened, we don't need to do anything here. This
         # corresponds to e.g. `with AbstractSimData(args).from_numpy(more_args) as f`

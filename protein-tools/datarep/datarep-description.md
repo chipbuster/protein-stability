@@ -3,6 +3,10 @@ Description of Data Representation/Transformations
 
 # Summary
 
+**IMPORTANT NOTE: Because of how HDF5.jl stores data, the data seen in Python
+and Julia will be transpositions of each other!** This must be taken into account
+when writing analysis code.
+
 There are three general stages that a dataset passes through in the Avinery
 procedure:
    1. Input
