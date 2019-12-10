@@ -1,6 +1,11 @@
+module SimData
+
 using HDF5;
 
 abstract type AbstractSimData end;
+
+export AbstractSimData, InputData, ParameterizedData, BinnedData
+export create_binneddata, create_inputdata, create_parameterizeddata
 
 struct InputData <: AbstractSimData
     data::HDF5Dataset
@@ -79,3 +84,5 @@ function create_binneddata(fp::String, dp::String, data, attr)
     end
     BinnedData(fdata, fp, dp, file)
 end
+
+end # End module SimData
