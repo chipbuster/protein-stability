@@ -1,6 +1,5 @@
 import h5py
 import numpy as np
-from transposed_data_view import *
 
 # See markdown file in this folder for descriptions of these datatypes
 
@@ -14,14 +13,25 @@ class AbstractSimData:
         self.h5File = None  # H5PY file handle
 
     def from_file(self):
+        """Initialize with existing file contents"""
         self.h5File = h5py.File(self.filepath, "a")
         self.data = self.h5File[self.datapath]
         self.shape = np.shape(self.data)
         return self
 
-    def from_numpy(self, data, attrs):
+    def from_numpy(self, data, attrs={}):
+        """Initialize with numpy array and an attribute dictionary"""
         self.h5File = h5py.File(self.filepath, "a")
         self.data = self.h5File.create_dataset(self.datapath, data=data)
+        self.shape = np.shape(self.data)
+        for k in attrs:
+            self.data.attrs[k] = attrs[k]
+        return self
+
+    def from_shape(self, shape, attrs={}):
+        """Initialize with a shape (but no data) and an attribute dictionary"""
+        self.h5File = h5py.File(self.filepath, "a")
+        self.data = self.h5File.create_dataset(self.datapath, shape=shape)
         self.shape = np.shape(self.data)
         for k in attrs:
             self.data.attrs[k] = attrs[k]
