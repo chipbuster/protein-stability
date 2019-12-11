@@ -5,7 +5,7 @@ import mdtraj as md
 mydir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(mydir, ".."))
 
-from simdata import *
+from core.simdata import *
 
 try:
     outFilename = sys.argv[1]
