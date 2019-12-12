@@ -7,6 +7,16 @@ abstract type AbstractSimData end;
 export AbstractSimData, InputData, ParameterizedData, BinnedData
 export create_binneddata, create_inputdata, create_parameterizeddata
 
+"""A specifier for an HDF5 dataset.
+
+filepath specifies the on-disk path to the HDF5 file
+datapath specifies the group-path within the HDF5 blob to the desired dataset
+"""
+struct HDF5LocIdent
+    filepath::String
+    datapath::String
+end
+
 struct InputData <: AbstractSimData
     data::HDF5Dataset
     filepath::String

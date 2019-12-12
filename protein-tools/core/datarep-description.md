@@ -80,3 +80,6 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 ### Parameterization Data
 - `maxval`: the maximum positive value of parameterized data. Data should be in
             range `[-maxval, maxval]`
+- `type`: the category of parameterization being used. Current options:
+      + `dihedral`: dihedral angles of Ca traces
+      + `ramachandran`: phi-psi angles of a protein simulation
