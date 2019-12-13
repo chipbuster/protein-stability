@@ -7,6 +7,62 @@ sys.path.append(os.path.join(mydir, ".."))
 
 from core.simdata import *
 
+
+def interleave_angles(a, b):
+    """Interleave two arrays rowwise.
+
+    Given arrays
+          a11 a12 a13           b11 b12 b13
+    a =   a21 a22 a23      b =  b21 b22 b33
+          a31 a32 a33           b31 b32 b33
+
+    return the array
+        a11 b11 a12 b12 a13 b13
+   c =  a21 b21 a22 b22 a23 b23
+        a31 b31 a32 b32 a33 b33
+
+
+    """
+    (ax, ay) = np.shape(a)
+    (bx, by) = np.shape(b)
+
+    if ax != bx:
+        raise ValueError(
+            "Inputs to interleave_angles() must have same size in "
+            + "first dimension. Got a with shape "
+            + str(np.shape(a))
+            + " and b with shape "
+            + str(np.shape(b))
+        )
+
+    c = np.empty((ax, ay + by), dtype=a.dtype)
+    for j in range(ax):
+        c[j, 0::2] = a[j, :]
+        c[j, 1::2] = b[j, :]
+
+    return c
+
+
+def convert_IC(traj):
+    """Extract a series of frames from an MD trace in internal coordinates.
+    
+    Returns a numpy array of internal-coordinate traces. The trace at interval
+    i is in retval[i,:], and for a protein with N frames and M residues, the
+    total size should be (N, 2M).
+    """
+
+    # Return values from calls are np.ndarray of shape (n_frames, n_phi)
+    (_, phiVals) = md.compute_phi(traj)
+    (_, psiVals) = md.compute_psi(traj)
+
+    # Weave into double array of phi/psi timesteps. Layout should be
+    # [[ psi0, phi1, psi1, phi2, psi2, ......, phiN-2, psiN-2, phiN-1 ] for t = 0
+    # [ psi0, phi1, psi1, phi2, psi2, ......, phiN-2, psiN-2, phiN-1 ] for t = 1
+    # ] etc. etc.
+
+    return interleave_angles(psiVals, phiVals)
+
+
 try:
     outFilename = sys.argv[1]
     outDatapath = sys.argv[2]
@@ -51,9 +107,20 @@ def c_alpha_pos(trajectory, frameindex):
 # be in row-major order--let's set it so that we can access a single frame by
 # reading a contiguous block
 outputShape = (max_frame, num_residues, 3)
-h5file = InputData(outFilename, outDatapath).from_shape(outputShape)
+
+print("Writing calpha trace to HDF5")
+h5ifile = InputData(outFilename, outDatapath).from_shape(outputShape)
 
 for i in range(max_frame):
-    h5file.data[i, :, :] = c_alpha_pos(traj, i)
+    h5ifile.data[i, :, :] = c_alpha_pos(traj, i)
 
-h5file.finalize()
+h5ifile.finalize()
+
+print("Writing ramachandran angles to HDF5")
+# Get the phi-psi angles and store those into the parameterized data
+phipsi = convert_IC(traj)
+
+h5pfile = ParameterizedData(outFilename, outDatapath).from_numpy(
+    phipsi, {"maxval": 180.0, "type": "ramachandran"}
+)
+h5pfile.finalize()
