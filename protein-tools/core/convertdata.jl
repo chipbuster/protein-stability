@@ -3,22 +3,6 @@ include(joinpath(@__DIR__, "simdata.jl"))
 
 using .SimData;
 using HDF5;
-
-"""Find the name of all datasets below a given path in an HDF5 file"""
-function find_all_dataset(file::HDF5File, start="/"::String)::Vector{String}
-    datasets = Vector{String}()
-    for x in file[start]
-        if typeof(x) == HDF5Group
-            append!(datasets, find_all_dataset(file,name(x)))
-        elseif typeof(x) == HDF5Dataset
-            push!(datasets,name(x))
-        else
-            continue   # Not of interest to us
-        end
-    end
-    return datasets
-end
-
 """Generate a new HDF5 file with the same inputdata, but only using every Nth frame"""
 function create_dataskip_file(input_file::String, take_every::Int, new_file=""::String)
     infile = h5open(input_file,"r")
@@ -54,7 +38,7 @@ Output format follows that found in the Python code:
  ] etc. etc.
 
 """
-function to_dihedral(frames)
+function to_dihedral(frames, outputs)
     (_, natom, timesteps) = size(frames)
     dihedrals = zeros(natom - 3, timesteps)
     for i = 1:timesteps

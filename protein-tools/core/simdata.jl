@@ -5,7 +5,8 @@ using HDF5;
 abstract type AbstractSimData end;
 
 export AbstractSimData, InputData, ParameterizedData, BinnedData
-export create_binneddata, create_inputdata, create_parameterizeddata
+export create_binneddata, create_inputdata, create_parameterizeddata,
+       find_all_dataset
 
 """A specifier for an HDF5 dataset.
 
@@ -94,5 +95,22 @@ function create_binneddata(fp::String, dp::String, data, attr)
     end
     BinnedData(fdata, fp, dp, file)
 end
+
+"""Find the name of all datasets below a given path in an HDF5 file"""
+function find_all_dataset(file::HDF5File, start="/"::String)::Vector{String}
+    datasets = Vector{String}()
+    for x in file[start]
+        if typeof(x) == HDF5Group
+            append!(datasets, find_all_dataset(file,name(x)))
+        elseif typeof(x) == HDF5Dataset
+            push!(datasets,name(x))
+        else
+            continue   # Not of interest to us
+        end
+    end
+    return datasets
+end
+
+
 
 end # End module SimData

@@ -74,8 +74,8 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 
 ### General Keys
 - `temperature`: the temperature value of the simulation
-- `nsteps`: the total number of timesteps in the simulation
 - `dt`: the size of each timestep (context-sensitive units)
+- `pdbid`: the PDB structure (if applicable) of the unit
 
 ### Parameterization Data
 - `maxval`: the maximum positive value of parameterized data. Data should be in
