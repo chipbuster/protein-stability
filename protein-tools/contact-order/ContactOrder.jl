@@ -2,8 +2,6 @@ module ContactOrder
 using LinearAlgebra
 using BioStructures
 
-
-
 export contact_order
 
 """An aggregate to capture a contact between two Ca atoms in a protein"""
@@ -21,17 +19,17 @@ end
 
 """Find the set of contacts in a protein Ca trace
 
-Input: a 3xN array corresponding to C-alpha atom positions in a PDB. The atoms
-should be ordered in backbone ordering in default PDB order (N-terminus to 
-C-terminus), so that backbone distance can be calculated correctly.
+Input: A Vector of Bio.AbstractResidue that represents the protein. This function
+selects the heavy atoms and computes the minimum squared distance between them.
 """
 function find_contacts(aminos::Vector{AbstractResidue}, cutoff::Float64)::AbstractVector{Contact}
     contacts = Vector{Contact}()
     N = length(aminos)
     for i in 1:N
-        for j in i+1:N
+        for j in i + 1:N
             aa_i = aminos[i]
             aa_j = aminos[j]
+            # Note: important to use heavyatomselector instead of e.g. calphaselector
             for a_i in collectatoms(aa_i, heavyatomselector)
                 for a_j in collectatoms(aa_j, heavyatomselector)
                     d = sqdistance(a_i, a_j)
@@ -61,14 +59,20 @@ function contact_order_from_contacts(contacts::Vector{Contact}, nresidues::Int)
     end
 
     bbdists = [ c.bbdist for c in contacts ]
-    return sum(bbdists) / (N * L)
+    return sum(bbdists) / L
 end
 
-"""Compute the contact order given the Ca positions"""
-function contact_order(residues, cutoff::Float64)
+"""Compute the contact order given the residues"""
+function contact_order(residues, cutoff::Float64, absolute = true::Bool)
     nresidues = length(residues)
     contacts = find_contacts(residues, cutoff)
-    return contact_order_from_contacts(contacts, nresidues)
+    rco = contact_order_from_contacts(contacts, nresidues)
+
+    if absolute
+        return rco / nresidues    # ACO
+    else
+        return rco
+    end
 end
 
 end    # End module ContactOrder
