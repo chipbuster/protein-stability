@@ -4,12 +4,9 @@ import Bio.Structure
 using LinearAlgebra
 using Printf
 using Serialization
-using Distributed
 using Statistics
 using StatsBase
-using Plots
-using LsqFit
-const BS = BioStructures   # Name aliases!
+using Base.Threads
 
 #############
 
@@ -25,7 +22,7 @@ end
 
 """Return the "default" parameters for a simulation"""
 function gen_default_parameters()
-    return SimParameters(100.0, 0.0001, 0.95, 1_000_000)
+    return SimParameters(100.0, 0.001, 0.95, 10_000_000)
 end
 
 """Encapsulates state of the simulation"""
@@ -34,90 +31,6 @@ mutable struct SimState
     positions::Matrix{Float64}   # The initial positions of the atoms
     restlens::UpperTriangular{Float64,Matrix{Float64}}  # Restlength of bonds
     coeffs::UpperTriangular{Float64,Matrix{Float64}}    # Spring coefficients
-end
-
-# A lookup table used to determine the mass of a given amino acid. Numbers are
-# taken from http://www.matrixscience.com/help/aa_help.html, units in amu
-const AMINO_MASS = Dict{String,Float64}("ALA" => 71.0779,
-  "ARG" => 156.1857,
-  "ASN" => 114.1026,
-  "ASP" => 115.0874,
-  "ASX" => 114.595,  # For ASX, average ASN + ASP (since we don't know which)
-  "CYS" => 103.1429,
-  "GLU" => 129.114,
-  "GLN" => 128.1292,
-  "GLX" => 128.6216, # For GLX, average GLN + GLU (since we don't know which)
-  "GLY" => 57.0513,
-  "HIS" => 137.1393,
-  "ILE" => 113.1576,
-  "LEU" => 113.1576,
-  "LYS" => 128.1723,
-  "MET" => 131.1961,
-  "PHE" => 147.1739,
-  "PRO" => 97.1152,
-  "SER" => 87.0773,
-  "THR" => 101.1039,
-  "SEC" => 150.0379,
-  "TRP" => 186.2099,
-  "TYR" => 163.1733,
-  "VAL" => 99.1311)
-
-"""A simple helper that computes the Index Into Packed 3-vector: assume that a
-3xN set of coordinates (indexed from 1) is packed into a 3N-vector with the
-first column being 1:3, second being 4:6, etc. This computes the correct
-range to get the i-th 3-vector"""
-function iip3(i::Int)
-    first = 3 * (i - 1) + 1
-    last = first + 2
-    return first:last
-end
-
-
-"""Read protein structure and return list of calpha atoms and masses of residues.
-
-Returns a tuple (positions,masses), where positions is a 3xN matrix with positions
-of calpha atoms in the columns, and masses is an N-vector with the mass of residue
-i at the i-th index.
-
-span is used for taking subspans of the calpha trace to match protein fragments
-published in BroomDB (Broom et. al. 2015).
-"""
-function get_pdb_calpha(struc; span=nothing::Union{Nothing, Tuple{Int,Int}})
-    residues = Bio.Structure.collectresidues(struc)
-
-    # I'm not sure what the cleanest way to build up a matrix in Julia is...for
-    # now I'll just make an empty matrix and hcat to it.
-    positions = zeros(3, 0)
-    masses = Vector{Float64}()
-    for res in residues
-        c_alpha_set = BS.collectatoms(res, BS.calphaselector)
-        if isempty(c_alpha_set)
-            # println(BS.resname(res))  # If we're worried about the ignored res
-            continue # Not really a residue we care about
-        end
-
-        @assert(length(c_alpha_set) == 1, "A single residue has more than one c-alpha atom!")
-        ca_atom = c_alpha_set[1]    # The only atom in the set
-        atom_pos = BS.coords(ca_atom)
-        mass = get(AMINO_MASS, BS.resname(res), 0)
-        if mass == 0
-            @printf("WARNING: Unknown residue: %s\n", BS.resname(res))
-            @printf("Setting mass to a default value\n")
-            mass = 100.0
-        end
-
-        positions = hcat(positions, atom_pos)
-        push!(masses, mass)
-    end
-
-    # We might only want a subset-range of the protein for Broom's calc
-    if span !== nothing
-        (b, e) = span    # Type assertion in argument makes this safe
-        positions = positions[:,b:e]
-        masses = masses[b:e]
-    end
-
-    (positions, masses)
 end
 
 # The default c-alpha ProDy potential follows a very simple rule: if two calpha
@@ -256,26 +169,7 @@ function take_timestep(state::SimState, params::SimParameters)
 end
 
 """Run a simulation on the specified PDB name"""
-function run_sim(pdbname::AbstractString; params::Union{Nothing,SimParameters}=nothing, temp::Float64=1.0, subrange::Union{Nothing, Tuple{Int,Int}}=nothing)
-
-    if(length(pdbname) != 4)
-        println(pdbname * " does not appear to be a valid PDB name, skipping")
-        return nothing
-    end
-
-    # We don't trust system PDBs because Maestro can't output valid ones: grab 
-    # them from the interweb instead
-    main_dir = dirname(@__DIR__())
-    download_dir = joinpath(main_dir, "inputs")
-    output_dir = joinpath(main_dir, "outputs")
-
-    # Downloads and parses structure in a single line, equivalent to downloadpdb + read
-    # println("Reading PDB structure for " * pdbname)
-    struc = BS.retrievepdb(pdbname; pdb_dir = download_dir)
-
-    # println("Generating C-Alpha structure for " * pdbname)
-    (positions, masses) = get_pdb_calpha(struc; span=subrange)
-    simstate = generate_simstate(positions)
+function run_sim(simstate::SimState, filepath::String, datapath::String; params::Union{Nothing,SimParameters}=nothing)
 
     # Add a random perturbation to the initial positions
     simstate.positions = simstate.positions + rand_3unit(simstate.N)
@@ -285,20 +179,15 @@ function run_sim(pdbname::AbstractString; params::Union{Nothing,SimParameters}=n
         params = gen_default_parameters()
     end
 
-    if temp >= 0.0
-        params = SimParameters(temp, params.ts, params.damp, params.num_ts)
-    end
-
     @printf("Running %s with %d atoms, T = %f, %d timesteps of size %f \n"
             ,pdbname, simstate.N, params.temp, params.num_ts, params.ts)
 
-    solution = Array{Float64,3}(undef, 3, simstate.N, params.num_ts)
     for t in 1:params.num_ts
         solution[:,:,t] = simstate.positions
         take_timestep(simstate, params)
     end
 
-    # Serialize the outputs, ding 
+    # Serialize the outputs, ding
     return (solution, simstate)
 end
 

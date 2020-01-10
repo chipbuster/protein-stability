@@ -111,6 +111,4 @@ function find_all_dataset(file::HDF5File, start="/"::String)::Vector{String}
     return datasets
 end
 
-
-
 end # End module SimData
