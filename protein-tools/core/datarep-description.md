@@ -83,3 +83,8 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 - `type`: the category of parameterization being used. Current options:
       + `dihedral`: dihedral angles of Ca traces
       + `ramachandran`: phi-psi angles of a protein simulation
+
+### Binned Data
+- `nbins`: the number of bins used
+- `disctype`: the discretezation type
+   + `linear`: linearly separated bins (the only valid value right now)

@@ -2,6 +2,10 @@ module SimData
 
 using HDF5;
 
+# All AbstractSimDatas hold H5File handles. In some cases, these handles are
+# shared across multiple data pieces. Library functions should not close H5Files
+# unless they are certain that no other users hold that file. To guarantee 
+# 
 abstract type AbstractSimData end;
 
 export AbstractSimData, InputData, ParameterizedData, BinnedData
@@ -43,7 +47,6 @@ ParameterizedData(fp::String, dp::String) = begin
     dat  = file[dp * "/parameterized"]
     ParameterizedData(dat, fp, dp, file)
 end
-
 
 struct BinnedData <: AbstractSimData 
     data::HDF5Dataset
@@ -97,13 +100,13 @@ function create_binneddata(fp::String, dp::String, data, attr)
 end
 
 """Find the name of all datasets below a given path in an HDF5 file"""
-function find_all_dataset(file::HDF5File, start="/"::String)::Vector{String}
+function find_all_dataset(file::HDF5File, start = "/"::String)::Vector{String}
     datasets = Vector{String}()
     for x in file[start]
         if typeof(x) == HDF5Group
-            append!(datasets, find_all_dataset(file,name(x)))
+            append!(datasets, find_all_dataset(file, name(x)))
         elseif typeof(x) == HDF5Dataset
-            push!(datasets,name(x))
+            push!(datasets, name(x))
         else
             continue   # Not of interest to us
         end

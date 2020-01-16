@@ -3,7 +3,6 @@ import numpy as np
 
 # See markdown file in this folder for descriptions of these datatypes
 
-
 class AbstractSimData:
     def __init__(self, filepath, datapath):
         self.data = None  # Data as a numpy buffer
