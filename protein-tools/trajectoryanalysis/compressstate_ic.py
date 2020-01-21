@@ -6,8 +6,6 @@ import sys
 
 import MDAnalysis
 
-import extraction
-
 lzmaFilters = [
     {"id": lzma.FILTER_LZMA2, "preset": 7 | lzma.PRESET_EXTREME},
 ]
@@ -19,9 +17,9 @@ class CompressionData:
 
         allframes = univ
         self.frames = np.array([x for x in allframes])
-        self.binned = np.digitize(self.frames,
-                                  np.linspace(-180,180,num=bincount),
-                                  right=True)
+        self.binned = np.digitize(
+            self.frames, np.linspace(-180, 180, num=bincount), right=True
+        )
         self.ndof = np.size(self.frames[0])
         self.bincount = bincount
 
@@ -29,14 +27,14 @@ class CompressionData:
         self.cachedC0 = None
         self.cachedC1 = None
 
-    def calc_min_data_type(self,bincount):
-        if bincount < 2**8:
+    def calc_min_data_type(self, bincount):
+        if bincount < 2 ** 8:
             return np.uint8
-        elif bincount < 2**16:
+        elif bincount < 2 ** 16:
             return np.uint16
-        elif bincount < 2**32:
+        elif bincount < 2 ** 32:
             return np.uint32
-        elif bincout < 2**64:
+        elif bincout < 2 ** 64:
             return np.uint64
         else:
             raise ValueError("Requested more than 2^64 bins--you might be hosed.")
@@ -53,8 +51,12 @@ class CompressionData:
 
     def gen_random_data(self):
         """Generate the random string for compression ratio measurements"""
-        data = np.random.randint(low=0,high=np.max(self.binned),
-                            size=np.shape(self.binned),dtype=self.dtype)
+        data = np.random.randint(
+            low=0,
+            high=np.max(self.binned),
+            size=np.shape(self.binned),
+            dtype=self.dtype,
+        )
         return data.tobytes()
 
     def size_data(self):
@@ -74,11 +76,13 @@ class CompressionData:
 
     def compressed_data_size(self, obj):
         """Get size of compressed data. Input needs to be a bytearray."""
-        compressedStateData = lzma.compress(obj, 
-                                    format=lzma.FORMAT_RAW,
-                                    check=lzma.CHECK_NONE,
-                                    preset=None,
-                                    filters=lzmaFilters)
+        compressedStateData = lzma.compress(
+            obj,
+            format=lzma.FORMAT_RAW,
+            check=lzma.CHECK_NONE,
+            preset=None,
+            filters=lzmaFilters,
+        )
         return len(compressedStateData)
 
     def get_compression_ratios(self):
@@ -90,8 +94,7 @@ class CompressionData:
 
         return eta
 
-
-    def get_entropy(self, mapping = "linear"):
+    def get_entropy(self, mapping="linear"):
         """Compute entropy with given mapping from compression ratio to value."""
 
         if mapping == "linear":

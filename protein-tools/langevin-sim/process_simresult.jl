@@ -1,4 +1,4 @@
-qq = dirname(dirname(PROGRAM_FILE))
+qq = dirname(dirname(abspath(PROGRAM_FILE)))
 include(joinpath(qq, "core/convertdata.jl"))
 
 using Printf

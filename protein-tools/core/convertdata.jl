@@ -16,6 +16,7 @@ function create_dataskip_file(input_file::String, take_every::Int, new_file = ""
     outfile = h5open(new_file, "w")
     for datapath in find_all_dataset(infile)
         outfile[datapath] = infile[datapath][:,:,1:take_every:end]
+        attrs(outfile[datapath])["skip"] = take_every
     end
     close(outfile)
 end

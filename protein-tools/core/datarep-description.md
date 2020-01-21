@@ -80,6 +80,7 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 - `source`: Describes the source of the input
    + `md:<name>`: Describes a molecular dynamics simulation of a particular type
    + `langevin`: A simple langevin simulation
+- `skip`: If applicable, the number of skipped iterations from raw
 
 ### Parameterization Data
 - `maxval`: the maximum positive value of parameterized data. Data should be in
