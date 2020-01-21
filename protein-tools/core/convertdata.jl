@@ -5,6 +5,7 @@ using .SimData;
 using HDF5;
 using LinearAlgebra;
 using Discretizers;
+using Test;
 
 """Generate a new HDF5 file with the same inputdata, but only using every Nth frame"""
 function create_dataskip_file(input_file::String, take_every::Int, new_file = ""::String)
@@ -55,7 +56,7 @@ function bin_dihedrals(input_data::ParameterizedData, nbins::Integer)::BinnedDat
         binneddata = input_data.h5File[datapath]
         o_delete(binneddata)
     end
-    
+
     binneddata = d_create(input_data.h5File, datapath, datatype(Int), dataspace(N, ts))
 
     attrs(binneddata)["nbins"] = nbins
@@ -87,7 +88,7 @@ function to_dihedral(frames, outputs)
         outputs[:,i] = frame_dihedrals(frames[:,:,i])
         # println(size(frame_dihedrals(frames[:,:,i])), size(outputs[:,i]))
     end
-    end
+end
 
 """Normalize x to be in range by wrapping"""
 function wrap_range(x, minr = -pi, maxr = pi)
@@ -127,5 +128,44 @@ function frame_dihedrals(frame)
     end
     # The final result is not quite what we'd like: it uses the wrong convention
     # and is shifted. Remap it back into the correct interval to make it work.
-    return wrap_range.(dihedrals)
+    return wrap_range.(pi .- dihedrals)
+end
+
+using Rotations, StaticArrays
+function test_dihedralization()
+    num_theta = 20
+    mat = Array{Float64}(undef, 3, num_theta * 2)
+    rand_init = randn(3)
+    mat[:,1] = [0,0,0] + rand_init
+    mat[:,2] = [1,0,0] + rand_init
+    thetas = Vector{Float64}()
+
+    #Generate a random helix where every other line moves in pure z-dir and the others
+    # are a prescribed angle from [1,0,0]
+    for link_num in 2:num_theta
+        i = 2 * link_num
+        mat[:,i - 1] = mat[:,i - 2] + [0,0,1]
+        theta = 2 * pi * (rand() - 0.5)
+        push!(thetas, theta)
+        rx = cos(theta)
+        ry = sin(theta)
+        (px, py, pz) = mat[:,i - 1]
+        mat[:,i] = [px + rx, py + ry, pz + 10 * rand()]
+    end
+
+    r = rand(RotMatrix{3})
+    mat = r * mat   # Apply random rotation
+
+    frame_mat = Array{Float64,3}(undef, 3, num_theta * 2, 1)
+    frame_mat[:,:,1] = mat
+    recovered = Matrix{Float64}(undef, num_theta * 2 - 3, 1)
+    to_dihedral(frame_mat, recovered)
+
+    thetadiff = Vector{Float64}()
+    push!(thetadiff, thetas[1])
+    for i in 1:length(thetas) - 1
+        push!(thetadiff, wrap_range(thetas[i + 1] - thetas[i]))
+    end
+    diffs = recovered[1:2:end] - thetadiff
+    all(abs.(diffs) .< 1e-10)
 end
