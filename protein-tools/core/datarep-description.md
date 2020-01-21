@@ -69,13 +69,17 @@ This form is ready to compress. It is a 1D sequence of integer datatypes
 corresponding to bins. Metadata should include the binning and linearization
 strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 
-
 # Common Keys
 
 ### General Keys
 - `temperature`: the temperature value of the simulation
 - `dt`: the size of each timestep (context-sensitive units)
 - `pdbid`: the PDB structure (if applicable) of the unit
+
+### Input Data
+- `source`: Describes the source of the input
+   + `md:<name>`: Describes a molecular dynamics simulation of a particular type
+   + `langevin`: A simple langevin simulation
 
 ### Parameterization Data
 - `maxval`: the maximum positive value of parameterized data. Data should be in

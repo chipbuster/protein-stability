@@ -3,9 +3,10 @@ import numpy as np
 
 # See markdown file in this folder for descriptions of these datatypes
 
+
 class AbstractSimData:
     def __init__(self, filepath, datapath):
-        self.data = None  # Data as a numpy buffer
+        self.data = None  # Data as an HDF5 dataset
         self.shape = None  # Shape of data buffer
         self.filepath = filepath  # Path to the HDF5 file on the host filesystem
         self.datapath = datapath  # Path to the data within the HDF5 dataset
@@ -54,16 +55,17 @@ class AbstractSimData:
 class InputData(AbstractSimData):
     def __init__(self, filepath, datapath):
         AbstractSimData.__init__(self, filepath, datapath)
-        self.datapath = self.datapath + "/inputdata"
+        self.datapath = datapath + "/inputdata"
 
 
 class ParameterizedData(AbstractSimData):
     def __init__(self, filepath, datapath):
         AbstractSimData.__init__(self, filepath, datapath)
-        self.datapath = self.datapath + "/parameterized"
+        self.datapath = datapath + "/parameterized"
 
 
 class BinnedData(AbstractSimData):
     def __init__(self, filepath, datapath):
         AbstractSimData.__init__(self, filepath, datapath)
-        self.datapath = self.datapath + "/binned"
+        self.datapath = datapath + "/binned"
+

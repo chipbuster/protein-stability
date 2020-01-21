@@ -44,10 +44,9 @@ function xyz_to_dihedrals(input_data::InputData)::ParameterizedData
 end
 
 """Bin a dihedral/phi-psi dataset into dihedral angles"""
-function bin_dihedrals(input_data::ParameterizedData, nbins::Integer)
+function bin_dihedrals(input_data::ParameterizedData, nbins::Integer)::BinnedData
     datapath = input_data.datapath * "/binned"
     maxv = read(attrs(input_data.data)["maxval"])
-    println(maxv)
 
     bounds = collect(range(-maxv, maxv, length = nbins + 1))
     (N, ts) = size(input_data.data)
