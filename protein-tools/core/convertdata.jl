@@ -126,27 +126,28 @@ function frame_dihedrals(frame)
         d = atan(y, x)
         push!(dihedrals, d)
     end
-    # The final result is not quite what we'd like: it uses the wrong convention
-    # and is shifted. Remap it back into the correct interval to make it work.
-    return wrap_range.(pi .- dihedrals)
+    return dihedrals
 end
 
 using Rotations, StaticArrays
 function test_dihedralization()
-    num_theta = 20
+    num_theta = 25
     mat = Array{Float64}(undef, 3, num_theta * 2)
     rand_init = randn(3)
     mat[:,1] = [0,0,0] + rand_init
     mat[:,2] = [1,0,0] + rand_init
-    thetas = Vector{Float64}()
+    dihedrals = Vector{Float64}()
 
     #Generate a random helix where every other line moves in pure z-dir and the others
     # are a prescribed angle from [1,0,0]
+    theta = 0.0
     for link_num in 2:num_theta
         i = 2 * link_num
-        mat[:,i - 1] = mat[:,i - 2] + [0,0,1]
-        theta = 2 * pi * (rand() - 0.5)
-        push!(thetas, theta)
+        mat[:,i - 1] = mat[:,i - 2] + [0,0,1]   # Simple straight-up Z segment
+        dtheta = 2 * pi * (rand() - 0.5)        # Range [-pi, pi]
+        push!(dihedrals, dtheta)
+        theta = wrap_range(theta - pi)  # "0 dihedral" is pointing in opposite dir
+        theta -= dtheta                 # Apply opposite sign since we view from below
         rx = cos(theta)
         ry = sin(theta)
         (px, py, pz) = mat[:,i - 1]
@@ -161,11 +162,6 @@ function test_dihedralization()
     recovered = Matrix{Float64}(undef, num_theta * 2 - 3, 1)
     to_dihedral(frame_mat, recovered)
 
-    thetadiff = Vector{Float64}()
-    push!(thetadiff, thetas[1])
-    for i in 1:length(thetas) - 1
-        push!(thetadiff, wrap_range(thetas[i + 1] - thetas[i]))
-    end
-    diffs = recovered[1:2:end] - thetadiff
+    diffs = recovered[1:2:end] - dihedrals
     all(abs.(diffs) .< 1e-10)
 end
