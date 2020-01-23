@@ -81,11 +81,9 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
    + `md:<name>`: Describes a molecular dynamics simulation of a particular type
    + `langevin`: A simple langevin simulation
 - `skip`: If applicable, the number of skipped iterations from raw
-
-###### Optional
-- `timestep`: the raw timestep size (arbitrary units)
-- `temp`: the temperature of the simulation (K or arbitrary units)
-- `damp`: the damping coefficient ([0,1])
+- `timestep`: If applicable, the raw timestep size (arbitrary units)
+- `temp`: If applicable, the temperature of the simulation (K or arbitrary units)
+- `damp`: If applicable, the damping coefficient ([0,1])
 
 ### Parameterization Data
 - `maxval`: the maximum positive value of parameterized data. Data should be in

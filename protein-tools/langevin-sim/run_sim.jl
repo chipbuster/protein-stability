@@ -74,15 +74,15 @@ natoms = parse(Int, ARGS[4])
 for kvpair in ARGS[5:end]
     (key,val) = split(kvpair,":")
     if key == "temp"
-        t = parse(Float64, val)
+        global t = parse(Float64, val)
     elseif key == "timestep"
-        ts = parse(Float64, val)
+        global ts = parse(Float64, val)
     elseif key == "damp"
-        d = parse(Float64, val)
+        global d = parse(Float64, val)
     elseif key == "num_ts"
-        n = parse(Int, val)
+        global n = parse(Int, val)
     elseif key == "restlen"
-        rlen = parse(Float64, val)
+        global rlen = parse(Float64, val)
     else
         @printf("Unknown key-value pair \t %s", kvpair)
         exit(1)
@@ -91,6 +91,7 @@ end
 
 ## Generate initial data
 params = SimParameters(t,ts,d,n)
+println(params)
 ## We need to preallocate the array in the HDF5 file
 h5open(hdf_fname,"cw") do file
     # Create a 3 X N X TS dataset, chunking into the appropriate timesteps
