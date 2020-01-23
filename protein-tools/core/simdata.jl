@@ -31,6 +31,7 @@ end
 
 InputData(fp::AbstractString, dp::AbstractString) = begin
     file = h5open(fp, "cw")
+    println(dp)
     dat  = file[dp * "/inputdata"]
     InputData(dat, fp, dp, file)
 end

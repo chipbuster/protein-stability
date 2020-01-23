@@ -1,12 +1,10 @@
-import BioStructures
-import Bio
-import Bio.Structure
 using LinearAlgebra
 using Printf
 using Serialization
 using Statistics
 using StatsBase
 using Base.Threads
+using HDF5
 
 #############
 
@@ -20,10 +18,6 @@ struct SimParameters
     num_ts::Int     # The total number of timesteps to take
 end
 
-"""Return the "default" parameters for a simulation"""
-function gen_default_parameters()
-    return SimParameters(100.0, 0.001, 0.95, 10_000_000)
-end
 
 """Encapsulates state of the simulation"""
 mutable struct SimState
@@ -168,28 +162,28 @@ function take_timestep(state::SimState, params::SimParameters)
     state.positions += update
 end
 
-"""Run a simulation on the specified PDB name"""
-function run_sim(simstate::SimState, filepath::String, datapath::String; params::Union{Nothing,SimParameters}=nothing)
-
+"""Run a simulation on the specified initial simulation state"""
+function run_sim(simstate::SimState, data::HDF5Dataset; params::SimParameters)
     # Add a random perturbation to the initial positions
     simstate.positions = simstate.positions + rand_3unit(simstate.N)
 
-    # If we don't have user-supplied parameters, use the default
-    if params === nothing
-        params = gen_default_parameters()
-    end
+    @printf("Running with %d atoms, T = %f, %d timesteps of size %f \n",
+            simstate.N, params.temp, params.num_ts, params.ts)
 
-    @printf("Running %s with %d atoms, T = %f, %d timesteps of size %f \n"
-            ,pdbname, simstate.N, params.temp, params.num_ts, params.ts)
+    attrs(data)["timestep"] = params.ts
+    attrs(data)["temp"] = params.temp
+    attrs(data)["damp"] = params.damp
 
     for t in 1:params.num_ts
-        solution[:,:,t] = simstate.positions
+        data[:,:,t] = simstate.positions
         take_timestep(simstate, params)
     end
-
-    # Serialize the outputs, ding
-    return (solution, simstate)
 end
+
+############################
+# END SIMULATION FUNCTIONS #
+# BEGIN UTILITIY FUNCTIONS #
+############################
 
 """ Creates a simple test which can be checked by hand for correctness.
 
