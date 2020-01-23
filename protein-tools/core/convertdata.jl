@@ -6,6 +6,7 @@ using HDF5;
 using LinearAlgebra;
 using Discretizers;
 using Test;
+using Assert;
 
 """Generate a new HDF5 file with the same inputdata, but only using every Nth frame"""
 function create_dataskip_file(input_file::String, take_every::Int, new_file = ""::String)
@@ -51,6 +52,7 @@ function bin_dihedrals(input_data::ParameterizedData, nbins::Integer)::BinnedDat
     maxv = read(attrs(input_data.data)["maxval"])
 
     bounds = collect(range(-maxv, maxv, length = nbins + 1))
+    @assert length(bounds) == nbins+1 "Incorrect bounds length from range/collect! Potential Julia bug?"
     (N, ts) = size(input_data.data)
     if datapath in SimData.find_all_dataset(input_data.h5File)
         binneddata = input_data.h5File[datapath]
