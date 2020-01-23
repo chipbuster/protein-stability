@@ -1,6 +1,3 @@
-qq = dirname(dirname(abspath(PROGRAM_FILE)))
-include(joinpath(qq, "core/convertdata.jl"))
-
 using Printf
 
 if length(ARGS) != 3
@@ -12,6 +9,9 @@ if length(ARGS) != 3
     println("   Processes all datasets in <hdf5_file> that have path /inputdata")
     exit(2)
 end
+
+qq = dirname(dirname(abspath(PROGRAM_FILE)))
+include(joinpath(qq, "core/convertdata.jl"))
 
 hdf5_path = ARGS[1]
 bincount = parse(Int, ARGS[3])
