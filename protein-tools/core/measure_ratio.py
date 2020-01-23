@@ -1,27 +1,28 @@
-# This module determines the compression ratio of a given state.
 import numpy as np
 import lzma
 import struct
 import sys
+import h5py
 
-import MDAnalysis
+from simdata import BinnedData, ParameterizedData, InputData
 
+# Note: ideally this would be Julia for full compatibility, but since Julia does
+# not have good interfaces to compression libraries currently, and most of this
+# code is just wrappers around C anyways, this doesn't matter *so* much.
+
+# Compression parameters
 lzmaFilters = [
     {"id": lzma.FILTER_LZMA2, "preset": 7 | lzma.PRESET_EXTREME},
 ]
 
 # A class for keeping track of state info for compression
 class CompressionData:
-    def __init__(self, univ, bincount):
-        self.dtype = self.calc_min_data_type(bincount)
+    def __init__(self, binned_data):
+        self.bincount = binned_data.data.attrs["nbins"]
+        self.dtype = self.calc_min_data_type(self.bincount)
 
-        allframes = univ
-        self.frames = np.array([x for x in allframes])
-        self.binned = np.digitize(
-            self.frames, np.linspace(-180, 180, num=bincount), right=True
-        )
-        self.ndof = np.size(self.frames[0])
-        self.bincount = bincount
+        self.binned = binned_data.data
+        self.ndof = np.size(self.binned[0])
 
         self.cachedCd = None
         self.cachedC0 = None
@@ -34,7 +35,7 @@ class CompressionData:
             return np.uint16
         elif bincount < 2 ** 32:
             return np.uint32
-        elif bincout < 2 ** 64:
+        elif bincount < 2 ** 64:
             return np.uint64
         else:
             raise ValueError("Requested more than 2^64 bins--you might be hosed.")
@@ -46,7 +47,7 @@ class CompressionData:
 
     def gen_zeros_data(self):
         """Generate the all-zeros string for compression ratio measurements"""
-        data = np.zeros(np.shape(self.frames), dtype=self.dtype)
+        data = np.zeros(np.shape(self.binned), dtype=self.dtype)
         return data.tobytes()
 
     def gen_random_data(self):
@@ -99,3 +100,18 @@ class CompressionData:
 
         if mapping == "linear":
             return self.get_compression_ratios() * self.ndof * np.log2(self.bincount)
+
+
+## Simple oneshot functions to compute based on a filepath. Used to ease some
+# parts of Pycall.jl interop
+def compute_entropy(filepath, datapath):
+    data = BinnedData(filepath, datapath).from_file()
+    c = CompressionData(data)
+    return c.get_entropy()
+
+
+def compute_ratio(filepath, datapath):
+    data = BinnedData(filepath, datapath).from_file()
+    c = CompressionData(data)
+    return c.get_compression_ratios()
+

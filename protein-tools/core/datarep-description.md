@@ -69,7 +69,6 @@ This form is ready to compress. It is a 1D sequence of integer datatypes
 corresponding to bins. Metadata should include the binning and linearization
 strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 
-
 # Common Keys
 
 ### General Keys
@@ -77,9 +76,20 @@ strategies (e.g. `uniform [-pi,pi]` and `peano-curve`).
 - `dt`: the size of each timestep (context-sensitive units)
 - `pdbid`: the PDB structure (if applicable) of the unit
 
+### Input Data
+- `source`: Describes the source of the input
+   + `md:<name>`: Describes a molecular dynamics simulation of a particular type
+   + `langevin`: A simple langevin simulation
+- `skip`: If applicable, the number of skipped iterations from raw
+
 ### Parameterization Data
 - `maxval`: the maximum positive value of parameterized data. Data should be in
             range `[-maxval, maxval]`
 - `type`: the category of parameterization being used. Current options:
       + `dihedral`: dihedral angles of Ca traces
       + `ramachandran`: phi-psi angles of a protein simulation
+
+### Binned Data
+- `nbins`: the number of bins used
+- `disctype`: the discretezation type
+   + `linear`: linearly separated bins (the only valid value right now)
