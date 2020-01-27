@@ -1,5 +1,11 @@
 using Printf;
 
+const DEFAULT_TEMP = 10
+const DEFAULT_TIMESTEP = 0.05
+const DEFAULT_DAMP = 0.95
+const DEFAULT_NUM_TS = 10_000_000
+const DEFAULT_RESTLEN = 1.0
+
 if length(ARGS) < 4
     @printf("Usage: %s <hdf5_file> <datapath> <type> <natoms> [opts]\n", PROGRAM_FILE)
     println("")
@@ -54,12 +60,6 @@ function generate_simstate(chainlength::Int, restlen::Float64, gamma::Float64, r
     simstate = SimState(chainlength, positions, restlens, coeffs)
 end
 
-const DEFAULT_TEMP = 10
-const DEFAULT_TIMESTEP = 0.05
-const DEFAULT_DAMP = 0.95
-const DEFAULT_NUM_TS = 10_000_000
-const DEFAULT_RESTLEN = 1.0
-
 t = DEFAULT_TEMP
 ts = DEFAULT_TIMESTEP
 d = DEFAULT_DAMP
@@ -95,7 +95,7 @@ println(params)
 ## We need to preallocate the array in the HDF5 file
 h5open(hdf_fname,"cw") do file
     # Create a 3 X N X TS dataset, chunking into the appropriate timesteps
-    d_create(file, datapath * "/inputdata", datatype(Float64), dataspace(3,natoms,n), "chunk", (3,natoms,1))
+    d_create(file, datapath * "/inputdata", datatype(Float64), dataspace(3,natoms,n))
 end
 
 simfile = SimData.InputData(hdf_fname, datapath)
