@@ -5,33 +5,6 @@ Takes a dxNxnsteps dataset and returns a vector with <nsteps> elements.
 Currently does things in-memory because I'm lazy and haven't needed to not to.
 """
 
-function sim_autocov_adjusted(dataset::InputData)
-    (dim, natoms, nsteps) = size(dataset.data)
-    mydat = Array{Float64,3}(dataset.data[:,:,:])
-    println(typeof(mydat))
-
-    # Make each individual frame zero-mean
-    mydat = mydat .- mean(mydat; dims=2)
-
-    vals =  collect(1:200:nsteps)
-    covs = Vector{Float64}(undef, length(vals))
-
-    @threads for index in 1:length(vals)
-        lag = vals[index]
-        mycov = 0.0
-        ctr = 0
-        for i in 1:nsteps - lag
-            x = vec(mydat[:,:,i])
-            y = vec(mydat[:,:,i+lag])
-            mycov += cov(x,y) / sqrt(var(x) * var(y))
-            ctr += 1
-        end
-#        println(mycov, "   " ,lag)   # Crude progress meter
-        covs[index] = mycov / ctr
-    end
-    return (vals,covs)
-end
-
 function sim_autocov(dataset::InputData)
     (dim, natoms, nsteps) = size(dataset.data)
     mydat = Array{Float64,3}(dataset.data[:,:,:])
@@ -39,14 +12,14 @@ function sim_autocov(dataset::InputData)
     # Make each individual frame zero-mean                                                                          
     mydat = mydat .- mean(mydat; dims=2)
 
-    vals =  collect(1:200:nsteps)
+    vals =  collect(1:3:1000)
     covs = Vector{Float64}(undef, length(vals))
 
-    @threads for index in 1:length(vals)
+    @inbounds @threads for index in 1:length(vals)
         lag = vals[index]
         mycov = 0.0
         ctr = 0
-        for i in 1:nsteps - lag
+        @inbounds for i in 1:nsteps - lag
             x = vec(mydat[:,:,i])
             y = vec(mydat[:,:,i+lag])
             mycov += cov(x,y)
@@ -65,14 +38,14 @@ function sim_autocor(dataset::InputData)
     # Make each individual frame zero-mean
     mydat = mydat .- mean(mydat; dims=2)
 
-    vals =  collect(1:200:nsteps)
+    vals =  collect(1:3:1000)
     cors = Vector{Float64}(undef, length(vals))
 
-    @threads for index in 1:length(vals)
+    @inbounds @threads for index in 1:length(vals)
         lag = vals[index]
         mycor = 0.0
         ctr = 0
-        for i in 1:nsteps - lag
+        @inbounds for i in 1:nsteps - lag
             mycor += cor(vec(mydat[:,:,i]), vec(mydat[:,:,i+lag]))
             ctr += 1
         end

@@ -6,7 +6,6 @@ using HDF5;
 using LinearAlgebra;
 using Discretizers;
 using Test;
-using Assert;
 
 """Generate a new HDF5 file with the same inputdata, but only using every Nth frame"""
 function create_dataskip_file(input_file::String, take_every::Int, new_file = ""::String)

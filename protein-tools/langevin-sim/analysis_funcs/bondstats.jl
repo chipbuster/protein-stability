@@ -4,9 +4,9 @@ using LinearAlgebra
 function bond_lengths(dataset::InputData)::Matrix{Float64}
     (dim, natom, nsteps) = size(dataset.data)
     bond_lens = Array{Float64,2}(undef,natom-1,nsteps)
-    for t in 1:nsteps
+    @inbounds for t in 1:nsteps
         frame = dataset.data[:,:,t]
-        for i in 1:natom-1
+        @inbounds for i in 1:natom-1
             bond_lens[i,t] = norm(frame[:,i+1] - frame[:,i])
         end
     end
@@ -24,9 +24,9 @@ end
 function bond_angles(dataset::InputData)
     (dim, natom, nsteps) = size(dataset.data)
     bond_angles = Array{Float64,2}(undef,natom-2,nsteps)
-    for t in 1:nsteps
+    @inbounds for t in 1:nsteps
         frame = dataset.data[:,:,t]
-        for i in 1:natom-2
+        @inbounds for i in 1:natom-2
             bond_angles[i,t] = calc_vector_angle(frame[:,i+2] - frame[:,i+1],
                                       frame[:,i+1] - frame[:,i])
         end
