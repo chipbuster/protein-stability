@@ -12,7 +12,7 @@ function sim_autocov(dataset::InputData)
     # Make each individual frame zero-mean                                                                          
     mydat = mydat .- mean(mydat; dims=2)
 
-    vals =  collect(1:3:1000)
+    vals =  collect(1:1000)
     covs = Vector{Float64}(undef, length(vals))
 
     @inbounds @threads for index in 1:length(vals)

@@ -37,7 +37,7 @@ else
 end
 outnames = Vector{AbstractString}()
 for dp in datapaths                                              # Strip off leading /
-    outname = joinpath(dirname(filepath),replace(dp, "/" => "_"))[2:end] * "_stats.serial"
+    outname = joinpath(dirname(filepath),replace(dp, "/" => "_")[2:end]) * "_stats.serial"
     push!(outnames, outname)
 end
     
