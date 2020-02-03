@@ -17,11 +17,12 @@ lzmaFilters = [
 
 # A class for keeping track of state info for compression
 class CompressionData:
-    def __init__(self, binned_data):
+    def __init__(self, binned_data, nskip=1):
         self.bincount = binned_data.data.attrs["nbins"]
         self.dtype = self.calc_min_data_type(self.bincount)
 
-        self.binned = binned_data.data
+        self.binned = binned_data.data[::nskip,:]
+        print(np.shape(self.binned))
         self.ndof = np.size(self.binned[0])
 
         self.cachedCd = None
@@ -104,14 +105,14 @@ class CompressionData:
 
 ## Simple oneshot functions to compute based on a filepath. Used to ease some
 # parts of Pycall.jl interop
-def compute_entropy(filepath, datapath):
+def compute_entropy(filepath, datapath, nskip=1):
     data = BinnedData(filepath, datapath).from_file()
-    c = CompressionData(data)
+    c = CompressionData(data, nskip)
     return c.get_entropy()
 
 
-def compute_ratio(filepath, datapath):
+def compute_ratio(filepath, datapath, nskip=1):
     data = BinnedData(filepath, datapath).from_file()
-    c = CompressionData(data)
+    c = CompressionData(data, nskip)
     return c.get_compression_ratios()
 

@@ -1,13 +1,15 @@
-using Printf;
 if length(ARGS) < 2
-    @printf("Usage: %s <hdf5_file> <datapath>\n",PROGRAM_FILE)
-    @printf("                      <datapath> can be --all\n")
+    println("Usage: $(PROGRAM_FILE) <hdf5_file> <datapath> [additional args]")
+    println("                      <datapath> can be --all\n")
+    println("Additional args:")
+    println("   skip:<int>  Additional frames to skip, default is 1")
     exit(1)
 end
 
 # Set up python environments
 using PyCall;
 using HDF5;
+using Printf;
 
 core_dir = joinpath(dirname(dirname(abspath(PROGRAM_FILE))), "core")
 pushfirst!(PyVector(pyimport("sys")."path"), core_dir)
@@ -25,7 +27,17 @@ datapaths = if ARGS[2] == "--all"
     end
     else
         [ARGS[2]]
+end
+
+nskip = 1
+if length(ARGS) == 3
+    (tok, val) = split(strip(ARGS[3]),":")
+    if tok == "skip"
+        nskip = parse(Int, val)
+    else
+        println!("Unrecognized token $(tok), aborting")
     end
+end
 
 completed = []
 
@@ -43,7 +55,7 @@ for dp in datapaths
         mdp = dp
     end
 
-    ratio = measure.compute_entropy(infile, mdp)
+    ratio = measure.compute_entropy(infile, mdp, nskip)
     push!(completed,mdp)
     @printf("%s computed entropy is %f\n",mdp,ratio)
 end
