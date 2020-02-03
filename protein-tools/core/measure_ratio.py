@@ -22,7 +22,6 @@ class CompressionData:
         self.dtype = self.calc_min_data_type(self.bincount)
 
         self.binned = binned_data.data[::nskip,:]
-        print(np.shape(self.binned))
         self.ndof = np.size(self.binned[0])
 
         self.cachedCd = None
