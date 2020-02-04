@@ -17,7 +17,24 @@ function create_dataskip_file(input_file::String, take_every::Int, new_file = ""
     outfile = h5open(new_file, "w")
     for datapath in find_all_dataset(infile)
         outfile[datapath] = infile[datapath][:,:,1:take_every:end]
-        attrs(outfile[datapath])["skip"] = take_every
+        indata  = infile[datapath]
+        outdata = outfile[datapath]
+        inattr  = attrs(indata)
+        outattr = attrs(outdata)
+        
+        # Copy over attributes
+        for a in names(inattr)
+            outattr[a] = read(inattr[a])
+        end
+        # Compute skip based on existing skips: if curskip is n and new is m,
+        # we are skipping a total of m*n frames.
+        if exists(outattr, "skip")
+            oldskip = read(inattr["skip"])
+            new_skip = oldskip * take_every
+            write(outattr["skip"], new_skip)
+        else
+            outattr["skip"] = take_every
+        end
     end
     close(outfile)
 end
