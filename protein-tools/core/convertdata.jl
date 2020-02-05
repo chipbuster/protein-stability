@@ -108,17 +108,6 @@ function to_dihedral(frames, outputs)
     end
 end
 
-"""Normalize x to be in range by wrapping"""
-function wrap_range(x, minr = -pi, maxr = pi)
-    rangesize = maxr - minr
-    while x > maxr
-        x -= rangesize
-    end
-    while x < minr
-        x += rangesize
-    end
-    x
-end
 
 """Takes a single 3xN snapshot and returns an (N-3) long 1D vector containing the
 sequential """
@@ -147,39 +136,3 @@ function frame_dihedrals(frame)
     return dihedrals
 end
 
-using Rotations, StaticArrays
-function test_dihedralization()
-    num_theta = 25
-    mat = Array{Float64}(undef, 3, num_theta * 2)
-    rand_init = randn(3)
-    mat[:,1] = [0,0,0] + rand_init
-    mat[:,2] = [1,0,0] + rand_init
-    dihedrals = Vector{Float64}()
-
-    #Generate a random helix where every other line moves in pure z-dir and the others
-    # are a prescribed angle from [1,0,0]
-    theta = 0.0
-    for link_num in 2:num_theta
-        i = 2 * link_num
-        mat[:,i - 1] = mat[:,i - 2] + [0,0,1]   # Simple straight-up Z segment
-        dtheta = 2 * pi * (rand() - 0.5)        # Range [-pi, pi]
-        push!(dihedrals, dtheta)
-        theta = wrap_range(theta - pi)  # "0 dihedral" is pointing in opposite dir
-        theta -= dtheta                 # Apply opposite sign since we view from below
-        rx = cos(theta)
-        ry = sin(theta)
-        (px, py, pz) = mat[:,i - 1]
-        mat[:,i] = [px + rx, py + ry, pz + 10 * rand()]
-    end
-
-    r = rand(RotMatrix{3})
-    mat = r * mat   # Apply random rotation
-
-    frame_mat = Array{Float64,3}(undef, 3, num_theta * 2, 1)
-    frame_mat[:,:,1] = mat
-    recovered = Matrix{Float64}(undef, num_theta * 2 - 3, 1)
-    to_dihedral(frame_mat, recovered)
-
-    diffs = recovered[1:2:end] - dihedrals
-    all(abs.(diffs) .< 1e-10)
-end

@@ -13,6 +13,11 @@ using LinearAlgebra
 #
 # For time-series functions, the input is assumed to be in amatrix-like of 
 # (3,N,T), where N is the number of atoms and T is the number of frames.
+#
+# In addition, the functions operating on traces can optionally accept a
+# matrix-like to output the data into. This allows the user to avoid having to
+# store all the data in RAM. If the output argument is used, it must be non-null
+# and already have the correct size.
 
 """Calculate the distance between given atom coordinates."""
 @inline function bond_length(a1, a2)
@@ -45,7 +50,7 @@ end
 end
 
 """Calculate bond lengths in a frame."""
-@inline function bond_length_frame(frame)::Matrix{Float64}
+@inline function bond_length_frame(frame)
     (_, natom) = size(frame)
     bl = Vector{Float64}(undef,natom-1)
     @inbounds for i in 1:natom-1
@@ -69,13 +74,13 @@ end
     (_, natom) = size(frame)
     bd = Vector{Float64}(undef,natom-3)
     @inbounds for i in 1:natom-3
-        bd[i] = bond_angle(frame[:,i], frame[:,i+1], frame[:,i+2], frame[:,i+3])
+        bd[i] = bond_dihedral(frame[:,i], frame[:,i+1], frame[:,i+2], frame[:,i+3])
     end
     return bd
 end
 
 """Calculate the distribution of bond lengths in a trace"""
-function bond_lengths(trace)
+function bond_length_trace(trace, output)
     (dim, natom, nsteps) = size(trace)
     bond_lengths = Matrix{Float64}(undef,natom-1,nsteps)
     @inbounds for t in 1:nsteps
@@ -84,7 +89,7 @@ function bond_lengths(trace)
     return bond_lengths
 end
 """Calculate the distribution of bond angles in a trace"""
-function bond_angles(trace)
+function bond_angle_trace(trace, output)
     (dim, natom, nsteps) = size(trace)
     bond_angles = Matrix{Float64}(undef,natom-2,nsteps)
     @inbounds for t in 1:nsteps
@@ -93,7 +98,7 @@ function bond_angles(trace)
     return bond_angles
 end
 """Calculate the distribution of bond dihedrals in a trace"""
-function bond_dihedrals(trace)
+function bond_dihedral_trace(trace, output)
     (dim, natom, nsteps) = size(trace)
     bond_dihedrals = Matrix{Float64}(undef,natom-3,nsteps)
     @inbounds for t in 1:nsteps
