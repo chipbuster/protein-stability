@@ -55,7 +55,7 @@ function xyz_to_dihedrals(input_data::InputData)::ParameterizedData
     attrs(paramdata)["maxval"] = convert(Float64, pi)  # This may need to be changed later
     attrs(paramdata)["type"] = "dihedral"
 
-    to_dihedral(input_data.data, paramdata)
+    bond_dihedral_trace(input_data.data, paramdata)
     flush(input_data.h5File)
 
     ParameterizedData(paramdata, input_data.filepath, input_data.datapath,
@@ -86,53 +86,3 @@ function bin_dihedrals(input_data::ParameterizedData, nbins::Integer)::BinnedDat
 
     BinnedData(binneddata, input_data.filepath, input_data.datapath, input_data.h5File)
 end
-
-
-"""Take in a 3xNxtime set of coordinates and return a set of dihedral angles of
-for N-3xtime
-
-Output format follows that found in the Python code:
-
- [[ psi0, phi1, psi1, phi2, psi2, ......, phiN-2, psiN-2, phiN-1 ] for t = 0
- [ psi0, phi1, psi1, phi2, psi2, ......, phiN-2, psiN-2, phiN-1 ] for t = 1
- ] etc. etc.
-
-Outputs provided by this function are in the range [-pi, pi].
-"""
-function to_dihedral(frames, outputs)
-    (n, natom, timesteps) = size(frames)
-    @assert n == 3 "Tried to take dihedrals on non-3D trace"
-    for i = 1:timesteps
-        outputs[:,i] = frame_dihedrals(frames[:,:,i])
-        # println(size(frame_dihedrals(frames[:,:,i])), size(outputs[:,i]))
-    end
-end
-
-
-"""Takes a single 3xN snapshot and returns an (N-3) long 1D vector containing the
-sequential """
-# Algorithm taken from https://math.stackexchange.com/questions/47059/how-do-i-calculate-a-dihedral-angle-given-cartesian-coordinates
-function frame_dihedrals(frame)
-    (_, N) = size(frame)
-    dihedrals = Vector{Float64}()
-    for i = 1:(N - 3)
-        a1 = frame[:,i]
-        a2 = frame[:,i + 1]
-        a3 = frame[:,i + 2]
-        a4 = frame[:,i + 3]
-        b1 = a2 - a1
-        b2 = a3 - a2
-        b3 = a4 - a3
-        n1 = cross(b1, b2)
-        n2 = cross(b2, b3)
-        n1 = n1 ./ norm(n1)
-        n2 = n2 ./ norm(n2)
-        m1 = cross(n1, b2 / norm(b2))
-        x = dot(n1, n2)
-        y = dot(m1, n2)
-        d = atan(y, x)
-        push!(dihedrals, d)
-    end
-    return dihedrals
-end
-

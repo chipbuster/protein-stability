@@ -80,27 +80,40 @@ end
 end
 
 """Calculate the distribution of bond lengths in a trace"""
-function bond_length_trace(trace, output)
+function bond_length_trace(trace, output=nothing)
     (dim, natom, nsteps) = size(trace)
-    bond_lengths = Matrix{Float64}(undef,natom-1,nsteps)
+    bond_lengths = if output === nothing
+        Matrix{Float64}(undef,natom-1,nsteps)
+    else
+        output
+    end
     @inbounds for t in 1:nsteps
         bond_lengths[:,t] = bond_length_frame(dataset[:,:,t])
     end
     return bond_lengths
 end
+
 """Calculate the distribution of bond angles in a trace"""
-function bond_angle_trace(trace, output)
+function bond_angle_trace(trace, output=nothing)
     (dim, natom, nsteps) = size(trace)
-    bond_angles = Matrix{Float64}(undef,natom-2,nsteps)
+    bond_angles = if output === nothing
+        Matrix{Float64}(undef,natom-2,nsteps)
+    else
+        output
+    end
     @inbounds for t in 1:nsteps
         bond_angles[:,t] = bond_angle_frame(dataset[:,:,t])
     end
     return bond_angles
 end
 """Calculate the distribution of bond dihedrals in a trace"""
-function bond_dihedral_trace(trace, output)
+function bond_dihedral_trace(trace, output=nothing)
     (dim, natom, nsteps) = size(trace)
-    bond_dihedrals = Matrix{Float64}(undef,natom-3,nsteps)
+    bond_dihedrals = if output === nothing
+        Matrix{Float64}(undef,natom-3,nsteps)
+    else
+        output
+    end
     @inbounds for t in 1:nsteps
         bond_dihedrals[:,t] = bond_dihedral_frame(dataset[:,:,t])
     end
