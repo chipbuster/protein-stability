@@ -46,7 +46,7 @@ end
     m1 = cross(n1, b2 / norm(b2))
     x = dot(n1, n2)
     y = dot(m1, n2)
-    return atan(y, x)
+    return -atan(y, x)
 end
 
 """Calculate bond lengths in a frame."""
@@ -106,6 +106,7 @@ function bond_angle_trace(trace, output=nothing)
     end
     return bond_angles
 end
+
 """Calculate the distribution of bond dihedrals in a trace"""
 function bond_dihedral_trace(trace, output=nothing)
     (dim, natom, nsteps) = size(trace)
@@ -118,4 +119,67 @@ function bond_dihedral_trace(trace, output=nothing)
         bond_dihedrals[:,t] = bond_dihedral_frame(dataset[:,:,t])
     end
     return bond_dihedrals
+end
+
+function frame_cartesian_to_zmatrix(frame)
+    (_, natom) = size(frame)
+    
+    zmat = Matrix{Float64}(undef, natom - 1, 3)
+    
+    # Implicit: the first atom is at 0,0,0. Records begin with the second atom
+    # which has its angle/dihedral fields zeroed. The third atom has its dihedral
+    # field zeroed, starting with the fourth, all fields are nonzero.
+
+    zmat[1,1] = bond_length(frame[:,1], frame[:,2])
+    zmat[1,2] = 0.0
+    zmat[1,3] = 0.0
+    zmat[2,1] = bond_length(frame[:,2], frame[:,3])
+    zmat[2,2] = bond_angle(frame[:,1], frame[:,2], frame[:,3])
+    zmat[2,3] = 0
+    
+    for i = 3:natom-1
+        zmat[i,1] = bond_length(frame[:,i], frame[:,i+1])
+        zmat[i,2] = bond_angle(frame[:,i-1], frame[:,i], frame[:,i+1])
+        zmat[i,3] = bond_dihedral(frame[:,i-2], frame[:,i-1], frame[:,i], frame[:,i+1])
+    end
+
+    return zmat
+end
+
+function nerf(p1, p2, p3, len, θ, χ)
+    ab = normalize(p2 - p1)
+    bc = normalize(p3 - p2)
+
+    n_unit = normalize(cross(ab, bc))
+    p_unit = cross(n_unit, bc)
+
+    M = [bc p_unit n_unit]
+
+    d2 = [len * cos(θ), len * sin(θ)cos(χ), len*sin(θ)sin(χ)]
+
+    @assert bond_angle([-1;0;0], [0;0;0], d2) ≈ θ
+    
+    return p3 + M * d2
+end
+
+function frame_zmatrix_to_cartesian(zmat)
+    (n, _) = size(zmat)
+    
+    cart = Matrix{Float64}(undef, 3, n+1)
+
+    # Fill in the first three entries, which can be uniquely determined by
+    # placement along Z and then in the XZ-plane
+    
+    cart[:,1] = [0,0,0]
+    cart[:,2] = [0,0,zmat[1,1]]
+
+    l23 = zmat[2,1]
+    θ23 = zmat[2,2]
+    cart[:,3] = l23.*[sin(θ23), 0, cos(θ23)] + cart[:,2]
+
+    for i in 4:n+1
+        cart[:,i] = nerf(cart[:,i-3], cart[:,i-2], cart[:,i-1],
+                         zmat[i-1,1], zmat[i-1,2], zmat[i-1,3])
+    end
+    cart
 end
