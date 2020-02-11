@@ -162,20 +162,35 @@ function take_timestep(state::SimState, params::SimParameters)
     state.positions += update
 end
 
-"""Run a simulation on the specified initial simulation state"""
-function run_sim(simstate::SimState, data::HDF5Dataset; params::SimParameters)
+"""Run a simulation on the specified initial simulation state.
+
+    Stores output to an HDF dataset provided by `hdf_fname` and `datapath`
+    Only stores every `skipn` data steps.
+"""
+function run_sim(simstate::SimState, hdf_fname::String, datapath::String; params::SimParameters, skipn::Int = 1)
+    @assert skipn >= 1 "Trying to skip non-positive number of frames"
+    simfile = SimData.InputData(hdf_fname, datapath)
+    data = simfile.data
     # Add a random perturbation to the initial positions
     simstate.positions = simstate.positions + rand_3unit(simstate.N)
 
     @printf("Running with %d atoms, T = %f, %d timesteps of size %f \n",
             simstate.N, params.temp, params.num_ts, params.ts)
 
+    attrs(data)["source"] = "langevin"
     attrs(data)["timestep"] = params.ts
     attrs(data)["temp"] = params.temp
     attrs(data)["damp"] = params.damp
 
+    if skipn > 1
+       attrs(data)["skip"] = skipn
+    end
+
     for t in 1:params.num_ts
-        data[:,:,t] = simstate.positions
+        # Only record every skipn counts
+        if t % skipn == 0
+            data[:,:,t] = simstate.positions
+        end
         take_timestep(simstate, params)
     end
 end

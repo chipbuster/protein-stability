@@ -5,6 +5,7 @@ const DEFAULT_TIMESTEP = 0.05
 const DEFAULT_DAMP = 0.95
 const DEFAULT_NUM_TS = 10_000_000
 const DEFAULT_RESTLEN = 1.0
+const DEFAULT_SKIPN = 1
 
 if length(ARGS) < 4
     @printf("Usage: %s <hdf5_file> <datapath> <type> <natoms> [opts]\n", PROGRAM_FILE)
@@ -21,6 +22,7 @@ if length(ARGS) < 4
     println("	damp:<val>")
     println("	num_ts:<val>")
     println("	restlen:<val>")
+    println("	store_every:<val>")
     exit(1)
 end
 
@@ -65,6 +67,7 @@ ts = DEFAULT_TIMESTEP
 d = DEFAULT_DAMP
 n = DEFAULT_NUM_TS
 rlen = DEFAULT_RESTLEN
+skipn = DEFAULT_SKIPN
 
 ## Argument parsing block
 hdf_fname = ARGS[1]
@@ -83,6 +86,8 @@ for kvpair in ARGS[5:end]
         global n = parse(Int, val)
     elseif key == "restlen"
         global rlen = parse(Float64, val)
+    elseif key == "store_every"
+        global skipn = parse(Int, val)
     else
         @printf("Unknown key-value pair \t %s", kvpair)
         exit(1)
@@ -98,7 +103,6 @@ h5open(hdf_fname,"cw") do file
     d_create(file, datapath * "/inputdata", datatype(Float64), dataspace(3,natoms,n))
 end
 
-simfile = SimData.InputData(hdf_fname, datapath)
 if simtype == "ring"
     simstate = generate_simstate(natoms, rlen, d, true)
 elseif simtype == "chain"
@@ -107,4 +111,4 @@ else
     @printf("Unrecognized sim type: %s\n",simtype)
 end
 
-run_sim(simstate, simfile.data; params = params)
+run_sim(simstate, hdf_fname, datapath; params = params, skipn = skipn)
