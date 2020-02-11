@@ -36,7 +36,7 @@ function test_dihedral_calc()
         i = 2 * link_num
         mat[:,i - 1] = mat[:,i - 2] + [0,0,1]   # Simple straight-up Z segment
         dtheta = 2 * pi * (rand() - 0.5)        # Range [-pi, pi]
-        push!(dihedrals, dtheta)
+        push!(dihedrals, -dtheta)
         theta = wrap_range(theta - pi)  # "0 dihedral" is pointing in opposite dir
         theta -= dtheta                 # Apply opposite sign since we view from below
         length_scale = 10 * rand(Float64)  # Make sure we're not length-dependent
@@ -106,6 +106,24 @@ function test_length_calc()
     all(abs.(diffs) .< 1e-10)
 end
 
+function test_zmatrix_calc()
+    num_atoms = 50  # Can't go too large, or risk cumulative recovery error
+    frame = randn(Float64, (3, num_atoms))
+
+    # Need to align initial points carefully--rest can be random
+    frame[:,1] .= [0,0,0]
+    frame[:,2] .= [0,0,1]
+    frame[:,3] = [1,0,1]
+
+    zmat = frame_cartesian_to_zmatrix(frame)
+    recovered = frame_zmatrix_to_cartesian(zmat)
+
+    diffs = frame - recovered
+
+    all(abs.(diffs) .< 1e-8)
+end
+
+@test test_zmatrix_calc()
 @test test_dihedral_calc()
 @test test_length_calc()
 @test test_angle_calc()
