@@ -7,3 +7,5 @@ Pkg.add("Discretizers");
 Pkg.add("StaticArrays");
 Pkg.add("Rotations");
 Pkg.add("StatsBase");
+Pkg.add("Plots");
+
