@@ -74,11 +74,41 @@ function test_angle_calc()
         rx = magnitude * cos(theta)
         ry = magnitude * sin(theta)
         mat[:,i] = mat[:,i-1] + [rx, ry, 0]
-        angles[i-2] = abs(newangle)
+        angles[i-2] = abs(newangle) # In 3D + higher, only care about magnitude
     end
 
     r = rand(RotMatrix{3})
     mat = r * mat   # Apply random rotation
+
+    # Recovery phase
+    recovered = bond_angle_frame(mat)
+    diffs = angles - recovered
+    all(abs.(diffs) .< 1e-10)
+end
+
+function test_angle_calc_2d()
+    num_tests = 30
+    mat = Matrix{Float64}(undef, 2, num_tests+2)
+    mat[:,1] = randn(2) * 10
+    mat[:,2] = mat[:,1] + [1,0]
+
+    # Generate angles in x-y plane with initial z-value from above
+    angles = Vector{Float64}(undef, num_tests)
+    theta = 0    # Convenience value: used to track current frame
+    for i in 3:num_tests + 2
+        magnitude = 10 * rand(Float64)
+        newangle = 2 * pi * (rand(Float64) - 0.5)      # (-pi, pi)
+        theta = wrap_range(theta + newangle)
+        rx = magnitude * cos(theta)
+        ry = magnitude * sin(theta)
+        mat[:,i] = mat[:,i-1] + [rx, ry]
+        angles[i-2] = newangle
+    end
+
+    r = rand(RotMatrix{2})
+    t = randn(2) * 10
+    println(size(mat), " " ,size(t))
+    mat = r * mat .+ t   # Apply random rotation + translation
 
     # Recovery phase
     recovered = bond_angle_frame(mat)
@@ -127,3 +157,4 @@ end
 @test test_dihedral_calc()
 @test test_length_calc()
 @test test_angle_calc()
+@test test_angle_calc_2d()

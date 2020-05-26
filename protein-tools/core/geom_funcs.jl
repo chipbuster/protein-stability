@@ -24,13 +24,32 @@ using LinearAlgebra
     return norm(a2 - a1)
 end
 
-"""Calculate the 3-atom angle given atom coordinates."""
+"""Calculate the 3-atom angle given atom coordinates.
+
+In 2D, returns a *signed* angle, from -π to π. In higher dimensions, simply
+returns a value in [0,π].
+
+Computations in higher dimensions are vulnerable to floating point issues.
+"""
 @inline function bond_angle(a1,a2,a3)
-    vec1 = a2 - a1
-    vec2 = a3 - a2
-    num  = dot(vec1, vec2)
-    den  = norm(vec1) * norm(vec2)
-    return acos(num / den)
+    v1 = vec(a2 - a1)
+    v2 = vec(a3 - a2)
+
+    if length(v1) == 2
+        # Based on tangent half-angle identity: tan(t/2) = sin(t) / (1 + cos(t))
+        # where sin(t) = v1 `cross` v2 , cos(t) = v1 `dot` v2
+        y = ([v1;0] × [v2;0]) ⋅ [0;0;1]
+        x = norm(v1) * norm(v2) + dot(v1,v2)
+        return 2 * atan( y, x )
+    else
+        # We can't get sin(t) without dividing by some norms, and signed angles
+        # aren't that helpful in higher dimensions, so let's just use the cosine
+        # identity
+        num = dot(v1,v2)
+        den = norm(v1) * norm(v2)
+        val = clamp( num / den, -1.0, 1.0)   # Numerical issues, bleh
+        return acos(val)
+    end
 end
 
 """Calculate the 4-atom angles given atom coordinates"""
