@@ -86,7 +86,37 @@ function test_angle_calc()
     all(abs.(diffs) .< 1e-10)
 end
 
-function test_angle_calc_2d()
+random_angle() = 2π * (rand() - 0.5)    # Random angle in [-π,π]
+random_length() = rand() > 0.3 ? 10 * rand() : 0.01 * rand()     # Test "normal" and "very small" lengths
+"""Generates a random three points and the returns the triplet and the angle they were generated with."""
+function gen_random_angle_triplet()
+    leg1_theta = random_angle()
+    random_theta = random_angle()
+    leg2_theta = leg1_theta + random_theta
+    points = Matrix{Float64}(undef,2,3)
+    # Negative because we need to think carefully about which angle we're measuring
+    # in our code.
+    # It's π - internal angle.
+    p1 = -random_length() * [ cos(leg1_theta); sin(leg1_theta) ]
+    p2 = [0;0]
+    p3 = random_length() * [ cos(leg2_theta); sin(leg2_theta) ]
+    # random_offset = [ 5000 * (rand() - 0.5); 5000 * (rand() - 0.5)]  # Offset in [-2500,2500]^2
+    random_offset = 0
+    points[:,1] = p1
+    points[:,2] = p2
+    points[:,3] = p3
+    points .= points .+ random_offset
+    (random_theta, points)
+end
+
+function test_random_angle_triplet()
+    (angle, points) = gen_random_angle_triplet()
+    recovered = bond_angle_frame(points)[1]
+    abs(angle - recovered) < 1e-5
+end
+
+
+function test_angle_calc_2d_chain()
     num_tests = 30
     mat = Matrix{Float64}(undef, 2, num_tests+2)
     mat[:,1] = randn(2) * 10
@@ -107,13 +137,26 @@ function test_angle_calc_2d()
 
     r = rand(RotMatrix{2})
     t = randn(2) * 10
-    println(size(mat), " " ,size(t))
     mat = r * mat .+ t   # Apply random rotation + translation
 
     # Recovery phase
     recovered = bond_angle_frame(mat)
     diffs = angles - recovered
     all(abs.(diffs) .< 1e-10)
+end
+
+function test_angle_calc_2d_triplet()
+    num_tests = 100_000
+    for i = 1:num_tests
+        if !test_random_angle_triplet()
+            return false
+        end
+    end
+    return true
+end
+
+function test_angle_calc_2d()
+    test_angle_calc_2d_triplet() && test_angle_calc_2d_chain()
 end
 
 function test_length_calc()
@@ -152,6 +195,7 @@ function test_zmatrix_calc()
 
     all(abs.(diffs) .< 1e-8)
 end
+
 
 @test test_zmatrix_calc()
 @test test_dihedral_calc()
