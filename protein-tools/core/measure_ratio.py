@@ -12,7 +12,7 @@ from simdata import BinnedData, ParameterizedData, InputData
 
 # Compression parameters
 lzmaFilters = [
-    {"id": lzma.FILTER_LZMA2, "preset": 7 | lzma.PRESET_EXTREME},
+    {"id": lzma.FILTER_LZMA2, "preset": 9 | lzma.PRESET_EXTREME},
 ]
 
 # A class for keeping track of state info for compression
