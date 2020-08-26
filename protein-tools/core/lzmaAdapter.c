@@ -115,7 +115,9 @@ size_t get_compressed_size(const uint8_t *data, size_t length) {
     fprintf(stderr, "Error initializing LZMA encoder");
     return -2;
   }
-  return compress_data(&strm, data, length);
+  size_t compressed_size = compress_data(&strm, data, length);
+  lzma_end(&strm);
+  return compressed_size;
 }
 
 #ifdef STANDALONE
@@ -176,6 +178,7 @@ int main(int argc, char **argv) {
       printf("Size of input is %d\n", data_length);
     }
     compressed_outsize = compress_data(&strm, data, data_length);
+    free(data);
   }
   lzma_end(&strm);
 
