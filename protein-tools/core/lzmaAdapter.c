@@ -84,9 +84,11 @@ size_t compress_data(lzma_stream *strm, const uint8_t *data, size_t length) {
   strm->avail_out = length;
 
   lzma_ret ret = lzma_code(strm, action);
+  lzma_ret ret2 = lzma_code(strm, LZMA_FINISH);
 
   free(outbuf);
-  if (ret == LZMA_STREAM_END || ret == LZMA_OK) {
+
+  if (ret == LZMA_OK && ret2 == LZMA_STREAM_END) {
     return length - strm->avail_out;
   } else {
     const char *msg;
