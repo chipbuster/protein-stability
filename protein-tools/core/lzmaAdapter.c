@@ -75,13 +75,15 @@ static bool init_encoder(lzma_stream *strm) {
 // negative number if the compression fails.
 size_t compress_data(lzma_stream *strm, const uint8_t *data, size_t length) {
   lzma_action action = LZMA_RUN;
+ 
+  size_t bufsz = length + length / 5; // Some slack for too-large buffers
 
-  uint8_t *outbuf = malloc(length);
+  uint8_t *outbuf = malloc(bufsz);
 
   strm->next_in = data;
   strm->avail_in = length;
   strm->next_out = outbuf;
-  strm->avail_out = length;
+  strm->avail_out = bufsz;
 
   lzma_ret ret = lzma_code(strm, action);
   lzma_ret ret2 = lzma_code(strm, LZMA_FINISH);
@@ -89,7 +91,7 @@ size_t compress_data(lzma_stream *strm, const uint8_t *data, size_t length) {
   free(outbuf);
 
   if (ret == LZMA_OK && ret2 == LZMA_STREAM_END) {
-    return length - strm->avail_out;
+    return bufsz - strm->avail_out;
   } else {
     const char *msg;
     switch (ret) {
@@ -99,6 +101,12 @@ size_t compress_data(lzma_stream *strm, const uint8_t *data, size_t length) {
 
     case LZMA_DATA_ERROR:
       msg = "File size limits exceeded";
+      break;
+
+    case LZMA_BUF_ERROR:
+      // Last time, caused by having too small an output buffer. Fixed by adding
+      // a factor of length/5 to the output, to account for files larger than in
+      msg = "Buffer error: no progress is possible";
       break;
 
     default:
