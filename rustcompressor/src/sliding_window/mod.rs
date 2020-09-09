@@ -1,6 +1,4 @@
 use core::cmp::{Eq, PartialEq};
-use std::collections::VecDeque;
-use std::iter::Iterator;
 
 /** Sliding windows always occur on raw inputs, but it might be over larger
 integer types in later experiments.
@@ -22,7 +20,7 @@ where
   }
 
   pub fn new_with_params(source: &'a [S], winsz: usize) -> Self {
-    let win_end = std::cmp::max(winsz, source.len());
+    let win_end = std::cmp::min(winsz, source.len());
     Self {
       source,
       window: (0, win_end),
@@ -38,6 +36,14 @@ where
     }
   }
 
+  pub fn set_window(&mut self, i: usize, j: usize) -> Option<()> {
+    if i > j || j > self.source.len() {
+      return None;
+    }
+    self.window = (i, j);
+    Some(())
+  }
+
   /// Find the longest match in the current sliding window using a brute-force
   /// search algorithm.
   pub fn find_match(&self, to_match: &[S]) -> (usize, usize) {
@@ -46,14 +52,12 @@ where
 
     // Start searching at beginning of sliding window.
     for i in 0..=self.winsz {
-      let dist = self.winsz - i;
       let match_size = self.longest_match(i, to_match);
       if match_size > backref_size {
-        backref_dist = i;
+        backref_dist = self.winsz - i;
         backref_size = match_size;
       }
     }
-
     (backref_dist, backref_size)
   }
 
@@ -61,9 +65,47 @@ where
   my little peanut brain to understand. */
   fn longest_match(&self, win_index_start: usize, to_match: &[S]) -> usize {
     let mut offset = 0usize;
-    while self.window[win_index_start + offset] == to_match[offset] {
-      offset += 1;
+    let mut source_i = self.window.0 + win_index_start + offset;
+    let mut match_i = offset;
+    while source_i < self.source.len() && match_i < to_match.len() {
+      if self.source[source_i] == to_match[match_i] {
+        offset += 1;
+        source_i += 1;
+        match_i += 1;
+      } else {
+        break;
+      }
     }
     offset
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::sliding_window::SlidingWindow;
+  #[test]
+  fn win_too_large() {
+    let s = ['a'; 1024];
+    let win = SlidingWindow::new_with_params(&s[..], 64);
+    assert_eq!(win.window, (0, 64));
+  }
+
+  #[test]
+  fn match_test() {
+    let s = "qwertyuiop[]asdfghjkl;'zxcvbnm,./".as_bytes();
+    let win = SlidingWindow::new_with_params(s, 16);
+    assert_eq!(win.window, (0, 16));
+    let m = win.find_match("werty".as_bytes());
+    assert_eq!(m, (15, 5));
+  }
+
+  #[test]
+  fn match_off_end() {
+    let s = "qwertyuiop[]asdfghjkl;'zxcvbnm,./".as_bytes();
+    let mut win = SlidingWindow::new_with_params(s, 16);
+    assert_eq!(win.window, (0, 16));
+    win.window = (17, 33);
+    let m = win.find_match("zxcvbnm,./".as_bytes());
+    assert_eq!(m, (10, 10));
   }
 }

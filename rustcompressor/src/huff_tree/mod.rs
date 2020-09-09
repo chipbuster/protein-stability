@@ -230,12 +230,9 @@ impl<T: Eq + Ord> Tree<T> {
 }
 
 #[cfg(test)]
-#[macro_use]
-extern crate quickcheck;
-
-#[cfg(test)]
 mod tests {
-  use crate::Tree;
+  use crate::huff_tree::Tree;
+  use quickcheck::quickcheck;
 
   #[test]
   fn insert_into_singleton() {
@@ -257,7 +254,7 @@ mod tests {
     assert_eq!(tree_insert, tree_post_insert);
   }
 
-  use crate::HuffEncoder;
+  use crate::huff_tree::HuffEncoder;
   use std::collections::HashMap;
 
   #[test]
@@ -288,7 +285,7 @@ mod tests {
     assert_eq!(answer, hufftree);
   }
 
-  use bitvec::*;
+  use bitvec::prelude::*;
 
   #[test]
   fn simple_map() {
