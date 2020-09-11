@@ -6,7 +6,7 @@ use std::cmp::Ord;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use bitvec::vec::BitVec;
+use bit_vec::BitVec;
 
 type HuffTree<S> = Tree<(Option<S>, usize)>;
 
@@ -34,7 +34,7 @@ where
 
   fn push_bitvec(v1: &mut BitVec, v2: &BitVec) -> () {
     for bit in v2.iter() {
-      v1.push(*bit);
+      v1.push(bit);
     }
   }
 
@@ -58,7 +58,7 @@ where
     // Otherwise, follow the assigned bit, panicking if we are unable to
     // do so.
     for bit in inp.iter() {
-      if *bit {
+      if bit {
         if let Some(ref t) = tree_base.right {
           tree_base = t;
         }
