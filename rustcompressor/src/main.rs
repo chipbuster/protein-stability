@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::process;
 
-use compressor::huff_tree::HuffEncoder;
+use compressor::gzip::reader::*;
 
 fn main() {
   let args: Vec<String> = env::args().collect();
@@ -13,15 +13,11 @@ fn main() {
   }
 
   let infilename = &args[1];
-  let contents = fs::read_to_string(infilename)
-    .expect("Something went wrong reading the file")
-    .into_bytes();
-
-  let coder = HuffEncoder::new(&contents);
-  let encoded = coder.encode(&contents);
-
-  println!(
-    "Ratio is {}",
-    (encoded.len() as f64 / 8.0) / contents.len() as f64
-  );
+  let f = fs::File::open(infilename).unwrap();
+  let gzblob = GzipData::new_from_gzip_data(f);
+  if gzblob.is_err() {
+    println!("{}", gzblob.unwrap_err());
+  } else {
+    println!("{}", gzblob.unwrap());
+  }
 }

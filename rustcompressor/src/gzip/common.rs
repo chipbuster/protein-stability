@@ -1,6 +1,9 @@
 use bit_vec::BitVec;
 use bitflags::bitflags;
 use crc32fast::Hasher;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::convert::TryFrom;
+use std::fmt;
 use std::num::NonZeroU32;
 
 /* Structure from RFC 1952
@@ -70,6 +73,7 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Copy, Clone)]
 #[repr(u8)]
 pub enum OSType {
   FatFS = 0,
@@ -96,6 +100,7 @@ impl GZFlags {
   }
 }
 
+#[derive(Debug)]
 struct GZExtraRecord {
   si1: u8,
   si2: u8,
@@ -103,11 +108,13 @@ struct GZExtraRecord {
   data: [u8],
 }
 
+#[derive(Debug)]
 struct GZExtra {
   xlen: u16,
   data: [u8], // Unsafe to access directly--should use member functions
 }
 
+#[derive(Debug)]
 pub struct GzipData {
   id1: u8,
   id2: u8,
@@ -122,13 +129,12 @@ pub struct GzipData {
   crc16: Option<u16>,
   crc32: u32,
   isize: u32,
-  data: BitVec,
+  data: Vec<u8>,
 }
 
-pub fn calc_crc32(data: &BitVec) -> u32 {
-  let byte_data = data.to_bytes();
+pub fn calc_crc32(data: &[u8]) -> u32 {
   let mut hasher = Hasher::new();
-  hasher.update(byte_data.as_slice());
+  hasher.update(data);
   hasher.finalize()
 }
 
@@ -149,8 +155,80 @@ impl GzipData {
       crc16: None,
       crc32: u32::MAX,
       isize: 0,
-      data: BitVec::new(),
+      data: Vec::new(),
     }
+  }
+
+  /** Take ownership of a BitVector of compressed data, updating the associated
+  metadata fields appropriately */
+  pub fn set_data(&mut self, data: Vec<u8>) {
+    let datasize = u32::try_from(data.len()).expect("Data too large");
+    let crc32 = calc_crc32(&data);
+
+    self.crc32 = crc32;
+    self.isize = datasize;
+    self.data = data;
+    self.crc16.map(|_| crc32 as u16);
+  }
+
+  pub fn set_flags(&mut self, flg: GZFlags) {
+    self.flg = flg;
+  }
+
+  pub fn set_xflags(&mut self, xflg: GZXFlags) {
+    self.xfl = xflg;
+  }
+
+  pub fn set_ostype(&mut self, os: OSType) {
+    self.os = os;
+  }
+
+  pub fn set_mtime(&mut self, mtime: Option<NonZeroU32>) {
+    self.mtime = mtime;
+  }
+
+  pub fn set_name(&mut self, name: Option<String>) {
+    self.fname = name;
+  }
+
+  pub fn set_comment(&mut self, comment: Option<String>) {
+    self.comment = comment;
+  }
+
+  // Intentionally ignore EXTRA for the moment.
+}
+
+impl fmt::Display for GzipData {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      r#"GZip Data:
+   +---+---+---+---+---+---+---+---+---+---+
+   |ID1|ID2|CM |FLG|     MTIME     |XFL|OS | (more-->)
+   +---+---+---+---+---+---+---+---+---+---
+   {:x}   {:x}  {}   {:02x}  {:x?}   {:x}  {}
+"#,
+      self.id1, self.id2, self.cm, self.flg, self.mtime, self.xfl, self.os as u8
+    )?;
+    if self.flg.contains(GZFlags::FEXTRA) {
+      write!(f, "XLEN: {} bytes\n", self.fextra.as_ref().unwrap().xlen)?;
+    }
+
+    if self.flg.contains(GZFlags::FNAME) {
+      write!(f, "Filename: {}\n", self.fname.as_ref().unwrap())?;
+    }
+
+    if self.flg.contains(GZFlags::FCOMMENT) {
+      write!(f, "Comment: {}\n", self.comment.as_ref().unwrap())?;
+    }
+
+    if self.flg.contains(GZFlags::FHCRC) {
+      write!(f, "CRC16: {:x}\n", self.crc16.unwrap())?;
+    }
+
+    write!(f, "CRC32: {:x}\n", self.crc32)?;
+    write!(f, "Num Bytes: {}\n", self.isize)?;
+    write!(f, "Data: {:x?}\n", self.data)
   }
 }
 
