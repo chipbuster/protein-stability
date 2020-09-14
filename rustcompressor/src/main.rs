@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::process;
 
-use compressor::gzip::reader::*;
+use compressor::gzip::GzipData;
 
 fn main() {
   let args: Vec<String> = env::args().collect();
