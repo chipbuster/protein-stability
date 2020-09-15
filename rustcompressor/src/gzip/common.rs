@@ -128,7 +128,7 @@ pub struct GzipData {
   comment: Option<String>,
   crc16: Option<u16>,
   crc32: u32,
-  isize: u32,
+  isz: u32,
   data: Vec<u8>,
 }
 
@@ -154,7 +154,7 @@ impl GzipData {
       comment: None,
       crc16: None,
       crc32: u32::MAX,
-      isize: 0,
+      isz: 0,
       data: Vec::new(),
     }
   }
@@ -162,12 +162,12 @@ impl GzipData {
   /** Take ownership of a BitVector of compressed data, updating the associated
   metadata fields appropriately */
   pub fn set_data(&mut self, data: Vec<u8>) {
-    let datasize = u32::try_from(data.len()).expect("Data too large");
-    let crc32 = calc_crc32(&data);
-
-    self.crc32 = crc32;
-    self.isize = datasize;
     self.data = data;
+  }
+
+  pub fn set_checksums(&mut self, crc32: u32, isz: u32) {
+    self.crc32 = crc32;
+    self.isz = isz;
     self.crc16.map(|_| crc32 as u16);
   }
 
@@ -227,7 +227,7 @@ impl fmt::Display for GzipData {
     }
 
     write!(f, "CRC32: {:x}\n", self.crc32)?;
-    write!(f, "Num Bytes: {}\n", self.isize)?;
+    write!(f, "Num Bytes: {}\n", self.isz)?;
     write!(f, "Data: {:x?}\n", self.data)
   }
 }
