@@ -30,7 +30,11 @@ fn main() {
   if stream.is_err(){
     println!("{}", stream.unwrap_err());
     process::exit(1);
-  } else {
-    println!("{:?}", stream.unwrap());
-  }
+  } 
+
+  let stream = stream.unwrap();
+  println!("{:?}", stream);
+
+  println!("Getting raw buffer");
+  println!("{:?}", stream.into_byte_stream().unwrap())
 }

@@ -7,6 +7,17 @@ use std::io::Read;
 use thiserror::Error;
 
 const BLOCK_END: u16 = 256;
+const VERBOSE: bool = false;
+
+macro_rules! debug_log {
+  ($($arg:tt)*) => {
+    if VERBOSE {
+      println!($($arg)*)
+    } else {
+      print!("")
+    }
+  }
+}
 
 lazy_static! {
   pub static ref DEFAULT_READ_TREE: Box<[DeflateReadTree]> = default_read_hufftree();
@@ -22,7 +33,7 @@ pub enum DeflateReadError {
   #[error("The input stream was not completely consumed")]
   StreamNotConsumed,
   #[error("Tried to go back {0} symbols, but the stream is only {1} large")]
-  PastTheEnd(u16,usize),
+  BackrefPastStart(u16,usize),
   #[error("Value out of range of valid encoded values")]
   CodeOutOfRange(u16),
   #[error("The LEN and NLEN fields of an uncompressed block mismatched: {0}, {1}")]
@@ -44,22 +55,22 @@ impl DeflateSym {
   ) -> Result<Self, DeflateReadError> {
     let sym = bit_src.read_huffman(tree)?;
     if sym == BLOCK_END {
-      println!("End of block");
+      debug_log!("End of block");
       Ok(Self::EndOfBlock)
     } else if sym <= 255 {
-      println!("Literal {}", sym);
+      debug_log!("Literal {}", sym);
       Ok(Self::Literal(sym as u8)) // Sym is within valid range for u8
     } else {
       let len_sym = sym;
       let len_codept = DEFAULT_CODEPOINTS.lookup_codept(len_sym);
       assert_eq!(len_codept.codept, len_sym);
       if len_codept.codept < 255 {
-        println!("Got code {} when looking for a length", len_codept.codept);
+        debug_log!("Got code {} when looking for a length", len_codept.codept);
         return Err(DeflateReadError::CodeOutOfRange(sym));
       }
-      print!("Got length code {} ", len_codept.codept);
+      debug_log!("Got length code {} ", len_codept.codept);
       let len = len_codept.read_value_from_bitstream(bit_src)?;
-      println!("corresponding to match length {}", len);
+      debug_log!("corresponding to match length {}", len);
 
       // Perform second read to get the distance. These are coded by 5 literal
       // bits, not using the huffman coding of the literal/length bits
@@ -67,12 +78,12 @@ impl DeflateSym {
       let dist_codept = DEFAULT_CODEPOINTS.lookup_codept(dist_sym);
       assert_eq!(dist_codept.codept, dist_sym);
       if dist_codept.codept > 29 {
-        println!("Got code {} when looking for a dist", dist_codept.codept);
+        debug_log!("Got code {} when looking for a dist", dist_codept.codept);
         return Err(DeflateReadError::CodeOutOfRange(sym));
       }
-      print!("Got distance code {} ", dist_codept.codept);
+      debug_log!("Got distance code {} ", dist_codept.codept);
       let dist = dist_codept.read_value_from_bitstream(bit_src)?;
-      println!("corresponding to match distance {}", dist);
+      debug_log!("corresponding to match distance {}", dist);
 
       Ok(Self::Backreference(len, dist)) // Sym is within valid range for u8
     }
@@ -139,7 +150,7 @@ impl BlockData {
     bit_src: &mut BitReader<R, LittleEndian>,
   ) -> Result<Self, DeflateReadError> {
     let btype = bit_src.read::<u8>(2)?;
-    println!("Block type is {}", btype);
+    debug_log!("Block type is {}", btype);
     match btype {
       0b00 => Ok(Self::Raw(uncompressed_block_from_stream(bit_src)?)),
       0b01 => Ok(Self::Fix(fixed_block_from_stream(bit_src)?)),
@@ -158,7 +169,7 @@ impl Block {
     bit_src: &mut BitReader<R, LittleEndian>,
   ) -> Result<Self, DeflateReadError> {
     let final_block = bit_src.read_bit()?;
-    println!("Got bit");
+    debug_log!("Got final block bit {}", final_block);
     let data = BlockData::new_from_compressed_stream(bit_src)?;
     Ok(Block { bfinal: final_block, data })
   }
@@ -182,8 +193,33 @@ impl DeflateStream {
     Ok ( Self{ blocks})
   }
 
-  fn expand_backref(length: u16, distance: u16, data: &mut Vec<u8>){
-    ()
+  // Expand a backref at the given 
+  fn expand_backref(length: u16, distance: u16, data: &mut Vec<u8>) -> Result<(), DeflateReadError>{
+    let last_data_index = data.len();
+    if distance as usize > last_data_index {
+      return Err(DeflateReadError::BackrefPastStart(distance, last_data_index));
+    }
+    let first_i = last_data_index - distance as usize;
+    if length > distance {
+      let mut n = 0u16;
+      loop{
+        for j in first_i..last_data_index {
+          let target = data[j];
+          data.push(target);
+          n += 1;
+          if n == length {
+            return Ok(());
+          }
+        }
+      }
+    } else {
+      let last_i = first_i + length as usize;
+      for j in first_i..=last_i {
+        let target = data[j];
+        data.push(target);
+      }
+      return Ok(());
+    }
   }
 
   // Convert a stream of GZIP symbols into a 
@@ -197,7 +233,7 @@ impl DeflateStream {
             match sym {
               DeflateSym::Literal(ch) => literals.push(ch),
               DeflateSym::Backreference(length, distance) => {
-                Self::expand_backref(length, distance, &mut literals);
+                Self::expand_backref(length, distance, &mut literals)?;
               }
               DeflateSym::EndOfBlock => break,
             }
@@ -205,7 +241,7 @@ impl DeflateStream {
         }
       }
     }
-    Err(DeflateReadError::StreamNotConsumed)
+    Ok(literals)
   }
 
   pub fn into_byte_stream_checked(self, crc32: u32, isz: u32) -> Result<Vec<u8>, DeflateReadError> {
@@ -233,6 +269,7 @@ mod tests {
     let data = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0xe7, 0x2, 0x0u8];
     let strm = DeflateStream::new_from_source(&data[..]).unwrap();
     let decoded = strm.into_byte_stream().unwrap();
-    assert_eq!(decoded, vec![2]);
+    let correct_answer = [72, 101, 108, 108, 111, 10u8];
+    assert_eq!(decoded, correct_answer);
   }
 }

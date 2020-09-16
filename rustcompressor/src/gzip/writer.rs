@@ -1,4 +1,4 @@
-pub use super::common::{calc_crc32, GZFlags, GZXFlags, GzipData, OSType, GZIP_ID1, GZIP_ID2};
+pub use super::{calc_crc32, GZFlags, GZXFlags, GzipData, OSType, GZIP_ID1, GZIP_ID2};
 
 impl GzipData {
   /// Create a new GZipData from a BitVec which specifies the deflate-compressed data
