@@ -1,8 +1,6 @@
-use bit_vec::BitVec;
 use bitflags::bitflags;
 use crc32fast::Hasher;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::TryFrom;
 use std::fmt;
 use std::num::NonZeroU32;
 
@@ -114,7 +112,7 @@ struct GZExtra {
   data: [u8], // Unsafe to access directly--should use member functions
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GzipData {
   id1: u8,
   id2: u8,
@@ -123,7 +121,7 @@ pub struct GzipData {
   mtime: Option<NonZeroU32>,
   xfl: GZXFlags,
   os: OSType,
-  fextra: Option<Box<GZExtra>>,
+  fextra: (),
   fname: Option<String>,
   comment: Option<String>,
   crc16: Option<u16>,
@@ -149,7 +147,7 @@ impl GzipData {
       mtime: None,
       xfl: GZXFlags::empty(),
       os: OSType::Unknown,
-      fextra: None,
+      fextra: (),
       fname: None,
       comment: None,
       crc16: None,
@@ -195,6 +193,13 @@ impl GzipData {
     self.comment = comment;
   }
 
+  pub fn get_data_copy(&self) -> Vec<u8>{
+    self.data.clone()
+  }
+  pub fn into_data(self) -> Vec<u8> {
+    self.data
+  }
+
   // Intentionally ignore EXTRA for the moment.
 }
 
@@ -211,7 +216,7 @@ impl fmt::Display for GzipData {
       self.id1, self.id2, self.cm, self.flg, self.mtime, self.xfl, self.os as u8
     )?;
     if self.flg.contains(GZFlags::FEXTRA) {
-      write!(f, "XLEN: {} bytes\n", self.fextra.as_ref().unwrap().xlen)?;
+      write!(f, "Had an EXTRA field\n")?;
     }
 
     if self.flg.contains(GZFlags::FNAME) {
@@ -226,7 +231,7 @@ impl fmt::Display for GzipData {
       write!(f, "CRC16: {:x}\n", self.crc16.unwrap())?;
     }
 
-    write!(f, "CRC32: {:x}\n", self.crc32)?;
+    write!(f, "CRC32: {:x?}\n", self.crc32)?;
     write!(f, "Num Bytes: {}\n", self.isz)?;
     write!(f, "Data: {:x?}\n", self.data)
   }

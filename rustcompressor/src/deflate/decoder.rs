@@ -1,9 +1,17 @@
+use super::default_data::default_codepoints::{DecodeInfo};
+use super::default_data::default_read_hufftree::default_read_hufftree;
 use super::*;
-use bit_vec::BitVec;
-use bitstream_io::huffman::{compile_read_tree, HuffmanTreeError};
-use bitstream_io::{BitReader, Endianness, LittleEndian};
+use bitstream_io::{BitReader, LittleEndian};
+use lazy_static::lazy_static;
 use std::io::Read;
 use thiserror::Error;
+
+const BLOCK_END: u16 = 256;
+
+lazy_static! {
+  pub static ref DEFAULT_READ_TREE: Box<[DeflateReadTree]> = default_read_hufftree();
+  static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
+}
 
 #[derive(Error, Debug)]
 pub enum DeflateReadError {
@@ -11,100 +19,136 @@ pub enum DeflateReadError {
   ReservedValueUsed,
   #[error("Unexpected End of DEFLATE Data")]
   UnexpectedEndOfData,
+  #[error("The input stream was not completely consumed")]
+  StreamNotConsumed,
+  #[error("Tried to go back {0} symbols, but the stream is only {1} large")]
+  PastTheEnd(u16,usize),
+  #[error("Value out of range of valid encoded values")]
+  CodeOutOfRange(u16),
   #[error("The LEN and NLEN fields of an uncompressed block mismatched: {0}, {1}")]
   LenNlenMismatch(u16, u16),
-  #[error("Huffman Tree Generation Error: {0}")]
-  HuffTreeError(#[from] HuffmanTreeError),
+  #[error("Checksum mismatch: expected {:x} but data was {:x}", .0, .1)]
+  ChecksumMismatch(u32, u32),
+  #[error("Datasize mismatch: expected {0} but data was {1}")]
+  DatasizeMismatch(u32,usize),
   #[error("Other IO error: {0}")]
   IOError(#[from] std::io::Error),
 }
 
-// A utility function
-fn read_n<R: Read, E: Endianness>(
-  src: &mut BitReader<R, E>,
-  mut n: usize,
-) -> Result<u8, DeflateReadError> {
-  assert!(n <= 8);
-  let mut x = 0u8;
-  while n > 0 {
-    let bit = src.read_bit()? as u8;
-    x = x << 1;
-    x = x | bit;
-    n -= 1;
-  }
-  Ok(x)
-}
-
-// TODO: Implement default hufftree (for fixed blocks)
-
-impl CompSym {
+impl DeflateSym {
   // TODO: Implement functionality to read a symbol from bytestream, assuming
   // a particular hufftree encoding
-}
-
-impl UncompressedBlock {
-  pub fn new_from_compressed_stream<R: Read>(
+  pub fn next_from_bitsource<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
+    tree: &[DeflateReadTree],
   ) -> Result<Self, DeflateReadError> {
-    // According to 1951, we need to skip any remaining bits in the partial byte
-    bit_src.byte_align();
-    let mut byte_src = bit_src.bytereader().expect("Byte Align Failed");
+    let sym = bit_src.read_huffman(tree)?;
+    if sym == BLOCK_END {
+      println!("End of block");
+      Ok(Self::EndOfBlock)
+    } else if sym <= 255 {
+      println!("Literal {}", sym);
+      Ok(Self::Literal(sym as u8)) // Sym is within valid range for u8
+    } else {
+      let len_sym = sym;
+      let len_codept = DEFAULT_CODEPOINTS.lookup_codept(len_sym);
+      assert_eq!(len_codept.codept, len_sym);
+      if len_codept.codept < 255 {
+        println!("Got code {} when looking for a length", len_codept.codept);
+        return Err(DeflateReadError::CodeOutOfRange(sym));
+      }
+      print!("Got length code {} ", len_codept.codept);
+      let len = len_codept.read_value_from_bitstream(bit_src)?;
+      println!("corresponding to match length {}", len);
 
-    let mut u16bytes = [0u8; 2];
-    byte_src.read_bytes(&mut u16bytes)?;
-    let len = u16::from_le_bytes(u16bytes);
-    byte_src.read_bytes(&mut u16bytes)?;
-    let nlen = u16::from_le_bytes(u16bytes);
+      // Perform second read to get the distance. These are coded by 5 literal
+      // bits, not using the huffman coding of the literal/length bits
+      let dist_sym = bit_src.read(5)?;
+      let dist_codept = DEFAULT_CODEPOINTS.lookup_codept(dist_sym);
+      assert_eq!(dist_codept.codept, dist_sym);
+      if dist_codept.codept > 29 {
+        println!("Got code {} when looking for a dist", dist_codept.codept);
+        return Err(DeflateReadError::CodeOutOfRange(sym));
+      }
+      print!("Got distance code {} ", dist_codept.codept);
+      let dist = dist_codept.read_value_from_bitstream(bit_src)?;
+      println!("corresponding to match distance {}", dist);
 
-    if len != !nlen {
-      return Err(DeflateReadError::LenNlenMismatch(len, nlen));
+      Ok(Self::Backreference(len, dist)) // Sym is within valid range for u8
     }
-
-    let mut payload = vec![0u8; len as usize];
-    byte_src.read_bytes(&mut payload)?;
-
-    assert_eq!(len, !nlen);
-    assert_eq!(payload.len(), len as usize);
-
-    let block = Self { data: payload };
-    Ok(block)
   }
 }
 
-impl FixedCodeBlock {
-  pub fn new_from_compressed_stream<R: Read>(
-    bit_src: &mut BitReader<R, LittleEndian>,
-  ) -> Result<Self, DeflateReadError> {
-    unimplemented!("")
+pub fn uncompressed_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+) -> Result<UncompressedBlock, DeflateReadError> {
+  // According to 1951, we need to skip any remaining bits in the partial byte
+  bit_src.byte_align();
+  let mut byte_src = bit_src.bytereader().expect("Byte Align Failed");
+
+  let mut u16bytes = [0u8; 2];
+  byte_src.read_bytes(&mut u16bytes)?;
+  let len = u16::from_le_bytes(u16bytes);
+  byte_src.read_bytes(&mut u16bytes)?;
+  let nlen = u16::from_le_bytes(u16bytes);
+
+  if len != !nlen {
+    return Err(DeflateReadError::LenNlenMismatch(len, nlen));
+  }
+
+  let mut payload = vec![0u8; len as usize];
+  byte_src.read_bytes(&mut payload)?;
+
+  assert_eq!(len, !nlen);
+  assert_eq!(payload.len(), len as usize);
+
+  let block = UncompressedBlock { data: payload };
+  Ok(block)
+}
+
+fn compressed_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+  tree: &[DeflateReadTree],
+) -> Result<CompressedBlock, DeflateReadError> {
+  let mut contents = Vec::new();
+
+  loop {
+    let sym = DeflateSym::next_from_bitsource(bit_src, tree);
+    match sym {
+      Ok(DeflateSym::EndOfBlock) => return Ok(CompressedBlock { data: contents }),
+      Ok(x) => contents.push(x),
+      Err(e) => return Err(e),
+    }
   }
 }
 
-impl DynamicCodeBlock {
-  pub fn new_from_compressed_stream<R: Read>(
-    bit_src: &mut BitReader<R, LittleEndian>,
-  ) -> Result<Self, DeflateReadError> {
-    unimplemented!("")
-  }
+fn fixed_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+) -> Result<CompressedBlock, DeflateReadError> {
+  compressed_block_from_stream(bit_src, &DEFAULT_READ_TREE)
+}
+
+fn dynamic_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+) -> Result<CompressedBlock, DeflateReadError> {
+  unimplemented!("")
 }
 
 impl BlockData {
   pub fn new_from_compressed_stream<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
   ) -> Result<Self, DeflateReadError> {
-    let btype = read_n(bit_src, 2)?;
-
+    let btype = bit_src.read::<u8>(2)?;
+    println!("Block type is {}", btype);
     match btype {
-      0b00 => Ok(Self::Raw(UncompressedBlock::new_from_compressed_stream(
-        bit_src,
-      )?)),
-      0b00 => Ok(Self::Fix(FixedCodeBlock::new_from_compressed_stream(
-        bit_src,
-      )?)),
-      0b00 => Ok(Self::Dyn(DynamicCodeBlock::new_from_compressed_stream(
-        bit_src,
-      )?)),
+      0b00 => Ok(Self::Raw(uncompressed_block_from_stream(bit_src)?)),
+      0b01 => Ok(Self::Fix(fixed_block_from_stream(bit_src)?)),
+      0b10 => Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?)),
       0b11 => Err(DeflateReadError::ReservedValueUsed),
-      _ => unreachable!("Got n >= 4 on a two-bit read. Programming error?"),
+      _ => {
+        println!("type = {}", btype);
+        unreachable!("Got n >= 4 on a two-bit read. Programming error?")
+      }
     }
   }
 }
@@ -113,8 +157,82 @@ impl Block {
   pub fn new_from_compressed_stream<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
   ) -> Result<Self, DeflateReadError> {
-    let fin = bit_src.read_bit()?;
+    let final_block = bit_src.read_bit()?;
+    println!("Got bit");
     let data = BlockData::new_from_compressed_stream(bit_src)?;
-    Ok(Block { bfinal: fin, data })
+    Ok(Block { bfinal: final_block, data })
+  }
+}
+
+impl DeflateStream {
+  pub fn new_from_source<R: Read>(src: R) -> Result<Self, DeflateReadError> {
+    let mut bit_src = BitReader::<R, LittleEndian>::new(src);
+    let mut blocks = Vec::new();
+    let mut has_more_blocks = true;
+    while has_more_blocks {
+      let res = Block::new_from_compressed_stream(&mut bit_src)?;
+      has_more_blocks = !res.bfinal;
+      blocks.push(res);
+    }
+    //Check: Have we actually consumed all the input?
+    bit_src.byte_align();
+    if let Ok(_) = bit_src.read_bit(){
+      return Err(DeflateReadError::StreamNotConsumed);
+    }
+    Ok ( Self{ blocks})
+  }
+
+  fn expand_backref(length: u16, distance: u16, data: &mut Vec<u8>){
+    ()
+  }
+
+  // Convert a stream of GZIP symbols into a 
+  pub fn into_byte_stream(self) -> Result<Vec<u8>, DeflateReadError> {
+    let mut literals = Vec::<u8>::new();
+    for block in self.blocks {
+      match block.data {
+        BlockData::Raw(mut rawdata) => literals.append(&mut rawdata.data),
+        BlockData::Fix(comp) | BlockData::Dyn(comp) => {
+          for sym in comp.data.into_iter() {
+            match sym {
+              DeflateSym::Literal(ch) => literals.push(ch),
+              DeflateSym::Backreference(length, distance) => {
+                Self::expand_backref(length, distance, &mut literals);
+              }
+              DeflateSym::EndOfBlock => break,
+            }
+          }
+        }
+      }
+    }
+    Err(DeflateReadError::StreamNotConsumed)
+  }
+
+  pub fn into_byte_stream_checked(self, crc32: u32, isz: u32) -> Result<Vec<u8>, DeflateReadError> {
+    let literals = self.into_byte_stream()?;
+
+    if literals.len() != isz as usize {
+      return Err(DeflateReadError::DatasizeMismatch(isz, literals.len()));
+    }
+    let mut hasher = crc32fast::Hasher::new();
+    hasher.update(&literals);
+    let checksum = hasher.finalize();
+    if checksum != crc32 {
+      return Err(DeflateReadError::ChecksumMismatch(crc32, checksum));
+    }
+    Ok(literals)
+  }
+}
+
+mod tests {
+  #[allow(unused_imports)]
+  use super::*;
+
+  #[test]
+  fn hello_uncompressed() {
+    let data = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0xe7, 0x2, 0x0u8];
+    let strm = DeflateStream::new_from_source(&data[..]).unwrap();
+    let decoded = strm.into_byte_stream().unwrap();
+    assert_eq!(decoded, vec![2]);
   }
 }

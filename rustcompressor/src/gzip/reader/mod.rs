@@ -1,8 +1,7 @@
 pub use super::common::{calc_crc32, GZFlags, GZXFlags, GzipData, OSType, GZIP_ID1, GZIP_ID2};
-use bit_vec::BitVec;
 use std::convert::{TryFrom, TryInto};
 use std::io;
-use std::io::{BufRead, BufReader, Error, ErrorKind, Read};
+use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::num::NonZeroU32;
 use thiserror::Error;
 
@@ -24,7 +23,7 @@ pub enum GzipReadError {
 
 impl GzipData {
   /// Create a new GZipData from a BitStream which specifies an existing file
-  pub fn new_from_gzip_data<R: Read>(mut data: R) -> Result<Self, GzipReadError> {
+  pub fn new_from_gzip_data<R: Read>(data: R) -> Result<Self, GzipReadError> {
     let mut buf_rdr = BufReader::new(data);
 
     let mut reqd_header = [0u8; 10];
@@ -37,7 +36,7 @@ impl GzipData {
     let mtime_raw = u32::from_le_bytes(reqd_header[4..8].try_into().unwrap());
     let mtime = NonZeroU32::new(mtime_raw);
     let xflags = GZXFlags::from_bits_truncate(reqd_header[8]);
-    let os = OSType::try_from(reqd_header[9]);
+    let os = OSType::try_from(reqd_header[9]).unwrap_or(OSType::Unknown);
 
     // Check to make sure header is valid
     if id1 != 0x1f || id2 != 0x8b {
@@ -83,7 +82,8 @@ impl GzipData {
       .expect("Comment is not valid UTF-8")
       .to_owned();
 
-    let crc16 = if flags.contains(GZFlags::FHCRC) {
+    // CRC16 checking is used on the header, not the contents. Ignore for now.
+    let _crc16 = if has_crc16 {
       let mut crc_bytes = [0u8; 2];
       buf_rdr.read_exact(&mut crc_bytes)?;
       Some(u16::from_le_bytes(crc_bytes))
@@ -113,10 +113,10 @@ impl GzipData {
     let deflate_data = remainder;
 
     // Check if CRC matches
-    let my_crc32 = calc_crc32(&deflate_data);
-    let my_isize = deflate_data.len() as u32;
-    /*
+    let _my_crc32 = calc_crc32(&deflate_data);
+    let _my_isize = deflate_data.len() as u32;
 
+    /*
     size and CRC checks are for the uncompressed data, so these checks
     cannot be implemented until DEFLATE decompression is implemented.
 
@@ -133,6 +133,7 @@ impl GzipData {
     output.set_flags(flags);
     output.set_xflags(xflags);
     output.set_mtime(mtime);
+    output.set_ostype(os);
     if has_name {
       output.set_name(Some(name));
     }
@@ -143,5 +144,20 @@ impl GzipData {
     // Do not set name, comment, or extra
 
     Ok(output)
+  }
+}
+
+mod tests {
+  #[allow(unused_imports)]
+  use super::*;
+
+  #[test]
+  fn decode_uncompressed_hello() {
+    // A gzip file with filename "hello2.txt" containing the text "Hello\n"
+    let mut coded = [
+      0x1f, 0x8b, 0x08, 0x08, 0xa6, 0x75, 0x61, 0x5f, 0x00, 0xff, 0x68, 0x65, 0x6c, 0x6c, 0x6f,
+      0x32, 0x2e, 0x74, 0x78, 0x74, 0x00, 0x01, 0x06, 0x00, 0xf9, 0xff, 0x48, 0x65, 0x6c, 0x6c,
+      0x6f, 0x0, 0x16, 0x35, 0x96, 0x31, 0x06, 0x00, 0x00, 0x00u8,
+    ];
   }
 }

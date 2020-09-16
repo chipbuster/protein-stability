@@ -1,6 +1,4 @@
 pub use super::common::{calc_crc32, GZFlags, GZXFlags, GzipData, OSType, GZIP_ID1, GZIP_ID2};
-use bit_vec::BitVec;
-use std::convert::TryFrom;
 
 impl GzipData {
   /// Create a new GZipData from a BitVec which specifies the deflate-compressed data

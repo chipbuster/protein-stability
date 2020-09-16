@@ -3,8 +3,14 @@
 implementation of the compressor suggested at the end of the RFC. */
 
 pub mod decoder;
+mod default_data;
 pub mod encoder;
-use bit_vec::BitVec;
+
+use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
+use bitstream_io::LittleEndian;
+
+type DeflateReadTree = ReadHuffmanTree<LittleEndian, u16>;
+type DeflateWriteTree = WriteHuffmanTree<LittleEndian, u16>;
 
 /** Represents a compressed symbol in the DEFLATE stream: either a literal in
 0-255 or <length, distance> pair.
@@ -13,20 +19,11 @@ use bit_vec::BitVec;
 according to 3.2.5 of RFC 1951. Note that 3.2.5 only deals with the abstract
 numbers needed to encode the codepoints: the actual binary representation of the
 numbers is specified either according to 3.2.6 or the dynamic Huffman tree. */
-pub enum CompSym {
+#[derive(Debug, PartialEq, Eq)]
+pub enum DeflateSym {
+  EndOfBlock,
   Literal(u8),
-  /* A note about backreferences: the actual range of a backreference is [3,258]
-  This *can* be captured in a u8, but special care is needed when trying to
-  compute and store the resulting values */
-  Backreference(u8, u16),
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub enum BlockKind {
-  Uncompressed,
-  FixedCode,
-  DynamicCode,
-  Reserved,
+  Backreference(u16, u16),
 }
 
 #[derive(Debug)]
@@ -35,11 +32,11 @@ pub struct UncompressedBlock {
 }
 
 #[derive(Debug)]
-pub struct FixedCodeBlock {
-  data: BitVec,
+pub struct CompressedBlock {
+  data: Vec<DeflateSym>,
 }
 
-#[derive(Debug)]
+/*
 pub struct DynamicCodeBlock {
   hlit: u8,
   hdist: u8,
@@ -48,13 +45,13 @@ pub struct DynamicCodeBlock {
   codelenlit: Vec<u8>,
   codelendist: Vec<u8>,
   data: BitVec,
-}
+}*/
 
 #[derive(Debug)]
 pub enum BlockData {
   Raw(UncompressedBlock),
-  Fix(FixedCodeBlock),
-  Dyn(DynamicCodeBlock),
+  Fix(CompressedBlock),
+  Dyn(CompressedBlock),
 }
 
 #[derive(Debug)]
