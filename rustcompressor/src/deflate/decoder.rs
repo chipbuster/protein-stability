@@ -213,7 +213,7 @@ impl DeflateStream {
         }
       }
     } else {
-      let last_i = first_i + length as usize;
+      let last_i = first_i + length as usize - 1;
       for j in first_i..=last_i {
         let target = data[j];
         data.push(target);
@@ -226,6 +226,7 @@ impl DeflateStream {
   pub fn into_byte_stream(self) -> Result<Vec<u8>, DeflateReadError> {
     let mut literals = Vec::<u8>::new();
     for block in self.blocks {
+      debug_log!("{:?}", block);
       match block.data {
         BlockData::Raw(mut rawdata) => literals.append(&mut rawdata.data),
         BlockData::Fix(comp) | BlockData::Dyn(comp) => {
@@ -256,6 +257,7 @@ impl DeflateStream {
     if checksum != crc32 {
       return Err(DeflateReadError::ChecksumMismatch(crc32, checksum));
     }
+    debug_log!("Passed check with isz = {} and crc32 = {:x}", isz, crc32);
     Ok(literals)
   }
 }

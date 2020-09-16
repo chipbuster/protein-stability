@@ -26,15 +26,10 @@ fn main() {
   let data = gzblob.get_data_copy();
 
   println!("Attempting to unpack data...");
-  let stream = DeflateStream::new_from_source(&data[..]);
-  if stream.is_err(){
-    println!("{}", stream.unwrap_err());
+  let data = gzblob.into_decoded();
+  if data.is_err(){
+    println!("{}", data.unwrap_err());
     process::exit(1);
   } 
-
-  let stream = stream.unwrap();
-  println!("{:?}", stream);
-
-  println!("Getting raw buffer");
-  println!("{:?}", stream.into_byte_stream().unwrap())
+  println!("{:?}", data.unwrap());
 }
