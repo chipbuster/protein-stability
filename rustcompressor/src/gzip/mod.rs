@@ -196,7 +196,7 @@ impl GzipData {
     self.comment = comment;
   }
 
-  pub fn get_data_copy(&self) -> Vec<u8>{
+  pub fn get_data_copy(&self) -> Vec<u8> {
     self.data.clone()
   }
   pub fn into_data(self) -> Vec<u8> {
@@ -240,16 +240,16 @@ impl fmt::Display for GzipData {
     let mut i = 0usize;
     write!(f, "Data: [")?;
     'dataprint: loop {
-        for _ in 0..20 {
-            if i >= self.data.len(){
-                break 'dataprint;
-            }
-            write!(f, "{:02x?} ", self.data[i])?;
-            i += 1;
+      for _ in 0..20 {
+        if i >= self.data.len() {
+          break 'dataprint;
         }
-        write!(f,"\n")?;
+        write!(f, "{:02x?} ", self.data[i])?;
+        i += 1;
+      }
+      write!(f, "\n")?;
     }
-    write!(f,"];\n")
+    write!(f, "];\n")
   }
 }
 

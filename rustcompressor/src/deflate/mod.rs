@@ -3,8 +3,8 @@
 implementation of the compressor suggested at the end of the RFC. */
 
 pub mod decoder;
-pub mod encoder;
 mod default_data;
+pub mod encoder;
 
 use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
 use bitstream_io::LittleEndian;

@@ -1,11 +1,11 @@
 /*! A Huffman tree implementation designed for use with DEFLATE-style trees,
-and with the implementations in the bitstream_io library 
+and with the implementations in the bitstream_io library
 
 Huffman Trees in the DEFLATE library carry additional constraints that
  - Symbols with the same length are listed in lexicographical order
  - Shorter codes lexicographically precede longer codes.
 
-This makes it possible to specify a 
+This makes it possible to specify a
 
 */
 
@@ -25,25 +25,33 @@ fn to_bitvec(nbits: usize, source: u64) -> BitVec {
   let mut v = BitVec::new();
   while mask != 0 {
     let elem = mask & source != 0;
-    println!("Mask = {:b}, source = {:b}, result = {}", mask, source, elem);
-
     v.push(elem);
     mask >>= 1;
   }
-  println!("Code from {} bits of {:b} is {:?}", nbits, source, v);
   v
+}
+
+/// Transforms a vector of bits into a vector of 0-1 u8s. Useful for interfacing
+/// with the bitstream-io crate.
+fn bitvec_to_bytes(v: &BitVec) -> Vec<u8> {
+  let mut out = Vec::new();
+  for b in v.into_iter() {
+    out.push(b as u8);
+  }
+  out
 }
 
 /// Take a mapping of code length per symbol and return a mapping of bitvecs
 /// that determines the encodings according to the rules in RFC 1951. All symbols
 /// without an entry in codelens are assumed to have zero-length.
-pub fn huffcode_from_lengths<S>(codelens: &HashMap<S, usize>) -> Vec<(S, BitVec)>
-where S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug
+pub fn huffcode_from_lengths<S>(codelens: &HashMap<S, usize>) -> Vec<(S, Vec<u8>)>
+where
+  S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug,
 {
   // Count the number of symbols with a given codelength
   let mut bl_count = HashMap::<usize, usize>::new();
-  bl_count.insert(0,0);
-  for ct in codelens.values(){
+  bl_count.insert(0, 0);
+  for ct in codelens.values() {
     *bl_count.entry(*ct).or_insert(0) += 1;
   }
   let max_bits = *bl_count.keys().max().expect("No bitlength counts");
@@ -60,16 +68,23 @@ where S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug
   let mut result = Vec::new();
   let mut syms_to_encode = Vec::from_iter(codelens.keys().cloned());
   syms_to_encode.sort();
-  for sym in syms_to_encode.into_iter(){
+  for sym in syms_to_encode.into_iter() {
     let sym_codelength = *codelens.get(&sym).unwrap();
-    if sym_codelength == 0 { continue; }
+    if sym_codelength == 0 {
+      continue;
+    }
 
     let sym_code = bl_code.get_mut(&sym_codelength).unwrap();
     result.push((sym, to_bitvec(sym_codelength, *sym_code)));
     *sym_code += 1;
   }
 
-  result
+  let mut output = Vec::with_capacity(result.len());
+  for (j, bitvec) in result.into_iter(){
+    output.push((j, bitvec_to_bytes(&bitvec)));
+  }
+
+  output
 }
 
 type HuffTree<S> = Tree<(Option<S>, usize)>;
@@ -421,13 +436,115 @@ mod tests {
   }
 
   #[test]
-  fn simple_hufftree_test(){
-    let x = vec![ (0,3), (1,3), (2,3), (3,3), (4,3), (5,2), (6,4), (7,4)];
+  fn simple_hufftree_test() {
+    let x = vec![
+      (0, 3),
+      (1, 3),
+      (2, 3),
+      (3, 3),
+      (4, 3),
+      (5, 2),
+      (6, 4),
+      (7, 4),
+    ];
     let mut codelens = HashMap::new();
-    for (k,v) in x.into_iter(){
-      codelens.insert(k,v);
+    for (k, v) in x.into_iter() {
+      codelens.insert(k, v);
     }
-    let z = huffcode_from_lengths(&codelens);
-    assert!(true);
+    let z: Vec<(i32, Vec<u8>)> = huffcode_from_lengths(&codelens)
+      .into_iter()
+      .map(|(k, code)| (k, bitvec_to_bytes(&code)))
+      .collect();
+    for (sym, code) in z {
+      let truecode = match sym {
+        0 => vec![0, 1, 0],
+        1 => vec![0, 1, 1],
+        2 => vec![1, 0, 0],
+        3 => vec![1, 0, 1],
+        4 => vec![1, 1, 0],
+        5 => vec![0, 0],
+        6 => vec![1, 1, 1, 0],
+        7 => vec![1, 1, 1, 1],
+        _ => panic!("Code not in input test code--test is broken!"),
+      };
+      assert_eq!(truecode, code);
+    }
+  }
+
+  fn increment_bit_slice(mut arg: Vec<u8>) -> Option<Vec<u8>> {
+    let mut carry = 1u8;
+    for x in arg.iter_mut().rev() {
+      match (*x, carry) {
+        (0, 0) => carry = 0,
+        (0, 1) => {
+          carry = 0;
+          *x = 1;
+        }
+        (1, 0) => {}
+        (1, 1) => {
+          *x = 0;
+          carry = 1
+        }
+        _ => return None,
+      }
+    }
+    Some(arg)
+  }
+
+  fn default_hufftree_values() -> Vec<(u16, Vec<u8>)> {
+    let mut huff_values = Vec::with_capacity(288);
+
+    // Code Block 1: 00110000 through 10111111 for values 0-143
+    let mut code = Some(vec![0u8, 0, 1, 1, 0, 0, 0, 0]);
+    for val in 0..=143u16 {
+      let code2 = code.as_ref().unwrap().clone();
+      huff_values.push((val, code2));
+      code = increment_bit_slice(code.unwrap());
+    }
+
+    // Code Block 2: 110010000 through 111111111 for values 144-255
+    let mut code = Some(vec![1u8, 1, 0, 0, 1, 0, 0, 0, 0]);
+    for val in 144..=255u16 {
+      let code2 = code.as_ref().unwrap().clone();
+      huff_values.push((val, code2));
+      code = increment_bit_slice(code.unwrap());
+    }
+
+    // Code Block 3: 0000000 through 0010111 for values 256-279
+    let mut code = Some(vec![0u8, 0, 0, 0, 0, 0, 0]);
+    for val in 256..=279u16 {
+      let code2 = code.as_ref().unwrap().clone();
+      huff_values.push((val, code2));
+      code = increment_bit_slice(code.unwrap());
+    }
+
+    // Code Block 4: 11000000 through 11000111 for 280-287
+    let mut code = Some(vec![1u8, 1, 0, 0, 0, 0, 0, 0]);
+    for val in 280..=287u16 {
+      let code2 = code.as_ref().unwrap().clone();
+      huff_values.push((val, code2));
+      code = increment_bit_slice(code.unwrap());
+    }
+    huff_values
+  }
+
+  #[test]
+  fn default_hufftree_test() {
+    let mut codelens = HashMap::<u16, usize>::new();
+    for j in 0..=287 {
+      match j {
+        0..=143 => codelens.insert(j, 8),
+        144..=255 => codelens.insert(j, 9),
+        256..=279 => codelens.insert(j, 7),
+        280..=287 => codelens.insert(j, 8),
+        _ => None,
+      };
+    }
+    let rawcodes = huffcode_from_lengths(&codelens);
+    let mut codes = Vec::new();
+    for (x,y) in rawcodes {
+      codes.push((x, bitvec_to_bytes(&y)));
+    }
+    assert_eq!(codes, default_hufftree_values());
   }
 }

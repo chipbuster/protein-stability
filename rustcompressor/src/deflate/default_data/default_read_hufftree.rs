@@ -1,6 +1,6 @@
 use super::super::*;
-use std::vec::Vec;
 use bitstream_io::huffman::compile_read_tree;
+use std::vec::Vec;
 
 /// Takes a slice of 0-1 values and performs an "add" on it. Returns None if
 /// a non 0/1 input is encountered
@@ -61,7 +61,6 @@ pub fn default_read_hufftree() -> Box<[DeflateReadTree]> {
 
   compile_read_tree::<LittleEndian, u16>(huff_values).unwrap()
 }
-
 
 mod tests {
   #[allow(unused_imports)]

@@ -1,11 +1,11 @@
 pub use super::{calc_crc32, GZFlags, GZXFlags, GzipData, OSType, GZIP_ID1, GZIP_ID2};
+use crate::deflate::decoder::DeflateReadError;
+use crate::deflate::DeflateStream;
 use std::convert::{TryFrom, TryInto};
 use std::io;
 use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::num::NonZeroU32;
 use thiserror::Error;
-use crate::deflate::decoder::DeflateReadError;
-use crate::deflate::DeflateStream;
 
 #[derive(Error, Debug)]
 pub enum GzipReadError {
@@ -151,7 +151,7 @@ impl GzipData {
     Ok(output)
   }
 
-  // Consume this reader to create a 
+  // Consume this reader to create a
   pub fn into_decoded(self) -> Result<Vec<u8>, DeflateReadError> {
     let stream = DeflateStream::new_from_source(self.data.as_slice())?;
     let crc32 = self.crc32;
