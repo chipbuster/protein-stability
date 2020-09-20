@@ -236,7 +236,20 @@ impl fmt::Display for GzipData {
 
     write!(f, "CRC32: {:x?}\n", self.crc32)?;
     write!(f, "Num Bytes: {}\n", self.isz)?;
-    write!(f, "Data: {:x?}\n", self.data)
+
+    let mut i = 0usize;
+    write!(f, "Data: [")?;
+    'dataprint: loop {
+        for _ in 0..20 {
+            if i >= self.data.len(){
+                break 'dataprint;
+            }
+            write!(f, "{:02x?} ", self.data[i])?;
+            i += 1;
+        }
+        write!(f,"\n")?;
+    }
+    write!(f,"];\n")
   }
 }
 

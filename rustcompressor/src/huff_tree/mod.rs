@@ -1,3 +1,14 @@
+/*! A Huffman tree implementation designed for use with DEFLATE-style trees,
+and with the implementations in the bitstream_io library 
+
+Huffman Trees in the DEFLATE library carry additional constraints that
+ - Symbols with the same length are listed in lexicographical order
+ - Shorter codes lexicographically precede longer codes.
+
+This makes it possible to specify a 
+
+*/
+
 use std::collections::HashMap;
 use std::vec::Vec;
 
@@ -5,8 +16,61 @@ use std::cmp::Eq;
 use std::cmp::Ord;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::iter::FromIterator;
 
 use bit_vec::BitVec;
+
+fn to_bitvec(nbits: usize, source: u64) -> BitVec {
+  let mut mask = 1 << (nbits - 1);
+  let mut v = BitVec::new();
+  while mask != 0 {
+    let elem = mask & source != 0;
+    println!("Mask = {:b}, source = {:b}, result = {}", mask, source, elem);
+
+    v.push(elem);
+    mask >>= 1;
+  }
+  println!("Code from {} bits of {:b} is {:?}", nbits, source, v);
+  v
+}
+
+/// Take a mapping of code length per symbol and return a mapping of bitvecs
+/// that determines the encodings according to the rules in RFC 1951. All symbols
+/// without an entry in codelens are assumed to have zero-length.
+pub fn huffcode_from_lengths<S>(codelens: &HashMap<S, usize>) -> Vec<(S, BitVec)>
+where S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug
+{
+  // Count the number of symbols with a given codelength
+  let mut bl_count = HashMap::<usize, usize>::new();
+  bl_count.insert(0,0);
+  for ct in codelens.values(){
+    *bl_count.entry(*ct).or_insert(0) += 1;
+  }
+  let max_bits = *bl_count.keys().max().expect("No bitlength counts");
+
+  // Compute the smallest code for each codelength
+  let mut code = 0u64;
+  let mut bl_code = HashMap::<usize, u64>::new();
+  for bits in 1..=max_bits {
+    let num_small = *bl_count.entry(bits - 1).or_default() as u64;
+    code = (code + num_small) << 1;
+    bl_code.insert(bits, code);
+  }
+
+  let mut result = Vec::new();
+  let mut syms_to_encode = Vec::from_iter(codelens.keys().cloned());
+  syms_to_encode.sort();
+  for sym in syms_to_encode.into_iter(){
+    let sym_codelength = *codelens.get(&sym).unwrap();
+    if sym_codelength == 0 { continue; }
+
+    let sym_code = bl_code.get_mut(&sym_codelength).unwrap();
+    result.push((sym, to_bitvec(sym_codelength, *sym_code)));
+    *sym_code += 1;
+  }
+
+  result
+}
 
 type HuffTree<S> = Tree<(Option<S>, usize)>;
 
@@ -231,6 +295,9 @@ impl<T: Eq + Ord> Tree<T> {
 
 #[cfg(test)]
 mod tests {
+  #[allow(unused_imports)]
+  use super::*;
+
   use crate::huff_tree::Tree;
   use quickcheck::quickcheck;
 
@@ -351,5 +418,16 @@ mod tests {
           let coder = HuffEncoder::new(&ys);
           ys == coder.decode(&coder.encode(&ys))
       }
+  }
+
+  #[test]
+  fn simple_hufftree_test(){
+    let x = vec![ (0,3), (1,3), (2,3), (3,3), (4,3), (5,2), (6,4), (7,4)];
+    let mut codelens = HashMap::new();
+    for (k,v) in x.into_iter(){
+      codelens.insert(k,v);
+    }
+    let z = huffcode_from_lengths(&codelens);
+    assert!(true);
   }
 }

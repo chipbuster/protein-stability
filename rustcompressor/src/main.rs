@@ -31,5 +31,5 @@ fn main() {
     println!("{}", data.unwrap_err());
     process::exit(1);
   } 
-  println!("{:?}", data.unwrap());
+  println!("{:02x?}", data.unwrap());
 }
