@@ -37,7 +37,7 @@ pub enum DeflateReadError {
   StreamNotConsumed,
   #[error("Tried to go back {0} symbols, but the stream is only {1} large")]
   BackrefPastStart(u16, usize),
-  #[error("Value out of range of valid encoded values")]
+  #[error("Value out of range of valid encoded values: {0}")]
   CodeOutOfRange(u16),
   #[error("The LEN and NLEN fields of an uncompressed block mismatched: {0}, {1}")]
   LenNlenMismatch(u16, u16),
@@ -84,7 +84,16 @@ impl DeflateSym {
       if let Some(t) = dist_tree {
         dist_sym = bit_src.read_huffman(t)?;
       } else {
-        dist_sym = bit_src.read(5)?;
+        debug_log!("Using raw bits for distance");
+        // Read the bits in reverse (for some reason??)
+        let temp: u8 = bit_src.read(5)?;
+        let mut out = 0u8;
+        out |= (temp & 0b00001) << 4;
+        out |= (temp & 0b00010) << 2;
+        out |= (temp & 0b00100);
+        out |= (temp & 0b01000) >> 2;
+        out |= (temp & 0b10000) >> 4;
+        dist_sym = out as u16;
       }
       let dist_codept = DEFAULT_CODEPOINTS.lookup_codept(dist_sym);
       assert_eq!(dist_codept.codept, dist_sym);

@@ -13,7 +13,7 @@ pub struct DecodeCodepoint {
 
 impl DecodeCodepoint {
   pub fn new(codept: u16, nbits: u8, lo: u16) -> Self {
-    let range = if nbits == 0 { 0 } else { 1u16 << nbits - 1 };
+    let range = if nbits == 0 { 0 } else { (1u16 << nbits) - 1 };
     let hi = lo + range;
     Self {
       codept,

@@ -31,5 +31,6 @@ fn main() {
     println!("{}", data.unwrap_err());
     process::exit(1);
   }
-  println!("{:02x?}", data.unwrap());
+  println!("{:02x?}", data.as_ref().unwrap());
+  println!("{:?}", std::str::from_utf8(&data.unwrap()));
 }
