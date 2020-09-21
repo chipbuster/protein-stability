@@ -55,6 +55,15 @@ where
     *bl_count.entry(*ct).or_insert(0) += 1;
   }
   let max_bits = *bl_count.keys().max().expect("No bitlength counts");
+  for (size, count) in bl_count.iter() {
+    if size == &0 {
+      continue;
+    }
+    let max = 1usize << (size);
+    if count > &max {
+      panic!("There are {} codes that are {} bits long! Collision imminent.", count, size)
+    }
+  }
 
   // Compute the smallest code for each codelength
   let mut code = 0u64;
@@ -451,10 +460,7 @@ mod tests {
     for (k, v) in x.into_iter() {
       codelens.insert(k, v);
     }
-    let z: Vec<(i32, Vec<u8>)> = huffcode_from_lengths(&codelens)
-      .into_iter()
-      .map(|(k, code)| (k, bitvec_to_bytes(&code)))
-      .collect();
+    let z: Vec<(i32, Vec<u8>)> = huffcode_from_lengths(&codelens);
     for (sym, code) in z {
       let truecode = match sym {
         0 => vec![0, 1, 0],
