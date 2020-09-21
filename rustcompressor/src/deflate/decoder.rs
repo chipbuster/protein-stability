@@ -432,9 +432,4 @@ mod tests {
     let correct_answer = [72, 101, 108, 108, 111, 10u8];
     assert_eq!(decoded, correct_answer);
   }
-
-  #[test]
-  fn test_code_length_decoding(){
-
-  }
 }
