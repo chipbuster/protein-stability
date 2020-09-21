@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::process;
 
-use compressor::deflate::DeflateStream;
+//use compressor::deflate::DeflateStream;
 use compressor::gzip::GzipData;
 
 fn main() {

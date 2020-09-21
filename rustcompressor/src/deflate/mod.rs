@@ -36,17 +36,6 @@ pub struct CompressedBlock {
   data: Vec<DeflateSym>,
 }
 
-/*
-pub struct DynamicCodeBlock {
-  hlit: u8,
-  hdist: u8,
-  hclen: u8,
-  codelenlen: [u8; 19],
-  codelenlit: Vec<u8>,
-  codelendist: Vec<u8>,
-  data: BitVec,
-}*/
-
 #[derive(Debug)]
 pub enum BlockData {
   Raw(UncompressedBlock),

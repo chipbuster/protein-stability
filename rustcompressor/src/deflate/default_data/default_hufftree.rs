@@ -1,5 +1,6 @@
 use super::super::*;
-use bitstream_io::huffman::compile_read_tree;
+use crate::deflate::{DeflateReadTree, DeflateWriteTree};
+use bitstream_io::huffman::{compile_read_tree, compile_write_tree};
 use std::vec::Vec;
 
 /// Takes a slice of 0-1 values and performs an "add" on it. Returns None if
@@ -24,7 +25,7 @@ pub fn increment_bit_slice(mut arg: Vec<u8>) -> Option<Vec<u8>> {
   Some(arg)
 }
 
-pub fn default_read_hufftree() -> Box<[DeflateReadTree]> {
+fn default_hufftree() -> Vec<(u16, Vec<u8>)> {
   let mut huff_values = Vec::with_capacity(288);
 
   // Code Block 1: 00110000 through 10111111 for values 0-143
@@ -59,7 +60,17 @@ pub fn default_read_hufftree() -> Box<[DeflateReadTree]> {
     code = increment_bit_slice(code.unwrap());
   }
 
-  compile_read_tree::<LittleEndian, u16>(huff_values).unwrap()
+  huff_values
+}
+
+pub fn default_read_hufftree() -> Box<[DeflateReadTree]> {
+  let codes = default_hufftree();
+  compile_read_tree(codes).unwrap()
+}
+
+pub fn default_write_hufftree() -> DeflateWriteTree {
+  let codes = default_hufftree();
+  compile_write_tree(codes).unwrap()
 }
 
 mod tests {

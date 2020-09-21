@@ -1,16 +1,19 @@
 use super::default_data::default_codepoints::DecodeInfo;
-use super::default_data::default_read_hufftree::default_read_hufftree;
+use super::default_data::default_hufftree::default_read_hufftree;
 use super::*;
 use crate::huff_tree::{huffcode_from_lengths};
-use bitstream_io::{BitReader, LittleEndian, BigEndian};
-use bitstream_io::huffman::compile_read_tree;
-use lazy_static::lazy_static;
+
 use std::collections::HashMap;
 use std::io::Read;
+
+use bitstream_io::{BitReader, LittleEndian};
+use bitstream_io::huffman::compile_read_tree;
+
 use thiserror::Error;
+use lazy_static::lazy_static;
 
 const BLOCK_END: u16 = 256;
-const VERBOSE: bool = true;
+const VERBOSE: bool = false;
 
 macro_rules! debug_log {
   ($($arg:tt)*) => {
@@ -85,12 +88,12 @@ impl DeflateSym {
         dist_sym = bit_src.read_huffman(t)?;
       } else {
         debug_log!("Using raw bits for distance");
-        // Read the bits in reverse (for some reason??)
+        // Read the bits in reverse order (for some reason??)
         let temp: u8 = bit_src.read(5)?;
         let mut out = 0u8;
         out |= (temp & 0b00001) << 4;
         out |= (temp & 0b00010) << 2;
-        out |= (temp & 0b00100);
+        out |= temp & 0b00100;
         out |= (temp & 0b01000) >> 2;
         out |= (temp & 0b10000) >> 4;
         dist_sym = out as u16;
@@ -194,7 +197,7 @@ fn decode_huffman_alphabets<R: Read>(
   num_literals: u16,
   num_distances: u16
 ) -> Result<(Box<[DeflateReadTree]>, Box<[DeflateReadTree]>), DeflateReadError> {
-  let mut num_symbols = num_literals + num_distances;
+  let num_symbols = num_literals + num_distances;
   let mut lengths = Vec::new();
   let mut ctr = 0u16;
   while ctr < num_symbols{
@@ -380,7 +383,7 @@ impl DeflateStream {
     }
   }
 
-  // Convert a stream of GZIP symbols into a
+  /// Convert a stream of DEFLATE symbols into bytes by expanding backreferences
   pub fn into_byte_stream(self) -> Result<Vec<u8>, DeflateReadError> {
     let mut literals = Vec::<u8>::new();
     for block in self.blocks {
@@ -403,6 +406,7 @@ impl DeflateStream {
     Ok(literals)
   }
 
+  /// Convert DEFLATE symbols into bytes, then check against checksum
   pub fn into_byte_stream_checked(self, crc32: u32, isz: u32) -> Result<Vec<u8>, DeflateReadError> {
     let literals = self.into_byte_stream()?;
 
