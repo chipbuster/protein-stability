@@ -1,4 +1,3 @@
-use super::super::*;
 use crate::deflate::{DeflateReadTree, DeflateWriteTree};
 use bitstream_io::huffman::{compile_read_tree, compile_write_tree};
 use std::vec::Vec;

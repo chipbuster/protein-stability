@@ -1,16 +1,16 @@
 use super::default_data::default_codepoints::DecodeInfo;
 use super::default_data::default_hufftree::default_read_hufftree;
 use super::*;
-use crate::huff_tree::{huffcode_from_lengths};
+use crate::huff_tree::huffcode_from_lengths;
 
 use std::collections::HashMap;
 use std::io::Read;
 
-use bitstream_io::{BitReader, LittleEndian};
 use bitstream_io::huffman::compile_read_tree;
+use bitstream_io::{BitReader, LittleEndian};
 
-use thiserror::Error;
 use lazy_static::lazy_static;
+use thiserror::Error;
 
 const BLOCK_END: u16 = 256;
 const VERBOSE: bool = false;
@@ -144,7 +144,7 @@ pub fn uncompressed_block_from_stream<R: Read>(
 fn compressed_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
   length_tree: &[DeflateReadTree],
-  dist_tree: Option<&[DeflateReadTree]>
+  dist_tree: Option<&[DeflateReadTree]>,
 ) -> Result<CompressedBlock, DeflateReadError> {
   let mut contents = Vec::new();
 
@@ -183,7 +183,7 @@ fn read_code_length_codeslength<R: Read>(
 
   let lens = huffcode_from_lengths(&codecodelen);
 
-  match bitstream_io::huffman::compile_read_tree(lens){
+  match bitstream_io::huffman::compile_read_tree(lens) {
     Ok(x) => Ok(x),
     Err(_) => Err(DeflateReadError::HuffTreeError),
   }
@@ -195,12 +195,12 @@ fn decode_huffman_alphabets<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
   size_huffman: &[DeflateReadTree],
   num_literals: u16,
-  num_distances: u16
+  num_distances: u16,
 ) -> Result<(Box<[DeflateReadTree]>, Box<[DeflateReadTree]>), DeflateReadError> {
   let num_symbols = num_literals + num_distances;
   let mut lengths = Vec::new();
   let mut ctr = 0u16;
-  while ctr < num_symbols{
+  while ctr < num_symbols {
     let s = bit_src.read_huffman(size_huffman)?;
     match s {
       0..=15 => {
@@ -212,8 +212,12 @@ fn decode_huffman_alphabets<R: Read>(
         let r: u8 = bit_src.read(2)?;
         let repeat_length = 3 + r;
         let repeat_code = *lengths.last().unwrap();
-        debug_log!("Adding {} codelengths of length-{}\n", repeat_length, repeat_code);
-        for _ in 0..repeat_length{
+        debug_log!(
+          "Adding {} codelengths of length-{}\n",
+          repeat_length,
+          repeat_code
+        );
+        for _ in 0..repeat_length {
           lengths.push(repeat_code);
         }
         ctr += repeat_length as u16;
@@ -222,7 +226,7 @@ fn decode_huffman_alphabets<R: Read>(
         let r: u8 = bit_src.read(3)?;
         let repeat_length = 3 + r;
         debug_log!("Adding {} 0-length codes\n", repeat_length);
-        for _ in 0..repeat_length{
+        for _ in 0..repeat_length {
           lengths.push(0);
         }
         ctr += repeat_length as u16;
@@ -231,12 +235,12 @@ fn decode_huffman_alphabets<R: Read>(
         let r: u8 = bit_src.read(7)?;
         let repeat_length = 11 + r;
         debug_log!("Adding {} 0-length codes\n", repeat_length);
-        for _ in 0..repeat_length{
+        for _ in 0..repeat_length {
           lengths.push(0);
         }
         ctr += repeat_length as u16;
       }
-      _ => return Err(DeflateReadError::CodeOutOfRange(s))
+      _ => return Err(DeflateReadError::CodeOutOfRange(s)),
     }
   }
 
@@ -259,15 +263,19 @@ fn decode_huffman_alphabets<R: Read>(
       dist_lengths.insert(symbol, symlen);
     }
   }
-  debug_log!("{} literals and {} distance\n", literal_lengths.len(), dist_lengths.len());
+  debug_log!(
+    "{} literals and {} distance\n",
+    literal_lengths.len(),
+    dist_lengths.len()
+  );
   let litlen_code = huffcode_from_lengths(&literal_lengths);
   let dist_code = huffcode_from_lengths(&dist_lengths);
 
-  let litlen_tree = match compile_read_tree(litlen_code){
+  let litlen_tree = match compile_read_tree(litlen_code) {
     Ok(x) => x,
     Err(_) => return Err(DeflateReadError::HuffTreeError),
   };
-  let dist_tree = match compile_read_tree(dist_code){
+  let dist_tree = match compile_read_tree(dist_code) {
     Ok(x) => x,
     Err(_) => return Err(DeflateReadError::HuffTreeError),
   };
@@ -291,7 +299,8 @@ fn dynamic_block_from_stream<R: Read>(
 
   println!("{}, {}", num_literals, num_dists);
 
-  let (length_tree, dist_tree) = decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;
+  let (length_tree, dist_tree) =
+    decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;
 
   compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree))
 }
@@ -329,25 +338,8 @@ impl Block {
   }
 }
 
-impl DeflateStream {
-  pub fn new_from_source<R: Read>(src: R) -> Result<Self, DeflateReadError> {
-    let mut bit_src = BitReader::<R, LittleEndian>::new(src);
-    let mut blocks = Vec::new();
-    let mut has_more_blocks = true;
-    while has_more_blocks {
-      let res = Block::new_from_compressed_stream(&mut bit_src)?;
-      has_more_blocks = !res.bfinal;
-      blocks.push(res);
-    }
-    //Check: Have we actually consumed all the input?
-    bit_src.byte_align();
-    if let Ok(_) = bit_src.read_bit() {
-      return Err(DeflateReadError::StreamNotConsumed);
-    }
-    Ok(Self { blocks })
-  }
-
-  // Expand a backref at the given
+impl CompressedBlock {
+  /// Expand a backref at the given point in the data.
   fn expand_backref(
     length: u16,
     distance: u16,
@@ -383,6 +375,40 @@ impl DeflateStream {
     }
   }
 
+  // Decode this compressed block into a stream of bytes
+  pub fn into_bytes(self) -> Result<Vec<u8>, DeflateReadError> {
+    let mut literals = Vec::new();
+    for sym in self.data.into_iter() {
+      match sym {
+        DeflateSym::Literal(ch) => literals.push(ch),
+        DeflateSym::Backreference(length, distance) => {
+          Self::expand_backref(length, distance, &mut literals)?;
+        }
+        DeflateSym::EndOfBlock => break,
+      }
+    }
+    Ok(literals)
+  }
+}
+
+impl DeflateStream {
+  pub fn new_from_source<R: Read>(src: R) -> Result<Self, DeflateReadError> {
+    let mut bit_src = BitReader::<R, LittleEndian>::new(src);
+    let mut blocks = Vec::new();
+    let mut has_more_blocks = true;
+    while has_more_blocks {
+      let res = Block::new_from_compressed_stream(&mut bit_src)?;
+      has_more_blocks = !res.bfinal;
+      blocks.push(res);
+    }
+    //Check: Have we actually consumed all the input?
+    bit_src.byte_align();
+    if let Ok(_) = bit_src.read_bit() {
+      return Err(DeflateReadError::StreamNotConsumed);
+    }
+    Ok(Self { blocks })
+  }
+
   /// Convert a stream of DEFLATE symbols into bytes by expanding backreferences
   pub fn into_byte_stream(self) -> Result<Vec<u8>, DeflateReadError> {
     let mut literals = Vec::<u8>::new();
@@ -391,15 +417,8 @@ impl DeflateStream {
       match block.data {
         BlockData::Raw(mut rawdata) => literals.append(&mut rawdata.data),
         BlockData::Fix(comp) | BlockData::Dyn(comp) => {
-          for sym in comp.data.into_iter() {
-            match sym {
-              DeflateSym::Literal(ch) => literals.push(ch),
-              DeflateSym::Backreference(length, distance) => {
-                Self::expand_backref(length, distance, &mut literals)?;
-              }
-              DeflateSym::EndOfBlock => break,
-            }
-          }
+          let mut blockdata = comp.into_bytes()?;
+          literals.append(&mut blockdata);
         }
       }
     }

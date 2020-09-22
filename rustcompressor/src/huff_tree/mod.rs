@@ -5,9 +5,11 @@ Huffman Trees in the DEFLATE library carry additional constraints that
  - Symbols with the same length are listed in lexicographical order
  - Shorter codes lexicographically precede longer codes.
 
-This makes it possible to specify a
-
+This makes it possible to specify a huffman tree by simply specifying the code
+length for each symbol.
 */
+
+mod legacy_hufftree;
 
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -20,6 +22,8 @@ use std::iter::FromIterator;
 
 use bit_vec::BitVec;
 
+/// Convert the lower `nbits` bits of `source` into a bitvector in little-endian
+/// packing
 fn to_bitvec(nbits: usize, source: u64) -> BitVec {
   let mut mask = 1 << (nbits - 1);
   let mut v = BitVec::new();
@@ -31,8 +35,8 @@ fn to_bitvec(nbits: usize, source: u64) -> BitVec {
   v
 }
 
-/// Transforms a vector of bits into a vector of 0-1 u8s. Useful for interfacing
-/// with the bitstream-io crate.
+/// Transforms a vector of bits into a vector of 0-1 u8s. Useful for interfacing with the
+/// bitstream-io crate.
 fn bitvec_to_bytes(v: &BitVec) -> Vec<u8> {
   let mut out = Vec::new();
   for b in v.into_iter() {
@@ -41,9 +45,7 @@ fn bitvec_to_bytes(v: &BitVec) -> Vec<u8> {
   out
 }
 
-/// Take a mapping of code length per symbol and return a mapping of bitvecs
-/// that determines the encodings according to the rules in RFC 1951. All symbols
-/// without an entry in codelens are assumed to have zero-length.
+/// Given the code lengths per symbol,
 pub fn huffcode_from_lengths<S>(codelens: &HashMap<S, usize>) -> Vec<(S, Vec<u8>)>
 where
   S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug,
@@ -60,8 +62,13 @@ where
       continue;
     }
     let max = 1usize << (size);
+    // This is actually not restrictive enough since we can't actually use all
+    // 2^n codes, but it's a good fail-safe check
     if count > &max {
-      panic!("There are {} codes that are {} bits long! Collision imminent.", count, size)
+      panic!(
+        "There are {} codes that are {} bits long! Collision imminent.",
+        count, size
+      )
     }
   }
 
@@ -89,360 +96,164 @@ where
   }
 
   let mut output = Vec::with_capacity(result.len());
-  for (j, bitvec) in result.into_iter(){
+  for (j, bitvec) in result.into_iter() {
     output.push((j, bitvec_to_bytes(&bitvec)));
   }
 
   output
 }
 
-type HuffTree<S> = Tree<(Option<S>, usize)>;
-
-pub struct HuffEncoder<S> {
-  frequency: HashMap<S, usize>,
-  mapping: HashMap<S, BitVec>,
-  hufftree: HuffTree<S>,
-}
-
-impl<S> HuffEncoder<S>
+/// Generate the restricted-length Huffman code for the given input.
+pub fn huffcode_from_input<S>(input: &[S], maxlen_inp: Option<usize>) -> Vec<(S, Vec<u8>)>
 where
-  S: Eq + Ord + Hash + Clone + Debug,
+  S: Eq + Hash + Clone + Copy + Ord + Debug,
 {
-  pub fn new(src: &Vec<S>) -> HuffEncoder<S> {
-    let frequency = HuffEncoder::get_frequencies(&src);
-    let hufftree = HuffEncoder::build_huffman_tree(&frequency);
-    let mapping = HuffEncoder::gen_mapping(hufftree.clone(), BitVec::new());
-
-    HuffEncoder {
-      frequency,
-      mapping,
-      hufftree,
-    }
-  }
-
-  fn push_bitvec(v1: &mut BitVec, v2: &BitVec) -> () {
-    for bit in v2.iter() {
-      v1.push(bit);
-    }
-  }
-
-  pub fn encode(&self, inp: &Vec<S>) -> BitVec {
-    let mut encoded = BitVec::new();
-
-    for inchar in inp.iter() {
-      Self::push_bitvec(&mut encoded, &self.mapping[inchar]);
-    }
-
-    encoded
-  }
-
-  /// Decodes a bitvector by walking the Huffman Tree
-  pub fn decode(&self, inp: &BitVec) -> Vec<S> {
-    let mut tree_base: &Tree<(Option<S>, usize)> = &self.hufftree;
-    let mut decoded = Vec::new();
-
-    // Decode loop: if we are at a leaf node, reset the tree reference and
-    // restart from the root, adding the decoded symbol into the tree.
-    // Otherwise, follow the assigned bit, panicking if we are unable to
-    // do so.
-    for bit in inp.iter() {
-      if bit {
-        if let Some(ref t) = tree_base.right {
-          tree_base = t;
-        }
-      } else {
-        if let Some(ref t) = &tree_base.left {
-          tree_base = t;
-        }
-      }
-
-      if tree_base.is_leaf() {
-        decoded.push(tree_base.val.0.clone().unwrap());
-        tree_base = &self.hufftree;
-      }
-    }
-    decoded
-  }
-
-  /// Get the frequencies of characters in a given input
-  fn get_frequencies(src: &Vec<S>) -> HashMap<S, usize> {
-    let mut counter: HashMap<S, usize> = HashMap::new();
-    for ch in src.iter() {
-      let chcount = counter.entry(ch.clone()).or_insert(0);
-      *chcount += 1;
-    }
-    if counter.len() <= 1 {
-      panic! {"Input is blank or has only one character."}
-    }
-    counter
-  }
-
-  /// Generate the forward mapping of symbols to bitstrings
-  fn gen_mapping(tree: HuffTree<S>, repr: BitVec) -> HashMap<S, BitVec> {
-    if tree.left.is_none() && tree.right.is_none() {
-      return vec![(tree.val.0.unwrap(), repr)].into_iter().collect();
-    } else {
-      let leftmap = match tree.left {
-        Some(t) => {
-          let mut newrepr = repr.clone();
-          newrepr.push(false);
-          HuffEncoder::gen_mapping(*t, newrepr)
-        }
-        None => HashMap::new(),
-      };
-      let rightmap = match tree.right {
-        Some(t) => {
-          let mut newrepr = repr.clone();
-          newrepr.push(true);
-          HuffEncoder::gen_mapping(*t, newrepr)
-        }
-        None => HashMap::new(),
-      };
-      leftmap.into_iter().chain(rightmap).collect()
-    }
-  }
-
-  fn build_huffman_tree(freqs: &HashMap<S, usize>) -> HuffTree<S> {
-    let mut trees = Vec::new();
-    for (ch, ct) in freqs {
-      trees.push(Tree::new((Some(ch.clone()), ct.clone())));
-    }
-
-    /* Huffman's algorithm: take the two trees with the least frequency
-    and merge them, creating a tree with the sum of the two frequencies.
-    Replace both trees with the new trees, then repeat
-
-    Since Rust only allows push/pop on the back of the vector, we work
-    reverse of how we'd do it in Haskell: we sort in descending order by
-    weights, then pop trees off the back.
-
-    Leaf nodes have concrete symbols and counts, while internal nodes have
-    counts, but use `None` as their symbol.
-    */
-    trees.sort_by(|t1, t2| t2.val.1.cmp(&t1.val.1)); // Important: reverse sort!
-    while trees.len() > 1 {
-      // Because length >= 2, we should be able to pop twice.
-      let t1 = trees.pop().unwrap();
-      let t2 = trees.pop().unwrap();
-
-      let sum_of_counts = t1.val.1 + t2.val.1;
-      let joined = Tree::new((None, sum_of_counts)).left(t1).right(t2);
-
-      trees.push(joined);
-
-      /* Maintain sorted invariant by bubbling largest tree backwards in
-        vector until it reaches the correct location
-
-         vec = [ .... ... ... t2, t1, ... ...]
-                                  ^---index
-      */
-
-      let mut index = trees.len() - 1;
-      while index > 1 {
-        let t1 = &trees[index];
-        let t2 = &trees[index - 1];
-        if t1.val.1 > t2.val.1 {
-          trees.swap(index, index - 1);
-          index -= 1;
-        } else {
-          break; // List is now sorted. Let's GTFO!
-        }
-      }
-    } // End tree generation loop.
-    assert!(trees.len() == 1, "Bad number of trees at hufftree exit");
-    trees[0].clone()
-  }
+  let maxlen = maxlen_inp.unwrap_or_else(|| usize::MAX);
+  let freqs = get_frequencies(input);
+  let codelens = get_codeslens_restricted(&freqs, maxlen);
+  huffcode_from_lengths(&codelens)
 }
 
-/* Tree structure nicked from https://matthias-endler.de/2017/boxes-and-trees/
- * and augmented with additional operations */
-#[derive(Default, Debug, PartialEq, Clone)]
-struct Tree<T> {
-  val: T,
-  left: Option<Box<Tree<T>>>,
-  right: Option<Box<Tree<T>>>,
+/// Get the frequencies of characters in a given input
+fn get_frequencies<S: Eq + Hash + Clone>(src: &[S]) -> HashMap<S, usize> {
+  let mut counter: HashMap<S, usize> = HashMap::new();
+  for ch in src.iter() {
+    let chcount = counter.entry(ch.clone()).or_insert(0);
+    *chcount += 1;
+  }
+  if counter.len() <= 1 {
+    panic! {"Input is blank or has only one character."}
+  }
+  counter
 }
 
-impl<T: Eq + Ord> Tree<T> {
-  fn new(root: T) -> Tree<T> {
-    Tree {
-      val: root,
-      left: None,
-      right: None,
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
+struct Coin<S> {
+  value: usize,
+  invdenom: usize, // Denomination = 2^{-invdenom}
+  sym: S,
+}
+
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
+struct CoinPackage<S> {
+  value: usize,
+  invdenom: usize,
+  coins: Vec<Coin<S>>,
+}
+
+impl<S: Clone + Copy> CoinPackage<S> {
+  fn new_singleton(c: Coin<S>) -> Self {
+    Self {
+      value: c.value,
+      invdenom: c.invdenom,
+      coins: vec![c],
     }
   }
 
-  fn left(mut self, leaf: Tree<T>) -> Self {
-    self.left = Some(Box::new(leaf));
-    self
-  }
-
-  fn right(mut self, leaf: Tree<T>) -> Self {
-    self.right = Some(Box::new(leaf));
-    self
-  }
-
-  fn is_leaf(&self) -> bool {
-    self.left.is_none() && self.right.is_none()
-  }
-
-  fn insert(mut self, val: T) -> Self {
-    if val == self.val {
-      return self;
-    }
-
-    if val < self.val {
-      match self.left {
-        None => {
-          self.left = Some(Box::new(Tree::new(val)));
-          self
-        }
-        Some(lchild) => {
-          self.left = Some(Box::new(lchild.insert(val)));
-          self
-        }
-      }
-    } else {
-      match self.right {
-        None => {
-          self.right = Some(Box::new(Tree::new(val)));
-          self
-        }
-        Some(rchild) => {
-          self.right = Some(Box::new(rchild.insert(val)));
-          self
-        }
-      }
+  fn merge(self, other: CoinPackage<S>) -> CoinPackage<S> {
+    assert!(other.invdenom == self.invdenom);
+    assert!(other.invdenom != 0, "Merging two max-value packages!");
+    let value = self.value + other.value;
+    let invdenom = self.invdenom - 1;
+    let coins = self
+      .coins
+      .into_iter()
+      .chain(other.coins.into_iter())
+      .collect();
+    Self {
+      value,
+      invdenom,
+      coins,
     }
   }
 }
 
-#[cfg(test)]
+fn coin_merge<S: Clone + Copy + Eq>(mut v: Vec<CoinPackage<S>>) -> Vec<CoinPackage<S>> {
+  let mut out = Vec::new();
+  v.sort_by(|c1, c2| c1.value.cmp(&c2.value));
+
+  let mut i = 0usize;
+  while i + 1 < v.len() {
+    out.push(v[i].clone().merge(v[i + 1].clone()));
+    i += 2;
+  }
+
+  out
+}
+
+/// Build a huffman tree with a restricted maximum code length using package-merge
+fn get_codeslens_restricted<S>(freqs: &HashMap<S, usize>, maxlen: usize) -> HashMap<S, usize>
+where
+  S: Eq + Hash + Ord + Clone + Copy,
+{
+  let n = freqs.len();
+  let mut syms = Vec::with_capacity(n);
+  for (sym, freq) in freqs.iter() {
+    syms.push((sym.clone(), *freq))
+  }
+  syms.sort_by(|(x1, y1), (x2, y2)| y1.cmp(y2));
+
+  let mut coins = Vec::new();
+  for (sym, freq) in syms {
+    for j in 1..=maxlen {
+      coins.push(Coin {
+        value: freq,
+        invdenom: j,
+        sym,
+      });
+    }
+  }
+
+  // Execute the package-merge algorithm to obtain the min-value set of denom n-1
+  let mut out = package_merge(coins);
+  let mut rescoins: Vec<Coin<S>> = Vec::new();
+  for j in 0..n - 1 {
+    assert_eq!(out[j].invdenom, 0);
+    rescoins.append(&mut out[j].coins);
+  }
+
+  let mut code_lens = HashMap::new();
+  for coin in rescoins {
+    let id = coin.sym;
+    *code_lens.entry(id).or_default() += 1;
+  }
+  code_lens
+}
+
+/// Execute package merge on a set of coins. Assumes that there is at least one coin of each
+/// denomination between the largest and smallest denominations (i.e. no denom is skipped)
+fn package_merge<S: Clone + Copy + Eq>(init_coins: Vec<Coin<S>>) -> Vec<CoinPackage<S>> {
+  let mut coinmap: HashMap<usize, Vec<CoinPackage<S>>> = HashMap::new();
+  let mut max_invdenom = 0usize; // Largest invdenom (smallest denom) seen
+  for coin in init_coins.into_iter() {
+    coinmap
+      .entry(coin.invdenom)
+      .or_default()
+      .push(CoinPackage::new_singleton(coin));
+  }
+
+  let mut coinpacs: Vec<Vec<CoinPackage<S>>> = Vec::new();
+  let ndenom = *coinmap.keys().max().unwrap() + 1;
+  coinpacs.resize_with(ndenom, Default::default);
+  for (i, pac) in coinmap.into_iter() {
+    coinpacs[i] = pac;
+  }
+
+  // Merge procedure
+  while coinpacs.len() > 1 {
+    let to_merge = coinpacs.pop().unwrap();
+    let mut merged = coin_merge(to_merge);
+    let l = coinpacs.len();
+    coinpacs[l - 1].append(&mut merged);
+  }
+
+  assert_eq!(coinpacs.len(), 1);
+  coinpacs[0].clone()
+}
+
 mod tests {
   #[allow(unused_imports)]
   use super::*;
-
-  use crate::huff_tree::Tree;
-  use quickcheck::quickcheck;
-
-  #[test]
-  fn insert_into_singleton() {
-    let singleton = Tree::new(3);
-    let insert = Tree::new(3).insert(5);
-    let post_insert = Tree::new(3).right(Tree::new(5));
-
-    assert_eq!(post_insert, insert);
-  }
-  #[test]
-  fn insert_tree_1() {
-    let tree_base: Tree<i32> = Tree::new(15)
-      .left(Tree::new(12).right(Tree::new(13)))
-      .right(Tree::new(22).left(Tree::new(18)).right(Tree::new(100)));
-    let tree_post_insert: Tree<i32> = Tree::new(15)
-      .left(Tree::new(12).left(Tree::new(10)).right(Tree::new(13)))
-      .right(Tree::new(22).left(Tree::new(18)).right(Tree::new(100)));
-    let tree_insert = tree_base.insert(10);
-    assert_eq!(tree_insert, tree_post_insert);
-  }
-
-  use crate::huff_tree::HuffEncoder;
-  use std::collections::HashMap;
-
-  #[test]
-  fn freqcount_1() {
-    let teststring = "aaaabbcc".chars().collect();
-    let h1 = HuffEncoder::get_frequencies(&teststring);
-    let mut h2 = HashMap::new();
-    h2.insert('a', 4);
-    h2.insert('b', 2);
-    h2.insert('c', 2);
-    assert_eq!(h1, h2);
-  }
-
-  #[test]
-  fn hufftree_1() {
-    let teststring = "aaaaabbc".chars().collect();
-    let hufffreq = HuffEncoder::get_frequencies(&teststring);
-    let hufftree = HuffEncoder::build_huffman_tree(&hufffreq);
-
-    let answer = Tree::new((None, 8))
-      .left(
-        Tree::new((None, 3))
-          .left(Tree::new((Some('c'), 1)))
-          .right(Tree::new((Some('b'), 2))),
-      )
-      .right(Tree::new((Some('a'), 5)));
-
-    assert_eq!(answer, hufftree);
-  }
-
-  use bit_vec::*;
-
-  #[test]
-  fn simple_map() {
-    let teststring = "aaaaabbc".chars().collect();
-    let hufffreq = HuffEncoder::get_frequencies(&teststring);
-    let hufftree = HuffEncoder::build_huffman_tree(&hufffreq);
-    let hufftabl = HuffEncoder::gen_mapping(hufftree, BitVec::new());
-
-    /*let answer: HashMap<char, BitVec> = vec![
-      ('c', bitvec![0, 0]),
-      ('b', bitvec![0, 1]),
-      ('a', bitvec![1]),
-    ]
-    .into_iter()
-    .collect();
-    assert_eq!(answer, hufftabl);*/
-  }
-
-  #[test]
-  fn encode_1() {
-    let teststring = "aaaaabbc".chars().collect();
-    let tocode = "abc".chars().collect();
-    let coder = HuffEncoder::new(&teststring);
-    let encoded1 = coder.encode(&tocode);
-    let encoded2 = coder.encode(&teststring);
-
-    /*
-    assert_eq!(encoded1, bitvec![1, 0, 1, 0, 0]);
-    assert_eq!(encoded2, bitvec![1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0]);
-    */
-  }
-
-  #[test]
-  fn encode_decode_1() {
-    let teststring = "aaaaabbc".chars().collect();
-
-    let coder = HuffEncoder::new(&teststring);
-    let encoded = coder.encode(&teststring);
-    let decoded = coder.decode(&encoded);
-
-    // assert_eq!(encoded, bitvec![1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0]);
-    assert_eq!(decoded, teststring);
-  }
-
-  #[test]
-  #[should_panic]
-  fn encode_decode_2() {
-    let teststring = "444444".chars().collect();
-
-    let coder = HuffEncoder::new(&teststring);
-    let encoded = coder.encode(&teststring);
-    let decoded = coder.decode(&encoded);
-
-    // assert_eq!(encoded, bitvec![1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0]);
-    assert_eq!(decoded, teststring);
-  }
-
-  quickcheck! {
-      fn prop(xs: String) -> bool {
-          if xs.len() < 2 {return true;}
-          if !xs.is_ascii() {return true;}
-          let ys = xs.chars().collect();
-          let coder = HuffEncoder::new(&ys);
-          ys == coder.decode(&coder.encode(&ys))
-      }
-  }
 
   #[test]
   fn simple_hufftree_test() {
@@ -547,10 +358,103 @@ mod tests {
       };
     }
     let rawcodes = huffcode_from_lengths(&codelens);
-    let mut codes = Vec::new();
-    for (x,y) in rawcodes {
-      codes.push((x, bitvec_to_bytes(&y)));
-    }
-    assert_eq!(codes, default_hufftree_values());
+    assert_eq!(rawcodes, default_hufftree_values());
+  }
+
+  #[test]
+  fn test_coin_merge() {
+    let x = vec![
+      Coin {
+        value: 8,
+        invdenom: 3,
+        sym: 1,
+      },
+      Coin {
+        value: 3,
+        invdenom: 3,
+        sym: 2,
+      },
+      Coin {
+        value: 5,
+        invdenom: 3,
+        sym: 3,
+      },
+      Coin {
+        value: 6,
+        invdenom: 3,
+        sym: 4,
+      },
+      Coin {
+        value: 2,
+        invdenom: 3,
+        sym: 5,
+      },
+    ];
+
+    let q = x
+      .into_iter()
+      .map(|X| CoinPackage::new_singleton(X))
+      .collect();
+    let y = coin_merge(q);
+
+    let r = vec![
+      CoinPackage {
+        value: 5,
+        invdenom: 2,
+        coins: vec![
+          Coin {
+            value: 2,
+            invdenom: 3,
+            sym: 5,
+          },
+          Coin {
+            value: 3,
+            invdenom: 3,
+            sym: 2,
+          },
+        ],
+      },
+      CoinPackage {
+        value: 11,
+        invdenom: 2,
+        coins: vec![
+          Coin {
+            value: 5,
+            invdenom: 3,
+            sym: 3,
+          },
+          Coin {
+            value: 6,
+            invdenom: 3,
+            sym: 4,
+          },
+        ],
+      },
+    ];
+
+    println!("Output: {:#?}", y);
+    println!("Reference: {:#?}", r);
+
+    assert_eq!(y, r);
+  }
+
+  #[test]
+  fn test_codelength_gen() {
+    let freqs: HashMap<u8, usize> = [(1, 1), (2, 32), (3, 16), (4, 4), (5, 8), (6, 2), (7, 1)]
+      .iter()
+      .cloned()
+      .collect();
+    let max8: HashMap<u8, usize> = [(1, 6), (2, 1), (3, 2), (4, 4), (5, 3), (6, 5), (7, 6)]
+      .iter()
+      .cloned()
+      .collect();
+    let max5: HashMap<u8, usize> = [(1, 5), (2, 1), (3, 2), (4, 5), (5, 3), (6, 5), (7, 5)]
+      .iter()
+      .cloned()
+      .collect();
+    let sizes1 = get_codeslens_restricted(&freqs, 8);
+    let sizes2 = get_codeslens_restricted(&freqs, 5);
+    assert_eq!(sizes1, max8);
+    assert_eq!(sizes2, max5);
   }
 }
