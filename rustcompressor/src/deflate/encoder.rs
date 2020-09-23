@@ -1,23 +1,83 @@
-use super::default_data::default_codepoints::DecodeInfo;
+use super::default_data::default_codepoints::{DecodeCodepoint, DecodeInfo};
 use super::*;
-use bitstream_io::{BitWriter, LittleEndian};
+use crate::huff_tree::huffcode_from_freqs;
+use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
+use lazy_static::lazy_static;
 use std::collections::{HashMap, VecDeque};
 use std::{hash::Hash, io::Write};
 use thiserror::Error;
 
+const MAX_HUFF_LEN: Option<usize> = Some(15);
+lazy_static! {
+  static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
+}
+
 #[derive(Error, Debug)]
 pub enum DeflateWriteError {
+  #[error("Length was out of range: {0}")]
+  LengthOutOfRange(u16),
+  #[error("Length was out of range: {0}")]
+  DistOutOfRange(u16),
   #[error("Other IO Error: {0}")]
   IOError(#[from] std::io::Error),
 }
 
-fn write_uncompressed_block(
-  data: &[DeflateSym],
-  lit_tree: &DeflateWriteTree,
-  dist_tree: &DeflateWriteTree,
-) -> Result<(), DeflateWriteError> {
-  // Seriously, don't implement this until you have to
-  unimplemented!()
+impl DeflateSym {
+  pub fn write_to_stream<W: Write>(
+    &self,
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+    length_tree: &DeflateWriteTree,
+    dist_tree: Option<&DeflateWriteTree>,
+  ) -> Result<(), DeflateWriteError> {
+    match self {
+      DeflateSym::EndOfBlock => bit_sink.write_huffman(length_tree, 256)?,
+      DeflateSym::Literal(sym) => bit_sink.write_huffman(length_tree, *sym as u16)?,
+      DeflateSym::Backreference(length, dist) => {
+        Self::write_length_to_stream(bit_sink, *length, length_tree)?;
+        Self::write_dist_to_stream(bit_sink, *dist, dist_tree)?;
+      }
+    }
+    Ok(())
+  }
+
+  fn write_dist_to_stream<W: Write>(
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+    dist: u16,
+    dist_tree: Option<&DeflateWriteTree>,
+  ) -> Result<(), DeflateWriteError> {
+    if let Some(c) = &DEFAULT_CODEPOINTS.lookup_dist(dist) {
+      let extra_bits = dist - c.lo;
+      if let Some(d) = dist_tree {
+        bit_sink.write_huffman(d, c.codept)?;
+      } else {
+        let temp = c.codept;
+        let mut out = 0u16;
+        out |= (temp & 0b00001) << 4;
+        out |= (temp & 0b00010) << 2;
+        out |= temp & 0b00100;
+        out |= (temp & 0b01000) >> 2;
+        out |= (temp & 0b10000) >> 4;
+        bit_sink.write(5, out)?;
+      }
+      bit_sink.write(c.nbits as u32, extra_bits)?;
+      return Ok(());
+    }
+    Err(DeflateWriteError::DistOutOfRange(dist))
+  }
+
+  fn write_length_to_stream<W: Write>(
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+    length: u16,
+    length_tree: &DeflateWriteTree,
+  ) -> Result<(), DeflateWriteError> {
+    if let Some(c) = &DEFAULT_CODEPOINTS.lookup_length(length) {
+      let extra_bits = length - c.lo;
+      bit_sink.write_huffman(length_tree, c.codept)?;
+      bit_sink.write(c.nbits as u32, extra_bits)?;
+      return Ok(());
+    }
+    Err(DeflateWriteError::LengthOutOfRange(length))
+  }
 }
 
 type Dist = usize;
@@ -44,9 +104,19 @@ impl CompressedBlock {
     // when it ends, hence the cleanup section afterwards.
     while index + CHUNK_SZ < data.len() {
       let search_term = &data[index..index + CHUNK_SZ];
-      let matches: Vec<&Index> = match match_table.get(search_term) {
+      let matches: Vec<&Index> = match match_table.get_mut(search_term) {
         None => Vec::new(),
-        Some(x) => x.iter().filter(|x| index - **x < MAX_MATCH_DIST).collect(),
+        Some(x) => {
+          // Filter out the elements that are too far away
+          for i in (0..x.len()).rev() {
+            if index - x[i] > MAX_MATCH_DIST {
+              x.pop_back().unwrap();
+            } else {
+              break; // Sorted order = rest are within range
+            }
+          }
+          x.iter().collect()
+        }
       };
 
       if matches.is_empty() {
@@ -73,7 +143,7 @@ impl CompressedBlock {
       let (dist2, len2) = if !matches2.is_empty() {
         Self::find_longest_match(data_slice, index + 1, &matches2)
       } else {
-        (0,0)
+        (0, 0)
       };
 
       let (mdist, mlen) = if len2 > len1 {
@@ -85,6 +155,12 @@ impl CompressedBlock {
         (dist1, len1)
       };
 
+      // Add this match to the match table
+      match_table
+        .entry(search_term)
+        .or_default()
+        .push_front(index);
+
       index += mlen;
       output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
     }
@@ -94,7 +170,6 @@ impl CompressedBlock {
       output.push(DeflateSym::Literal(data[index]));
       index += 1
     }
-
     Self { data: output }
   }
 
@@ -122,30 +197,107 @@ impl CompressedBlock {
     assert!(start > max_index);
     (start - max_index, max_len - 1)
   }
+
+  fn compute_lengthlit_freq(&self) -> HashMap<u16, usize> {
+    let mut freqs = HashMap::new();
+    for x in self.data.iter() {
+      match x {
+        DeflateSym::Literal(sym) => *freqs.entry(*sym as u16).or_default() += 1,
+        DeflateSym::EndOfBlock => *freqs.entry(256).or_default() += 1,
+        DeflateSym::Backreference(length, dist) => {
+          let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
+          *freqs.entry(*lc).or_default() += 1;
+        }
+      }
+    }
+    freqs
+  }
+
+  fn compute_dist_freq(&self) -> HashMap<u16, usize> {
+    let mut freqs = HashMap::new();
+    for x in self.data.iter() {
+      match x {
+        DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
+        DeflateSym::Backreference(length, dist) => {
+          let dc = &DEFAULT_CODEPOINTS.lookup_dist(*dist).unwrap().codept;
+          *freqs.entry(*dc).or_default() += 1;
+        }
+      }
+    }
+    freqs
+  }
+
+  pub fn write_bitstream_fixed<W: Write>(
+    &self,
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+  ) -> Result<(), DeflateWriteError> {
+    let length_tree = super::default_data::default_hufftree::default_write_hufftree();
+    for sym in self.data.iter() {
+      sym.write_to_stream(bit_sink, &length_tree, None)?;
+    }
+    Ok(())
+  }
+
+  pub fn write_bitstream_dynamic<W: Write>(
+    &self,
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+  ) -> Result<(), DeflateWriteError> {
+    let lit_freq = self.compute_lengthlit_freq();
+    let dist_freq = self.compute_dist_freq();
+    let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
+    let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
+    let length_tree = compile_write_tree(length_codes).unwrap();
+    let dist_tree = compile_write_tree(dist_codes).unwrap();
+
+    for sym in self.data.iter() {
+      sym.write_to_stream(bit_sink, &length_tree, Some(&dist_tree))?;
+    }
+    Ok(())
+  }
+}
+
+impl BlockData {
+  pub fn write_to_bitstream<W: Write>(
+    &self,
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+  ) -> Result<(), DeflateWriteError> {
+    match self {
+      Self::Raw(x) => {
+        bit_sink.write(2, 0b00)?;
+        unimplemented!();
+      }
+      Self::Fix(x) => {
+        bit_sink.write(2, 0b01)?;
+        x.write_bitstream_fixed(bit_sink)
+      }
+      Self::Dyn(x) => {
+        bit_sink.write(2, 0b10)?;
+        x.write_bitstream_dynamic(bit_sink)
+      }
+    }
+  }
+}
+
+impl Block {
+  pub fn write_to_bitstream<W: Write>(
+    &self,
+    bit_sink: &mut BitWriter<W, LittleEndian>,
+  ) -> Result<(), DeflateWriteError> {
+    bit_sink.write_bit(self.bfinal)?;
+    self.data.write_to_bitstream(bit_sink)
+  }
 }
 
 impl DeflateStream {
-  pub fn write_bitstream_with_trees<W: Write>(
-    &self,
-    bit_sink: W,
-    lit_tree: &DeflateWriteTree,
-    dist_tree: &DeflateWriteTree,
-  ) -> Result<(), DeflateWriteError> {
-    unimplemented!()
+  pub fn write_to_bitstream<W: Write>(&self, sink: W) -> Result<W, DeflateWriteError> {
+    let mut bit_sink = BitWriter::new(sink);
+    for b in self.blocks.iter() {
+      b.write_to_bitstream(&mut bit_sink)?
+    }
+    // We must byte-align the writer or risk losing incomplete bytes
+    bit_sink.byte_align()?;
+    Ok(bit_sink.into_writer())
   }
-  pub fn write_bitstream_with_custom<W: Write>(
-    &self,
-    bit_sink: W,
-  ) -> Result<(), DeflateWriteError> {
-    unimplemented!()
-  }
-  pub fn write_bitstream_with_default<W: Write>(
-    &self,
-    bit_sink: W,
-  ) -> Result<(), DeflateWriteError> {
-    unimplemented!()
-  }
-  pub fn gen_default_trees(&self) {}
 }
 
 #[cfg(test)]
@@ -185,7 +337,10 @@ mod tests {
     let rt = comp.into_bytes().unwrap();
 
     if rt != testvec {
-      println!("Compressed block: {:?}", CompressedBlock::bytes_to_lz77(&testvec));
+      println!(
+        "Compressed block: {:?}",
+        CompressedBlock::bytes_to_lz77(&testvec)
+      );
       println!("Result: {:?}", rt);
       assert_eq!(rt, testvec);
     }
@@ -193,7 +348,7 @@ mod tests {
 
   #[test]
   fn many_random_round_trips() {
-    for _ in 0..100{
+    for _ in 0..100 {
       round_trip_randomlike()
     }
   }

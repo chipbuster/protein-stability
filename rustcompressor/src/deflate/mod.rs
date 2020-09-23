@@ -45,11 +45,11 @@ pub enum BlockData {
 
 #[derive(Debug)]
 pub struct Block {
-  bfinal: bool,
-  data: BlockData,
+  pub bfinal: bool,
+  pub data: BlockData,
 }
 
 #[derive(Debug)]
 pub struct DeflateStream {
-  blocks: Vec<Block>,
+  pub blocks: Vec<Block>,
 }

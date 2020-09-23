@@ -55,8 +55,6 @@ pub enum DeflateReadError {
 }
 
 impl DeflateSym {
-  // TODO: Implement functionality to read a symbol from bytestream, assuming
-  // a particular hufftree encoding
   pub fn next_from_bitsource<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
     length_tree: &[DeflateReadTree],

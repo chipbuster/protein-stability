@@ -103,6 +103,18 @@ where
   output
 }
 
+pub fn huffcode_from_freqs<S>(
+  codefreqs: &HashMap<S, usize>,
+  maxlen_inp: Option<usize>,
+) -> Vec<(S, Vec<u8>)>
+where
+  S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug + Copy,
+{
+  let maxlen = maxlen_inp.unwrap_or_else(|| usize::MAX);
+  let codelens = get_codeslens_restricted(&codefreqs, maxlen);
+  huffcode_from_lengths(&codelens)
+}
+
 /// Generate the restricted-length Huffman code for the given input.
 pub fn huffcode_from_input<S>(input: &[S], maxlen_inp: Option<usize>) -> Vec<(S, Vec<u8>)>
 where

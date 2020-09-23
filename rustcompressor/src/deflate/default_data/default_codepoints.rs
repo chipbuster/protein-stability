@@ -1,7 +1,11 @@
 use super::super::*;
-use bitstream_io::{BitReader, LittleEndian};
+use bitstream_io::{BitReader, LittleEndian, BitWriter};
 use decoder::DeflateReadError;
+use encoder::DeflateWriteError;
 use std::vec::Vec;
+
+const LDSEP: usize = 30; // The point in DecodeInfo where we switch from
+                         // length codes to distance codes.
 
 #[derive(Debug, Copy, Clone)]
 pub struct DecodeCodepoint {
@@ -23,6 +27,7 @@ impl DecodeCodepoint {
     }
   }
 
+  /// Read a value from bitstream using this codepoint, erroring if out of range
   pub fn read_value_from_bitstream<R: std::io::Read>(
     &self,
     bit_src: &mut BitReader<R, LittleEndian>,
@@ -36,9 +41,8 @@ impl DecodeCodepoint {
     }
   }
 }
-
 pub struct DecodeInfo {
-  info: Vec<DecodeCodepoint>,
+  pub info: Vec<DecodeCodepoint>,
 }
 
 impl DecodeInfo {
@@ -124,5 +128,23 @@ impl DecodeInfo {
       let index = codept as usize;
       self.info[index]
     }
+  }
+
+  pub fn lookup_length(&self, length: u16) -> Option<DecodeCodepoint> {
+    for c in &self.info[LDSEP..] {
+      if length >= c.lo && length <= c.hi {
+        return Some(*c);
+      }
+    }
+    None
+  }
+
+  pub fn lookup_dist(&self, dist: u16) -> Option<DecodeCodepoint> {
+    for c in &self.info[0..LDSEP] {
+      if dist >= c.lo && dist <= c.hi {
+        return Some(*c);
+      }
+    }
+    None
   }
 }

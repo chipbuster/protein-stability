@@ -3,6 +3,7 @@ use std::fs;
 use std::process;
 
 //use compressor::deflate::DeflateStream;
+use compressor::deflate::*;
 use compressor::gzip::GzipData;
 
 fn main() {
@@ -31,6 +32,19 @@ fn main() {
     println!("{}", data.unwrap_err());
     process::exit(1);
   }
-  println!("{:02x?}", data.as_ref().unwrap());
-  println!("{:?}", std::str::from_utf8(&data.unwrap()));
+  // println!("{:02x?}", data.as_ref().unwrap());
+  println!("{:?}", std::str::from_utf8(data.as_ref().unwrap()));
+
+  // Attempt to round-trip data
+  let compressed = CompressedBlock::bytes_to_lz77(data.as_ref().unwrap());
+  let stream = DeflateStream {
+    blocks: vec![Block {
+      bfinal: true,
+      data: BlockData::Dyn(compressed),
+    }],
+  };
+  let mut z: Vec<u8> = Vec::new();
+  let out = stream.write_to_bitstream(z).unwrap();
+
+  println!("{:x?}", out);
 }
