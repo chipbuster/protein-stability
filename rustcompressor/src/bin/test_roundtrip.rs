@@ -36,10 +36,10 @@ fn main() {
 
   println!("Repacking Data without recomputing LZ77");
   let stream = DeflateStream::new_from_source(data.as_slice()).unwrap();
-  let mut z: Vec<u8> = Vec::new();
-  let out = stream.write_to_bitstream(z).unwrap();
+  let z: Vec<u8> = Vec::new();
+  let _out = stream.write_to_bitstream(z).unwrap();
   let newbyte = DeflateStream::new_from_source(data.as_slice()).unwrap().into_byte_stream().unwrap();
-  let newstr = std::str::from_utf8(&newbyte[..]);
+  let _newstr = std::str::from_utf8(&newbyte[..]);
 
   assert_eq!(newbyte, decoded);
   println!("Outputs are equal without re-computing LZ77");
@@ -47,8 +47,8 @@ fn main() {
   println!("=================");
   println!("Repacking Data by recomputing LZ77");
   let stream = DeflateStream::new_from_raw_bytes(&decoded);
-  let mut z: Vec<u8> = Vec::new();
-  let out = stream.write_to_bitstream(z).unwrap();
+  let z: Vec<u8> = Vec::new();
+  let _out = stream.write_to_bitstream(z).unwrap();
   let newdecoded = DeflateStream::new_from_source(data.as_slice()).unwrap().into_byte_stream().unwrap();
 
   assert_eq!(newdecoded, decoded);

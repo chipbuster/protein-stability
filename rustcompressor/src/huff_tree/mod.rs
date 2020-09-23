@@ -9,8 +9,6 @@ This makes it possible to specify a huffman tree by simply specifying the code
 length for each symbol.
 */
 
-mod legacy_hufftree;
-
 use std::collections::HashMap;
 use std::vec::Vec;
 
@@ -203,7 +201,7 @@ where
   for (sym, freq) in freqs.iter() {
     syms.push((sym.clone(), *freq))
   }
-  syms.sort_by(|(x1, y1), (x2, y2)| y1.cmp(y2));
+  syms.sort_by(|(_, y1), (_, y2)| y1.cmp(y2));
 
   let mut coins = Vec::new();
   for (sym, freq) in syms {
@@ -236,7 +234,6 @@ where
 /// denomination between the largest and smallest denominations (i.e. no denom is skipped)
 fn package_merge<S: Clone + Copy + Eq>(init_coins: Vec<Coin<S>>) -> Vec<CoinPackage<S>> {
   let mut coinmap: HashMap<usize, Vec<CoinPackage<S>>> = HashMap::new();
-  let mut max_invdenom = 0usize; // Largest invdenom (smallest denom) seen
   for coin in init_coins.into_iter() {
     coinmap
       .entry(coin.invdenom)
@@ -300,6 +297,7 @@ mod tests {
     }
   }
 
+  #[cfg(test)]
   fn increment_bit_slice(mut arg: Vec<u8>) -> Option<Vec<u8>> {
     let mut carry = 1u8;
     for x in arg.iter_mut().rev() {
@@ -320,6 +318,7 @@ mod tests {
     Some(arg)
   }
 
+  #[cfg(test)]
   fn default_hufftree_values() -> Vec<(u16, Vec<u8>)> {
     let mut huff_values = Vec::with_capacity(288);
 
@@ -405,7 +404,7 @@ mod tests {
 
     let q = x
       .into_iter()
-      .map(|X| CoinPackage::new_singleton(X))
+      .map(|x| CoinPackage::new_singleton(x))
       .collect();
     let y = coin_merge(q);
 

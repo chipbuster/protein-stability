@@ -1,10 +1,10 @@
-use super::default_data::default_codepoints::{DecodeCodepoint, DecodeInfo};
+use super::default_data::default_codepoints::{DecodeInfo};
 use super::*;
 use crate::huff_tree::huffcode_from_freqs;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
 use lazy_static::lazy_static;
 use std::collections::{HashMap, VecDeque};
-use std::{hash::Hash, io::Write};
+use std::io::Write;
 use thiserror::Error;
 
 const MAX_HUFF_LEN: Option<usize> = Some(15);
@@ -98,8 +98,6 @@ impl CompressedBlock {
     let mut output: Vec<DeflateSym> = Vec::new();
 
     let mut index = 0usize;
-    let mut cur_match_length = 0usize;
-    let mut cur_match_dist = 0usize;
 
     // Main compression loop. Follow sections 4's suggestion and start by looking at triplets, then
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
@@ -219,8 +217,7 @@ impl CompressedBlock {
       match x {
         DeflateSym::Literal(sym) => *freqs.entry(*sym as u16).or_default() += 1,
         DeflateSym::EndOfBlock => *freqs.entry(256).or_default() += 1,
-        DeflateSym::Backreference(length, dist) => {
-          println!("{}", length);
+        DeflateSym::Backreference(length, _) => {
           let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
           *freqs.entry(*lc).or_default() += 1;
         }
@@ -234,7 +231,7 @@ impl CompressedBlock {
     for x in self.data.iter() {
       match x {
         DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
-        DeflateSym::Backreference(length, dist) => {
+        DeflateSym::Backreference(_, dist) => {
           let dc = &DEFAULT_CODEPOINTS.lookup_dist(*dist).unwrap().codept;
           *freqs.entry(*dc).or_default() += 1;
         }
@@ -278,7 +275,7 @@ impl BlockData {
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
     match self {
-      Self::Raw(x) => {
+      Self::Raw(_x) => {
         bit_sink.write(2, 0b00)?;
         unimplemented!();
       }

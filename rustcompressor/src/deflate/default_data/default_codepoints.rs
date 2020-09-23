@@ -1,7 +1,6 @@
 use super::super::*;
-use bitstream_io::{BitReader, LittleEndian, BitWriter};
+use bitstream_io::{BitReader, LittleEndian};
 use decoder::DeflateReadError;
-use encoder::DeflateWriteError;
 use std::vec::Vec;
 
 const LDSEP: usize = 30; // The point in DecodeInfo where we switch from

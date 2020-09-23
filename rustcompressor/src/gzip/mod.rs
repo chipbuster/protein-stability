@@ -263,8 +263,8 @@ mod tests {
     let invalid2 = GZFlags::RESERVED2;
     let invalid3 = GZFlags::RESERVED3;
     assert_eq!(invalid1.is_valid(), false);
-    assert_eq!(invalid1.is_valid(), false);
-    assert_eq!(invalid1.is_valid(), false);
+    assert_eq!(invalid2.is_valid(), false);
+    assert_eq!(invalid3.is_valid(), false);
   }
 
   #[test]
