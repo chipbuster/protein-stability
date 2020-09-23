@@ -157,11 +157,9 @@ impl CompressedBlock {
         (dist1, len1, search_term)
       };
 
+      assert!(&data[index - mdist..index - mdist + mlen] == &data[index..index + mlen]);
       // Add this match to the match table
-      match_table
-        .entry(term)
-        .or_default()
-        .push_front(index);
+      match_table.entry(term).or_default().push_front(index);
 
       index += mlen;
       output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
@@ -175,22 +173,35 @@ impl CompressedBlock {
     Self { data: output }
   }
 
+  #[inline]
+  fn check_match_valid(data: &[u8], data_start: Index, match_start: Index, length: Len) -> bool {
+    assert!(data_start > match_start); // Assert that we're looking back, not forwards
+    let no_data_overrun = data_start + length < data.len();
+    let match_no_overlap = match_start + length <= data_start;
+    let data_match =
+      data[data_start..data_start + length] == data[match_start..match_start + length];
+    no_data_overrun && match_no_overlap && data_match
+  }
+
+  fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index) -> Len {
+    let mut len = 3;
+    assert_eq!(
+      data[data_start..data_start + len],
+      data[match_start..match_start + len]
+    );
+    while len < MAX_LZ_LEN && Self::check_match_valid(data, data_start, match_start, len + 1) {
+      len += 1;
+    }
+    len
+  }
+
   fn find_longest_match(data: &[u8], start: Index, match_indices: &Vec<&Index>) -> (Dist, Len) {
     let mut max_len = 0usize;
     let mut max_index = 0usize;
     assert!(!match_indices.is_empty());
     for m in match_indices {
       let i = **m;
-      // println!("{}, {}, {}", data.len(), i, start);
-      let mut len = 3;
-      let mut range_valid = start + len < data.len() && i + len <= start;
-      let mut ranges_match = data[start..start + len] == data[i..i + len];
-      assert_eq!(data[start..start + len], data[i..i + len]);
-      while range_valid && ranges_match {
-        len += 1;
-        range_valid = start + len < data.len() && i + len < start && len < MAX_LZ_LEN;
-        ranges_match = data[start..start + len] == data[i..i + len];
-      }
+      let len = Self::longest_match_at_index(data, start, i);
       if len > max_len {
         max_len = len;
         max_index = i;
@@ -198,8 +209,8 @@ impl CompressedBlock {
     }
     assert_ne!(max_len, 0);
     assert!(start > max_index);
-    assert!(max_len > 3);
-    (start - max_index, max_len-1)
+    assert!(max_len >= 3);
+    (start - max_index, max_len)
   }
 
   fn compute_lengthlit_freq(&self) -> HashMap<u16, usize> {
@@ -209,6 +220,7 @@ impl CompressedBlock {
         DeflateSym::Literal(sym) => *freqs.entry(*sym as u16).or_default() += 1,
         DeflateSym::EndOfBlock => *freqs.entry(256).or_default() += 1,
         DeflateSym::Backreference(length, dist) => {
+          println!("{}", length);
           let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
           *freqs.entry(*lc).or_default() += 1;
         }
