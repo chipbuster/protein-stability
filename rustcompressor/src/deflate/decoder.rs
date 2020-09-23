@@ -295,7 +295,7 @@ fn dynamic_block_from_stream<R: Read>(
   let num_literals = 257 + hlit as u16;
   let num_dists = 1 + hdist as u16;
 
-  println!("{}, {}", num_literals, num_dists);
+  debug_log!("{}, {}\n", num_literals, num_dists);
 
   let (length_tree, dist_tree) =
     decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;

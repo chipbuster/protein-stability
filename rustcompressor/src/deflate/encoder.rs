@@ -8,6 +8,7 @@ use std::{hash::Hash, io::Write};
 use thiserror::Error;
 
 const MAX_HUFF_LEN: Option<usize> = Some(15);
+const MAX_LZ_LEN: usize = 258;
 lazy_static! {
   static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
 }
@@ -88,6 +89,7 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &Vec<u8>) -> Self {
+    println!("Let'S LZ77!");
     const CHUNK_SZ: Len = 3;
     const MAX_MATCH_DIST: Dist = 16384;
 
@@ -146,18 +148,18 @@ impl CompressedBlock {
         (0, 0)
       };
 
-      let (mdist, mlen) = if len2 > len1 {
+      let (mdist, mlen, term) = if len2 > len1 {
         // Emit a literal and then the second match
         output.push(DeflateSym::Literal(data[index]));
         index += 1;
-        (dist2, len2)
+        (dist2, len2, search_term_2)
       } else {
-        (dist1, len1)
+        (dist1, len1, search_term)
       };
 
       // Add this match to the match table
       match_table
-        .entry(search_term)
+        .entry(term)
         .or_default()
         .push_front(index);
 
@@ -179,13 +181,14 @@ impl CompressedBlock {
     assert!(!match_indices.is_empty());
     for m in match_indices {
       let i = **m;
+      // println!("{}, {}, {}", data.len(), i, start);
       let mut len = 3;
-      assert_eq!(data[start..start + len], data[i..i + len]);
-      let mut range_valid = start + len < data.len() && i + len < start;
+      let mut range_valid = start + len < data.len() && i + len <= start;
       let mut ranges_match = data[start..start + len] == data[i..i + len];
+      assert_eq!(data[start..start + len], data[i..i + len]);
       while range_valid && ranges_match {
         len += 1;
-        range_valid = start + len < data.len() && i + len < start;
+        range_valid = start + len < data.len() && i + len < start && len < MAX_LZ_LEN;
         ranges_match = data[start..start + len] == data[i..i + len];
       }
       if len > max_len {
@@ -195,7 +198,8 @@ impl CompressedBlock {
     }
     assert_ne!(max_len, 0);
     assert!(start > max_index);
-    (start - max_index, max_len - 1)
+    assert!(max_len > 3);
+    (start - max_index, max_len-1)
   }
 
   fn compute_lengthlit_freq(&self) -> HashMap<u16, usize> {
@@ -297,6 +301,14 @@ impl DeflateStream {
     // We must byte-align the writer or risk losing incomplete bytes
     bit_sink.byte_align()?;
     Ok(bit_sink.into_writer())
+  }
+  pub fn new_from_raw_bytes(data: &Vec<u8>) -> Self {
+    Self {
+      blocks: vec![Block {
+        bfinal: true,
+        data: BlockData::Dyn(CompressedBlock::bytes_to_lz77(&data)),
+      }],
+    }
   }
 }
 
