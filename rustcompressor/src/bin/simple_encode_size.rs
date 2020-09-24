@@ -7,8 +7,8 @@ use compressor::deflate::*;
 fn main() {
   let args: Vec<String> = env::args().collect();
 
-  if args.len() != 2 {
-    println!("Usage: {} <infilename>", &args[0]);
+  if args.len() != 3 {
+    println!("Usage: {} <infilename> <outfilename>", &args[0]);
     println!("\tAttempts to encode file contents, printing the sizes of the input and compressed result");
     process::exit(1);
   }
@@ -20,6 +20,5 @@ fn main() {
   let z: Vec<u8> = Vec::new();
   let out = stream.write_to_bitstream(z).unwrap();
 
-  println!("{}", bytes.len());
-  println!("{}", out.len());
+  std::fs::write(&args[2], out);
 }
