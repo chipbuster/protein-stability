@@ -1,10 +1,13 @@
-use super::default_data::default_codepoints::{DecodeInfo};
+use super::default_data::default_codepoints::DecodeInfo;
 use super::*;
 use crate::huff_tree::huffcode_from_freqs;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
 use lazy_static::lazy_static;
-use std::collections::{HashMap, VecDeque};
 use std::io::Write;
+use std::{
+  collections::{HashMap, VecDeque},
+  hash::Hash,
+};
 use thiserror::Error;
 
 const MAX_HUFF_LEN: Option<usize> = Some(15);
@@ -12,6 +15,8 @@ const MAX_LZ_LEN: usize = 258;
 lazy_static! {
   static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
 }
+
+type BackrefMap<S> = HashMap<S, VecDeque<Index>>;
 
 #[derive(Error, Debug)]
 pub enum DeflateWriteError {
@@ -86,14 +91,12 @@ type Len = usize;
 type Index = usize;
 
 impl CompressedBlock {
+  const CHUNK_SZ: Len = 3;
+  const MAX_MATCH_DIST: Dist = 16384;
+
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &Vec<u8>) -> Self {
-    println!("Let'S LZ77!");
-    const CHUNK_SZ: Len = 3;
-    const MAX_MATCH_DIST: Dist = 16384;
-
-    let data_slice = &data[..];
     let mut match_table = HashMap::<&[u8], VecDeque<Index>>::new();
     let mut output: Vec<DeflateSym> = Vec::new();
 
@@ -102,65 +105,10 @@ impl CompressedBlock {
     // Main compression loop. Follow sections 4's suggestion and start by looking at triplets, then
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
     // when it ends, hence the cleanup section afterwards.
-    while index + CHUNK_SZ < data.len() {
-      let search_term = &data[index..index + CHUNK_SZ];
-      let matches: Vec<&Index> = match match_table.get_mut(search_term) {
-        None => Vec::new(),
-        Some(x) => {
-          // Filter out the elements that are too far away
-          for i in (0..x.len()).rev() {
-            if index - x[i] > MAX_MATCH_DIST {
-              x.pop_back().unwrap();
-            } else {
-              break; // Sorted order = rest are within range
-            }
-          }
-          x.iter().collect()
-        }
-      };
-
-      if matches.is_empty() {
-        // Add this entry to the match table
-        match_table
-          .entry(search_term)
-          .or_default()
-          .push_front(index);
-        // Emit a literal symbol
-        output.push(DeflateSym::Literal(data[index]));
-        index += 1;
-        continue;
-      }
-
-      // Find longest match starting at this index
-      let (dist1, len1) = Self::find_longest_match(data_slice, index, &matches);
-
-      // Find longest match starting at next index
-      let search_term_2 = &data[index + 1..index + 1 + CHUNK_SZ];
-      let matches2 = match match_table.get(search_term_2) {
-        None => Vec::new(),
-        Some(x) => x.iter().filter(|x| index - **x < MAX_MATCH_DIST).collect(),
-      };
-      let (dist2, len2) = if !matches2.is_empty() {
-        Self::find_longest_match(data_slice, index + 1, &matches2)
-      } else {
-        (0, 0)
-      };
-
-      let (mdist, mlen, term) = if len2 > len1 {
-        // Emit a literal and then the second match
-        output.push(DeflateSym::Literal(data[index]));
-        index += 1;
-        (dist2, len2, search_term_2)
-      } else {
-        (dist1, len1, search_term)
-      };
-
-      assert!(&data[index - mdist..index - mdist + mlen] == &data[index..index + mlen]);
-      // Add this match to the match table
-      match_table.entry(term).or_default().push_front(index);
-
-      index += mlen;
-      output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
+    while index + Self::CHUNK_SZ < data.len() {
+      let (adv, mut matches) = Self::find_deflate_backref(&mut match_table, &data, index);
+      index += adv;
+      output.append(&mut matches);
     }
 
     // Cleanup: emit the last few unconsumed elements as literals (if needed).
@@ -177,8 +125,7 @@ impl CompressedBlock {
     assert!(data_start > match_start); // Assert that we're looking back, not forwards
     let no_data_overrun = data_start + length < data.len();
     let match_no_overlap = match_start + length <= data_start;
-    let data_match =
-      data[data_start + length-1] == data[match_start + length-1];
+    let data_match = data[data_start + length - 1] == data[match_start + length - 1];
     no_data_overrun && match_no_overlap && data_match
   }
 
@@ -210,6 +157,86 @@ impl CompressedBlock {
     assert!(start > max_index);
     assert!(max_len >= 3);
     (start - max_index, max_len)
+  }
+
+  /// Find a DEFLATE backref for this location in the input. These are the backrefs used
+  /// by DEFLATE: <length, distance> pairs. Returns a tuple containing the DEFLATE symbol(s)
+  /// to add to the output along with a usize indicating how far to advance the input stream.
+  fn find_deflate_backref<'a>(
+    match_table: &mut BackrefMap<&'a[u8]>,
+    data: &'a [u8],
+    index: usize,
+  ) -> (usize, Vec<DeflateSym>) {
+    let mut output = Vec::new();
+    let mut n_consumed = 0usize;
+    let term = &data[index..index + Self::CHUNK_SZ];
+
+    Self::prune_matches(match_table, term, index, Self::MAX_MATCH_DIST);
+    let matches = Self::get_matches(&match_table, term);
+
+    // If no match, add this entry to the match table and emit a literal symbol
+    if matches.is_empty() {
+      match_table.entry(term).or_default().push_front(index);
+      output.push(DeflateSym::Literal(data[index]));
+      return (1, output);
+    }
+
+    // Find longest match starting at this index
+    let (dist1, len1) = Self::find_longest_match(data, index, &matches);
+
+    // Follow the deflate suggestion about deferred matching
+    // This is technically wrong since we're looking back too far by 1, but
+    // since our max match isn't the DEFLATE maximum, it's a non-issue atm.
+    let search_term_2 = &data[index + 1..index + 1 + Self::CHUNK_SZ];
+    let matches2 = Self::get_matches(&match_table, search_term_2);
+    let (dist2, len2) = if !matches2.is_empty() {
+      Self::find_longest_match(data, index + 1, &matches2)
+    } else {
+      (0, 0)
+    };
+
+    let (mdist, mlen, term, index) = if len2 > len1 {
+      // Emit a literal and then the second match
+      output.push(DeflateSym::Literal(data[index]));
+      n_consumed += 1;
+      (dist2, len2, search_term_2, index + 1)
+    } else {
+      (dist1, len1, term, index)
+    };
+
+    assert!(&data[index - mdist..index - mdist + mlen] == &data[index..index + mlen]);
+    match_table.entry(term).or_default().push_front(index);
+
+    n_consumed += mlen;
+    output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
+
+    (n_consumed, output)
+  }
+
+  /// Collect a vec from the VecDeque in the backref map
+  fn get_matches<S: Hash + Eq>(backref_map: &BackrefMap<S>, term: S) -> Vec<&Index> {
+    match backref_map.get(&term) {
+      None => Vec::new(),
+      Some(x) => x.iter().collect(),
+    }
+  }
+
+  /// Prune all matches in the selected hashmap that are too old to participate in backrefs
+  fn prune_matches<S: Hash + Eq>(
+    backref_map: &mut BackrefMap<S>,
+    term: S,
+    cur_index: usize,
+    max_dist: usize,
+  ) {
+    if let Some(x) = backref_map.get_mut(&term) {
+      for i in (0..x.len()).rev() {
+        if cur_index - x[i] > max_dist {
+          x.pop_back().unwrap();
+        } else {
+          break; // Sorted order = rest are within range
+        }
+      }
+    }
   }
 
   fn compute_lengthlit_freq(&self) -> HashMap<u16, usize> {
