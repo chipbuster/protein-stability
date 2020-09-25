@@ -10,8 +10,22 @@ use std::{
 };
 use thiserror::Error;
 
+/* Custom DEFLATE extension: an offset backref. This is similar to a DEFLATE
+backref, but the entire sequence is offset by a fixed amount, modulo 255.
+
+That is, to compute the expansion of an offset backref <off, length, dist>, do
+the same thing with the <length, dist> values as you would for an ordinary DEFLATE
+backreference, then add offset (mod 255) to every element of the new sequence.
+
+The presence of an offset backref is indicated in the compressed sequence by
+the symbol value 259 in the length/literal encoding. This is followed by the
+offset value encoded directly in the length/literal encoding, then the 
+length and distance as is found in the standard DEFLATE encoding.
+*/
+
 const MAX_HUFF_LEN: Option<usize> = Some(15);
 const MAX_LZ_LEN: usize = 258;
+const OFFSET_SIGIL: u16 = 259;
 lazy_static! {
   static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
 }
@@ -39,6 +53,12 @@ impl DeflateSym {
       DeflateSym::EndOfBlock => bit_sink.write_huffman(length_tree, 256)?,
       DeflateSym::Literal(sym) => bit_sink.write_huffman(length_tree, *sym as u16)?,
       DeflateSym::Backreference(length, dist) => {
+        Self::write_length_to_stream(bit_sink, *length, length_tree)?;
+        Self::write_dist_to_stream(bit_sink, *dist, dist_tree)?;
+      }
+      DeflateSym::OffsetBackref(offset, length, dist) => {
+        bit_sink.write_huffman(length_tree, OFFSET_SIGIL)?;
+        bit_sink.write_huffman(length_tree, *offset as u16)?;
         Self::write_length_to_stream(bit_sink, *length, length_tree)?;
         Self::write_dist_to_stream(bit_sink, *dist, dist_tree)?;
       }
@@ -97,7 +117,8 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &Vec<u8>) -> Self {
-    let mut match_table = HashMap::<&[u8], VecDeque<Index>>::new();
+    let mut deflate_match_table = HashMap::<&[u8], VecDeque<Index>>::new();
+    let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
     let mut output: Vec<DeflateSym> = Vec::new();
 
     let mut index = 0usize;
@@ -106,9 +127,10 @@ impl CompressedBlock {
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
     // when it ends, hence the cleanup section afterwards.
     while index + Self::CHUNK_SZ < data.len() {
-      let (adv, mut matches) = Self::find_deflate_backref(&mut match_table, &data, index);
-      index += adv;
-      output.append(&mut matches);
+      let (sz_deflate, mut match_deflate) = Self::find_deflate_backref(&mut deflate_match_table, &data, index);
+      // let (sz_offset, mut match_offset) = Self::find_offset_backref(&mut offset_match_table, &data, index);
+      index += sz_deflate;
+      output.append(&mut match_deflate);
     }
 
     // Cleanup: emit the last few unconsumed elements as literals (if needed).
@@ -157,6 +179,25 @@ impl CompressedBlock {
     assert!(start > max_index);
     assert!(max_len >= 3);
     (start - max_index, max_len)
+  }
+
+  /// Find an offset backref for this location in the input. These are custom backrefs: 
+  /// <offset, length, distance> pairs. Returns a tuple containing the symbol(s) to add
+  /// to the output along with a usize indicating how far to advance the input stream.
+  fn find_offset_backref<'a>(
+    match_table: &mut BackrefMap<(u8, u8)>,
+    data: &'a [u8],
+    index: usize,
+  ) -> (usize, Vec<DeflateSym>) {
+    // Note: if CHUNK_SZ ever changes from 3, we need to change the type of match_table
+    assert_eq!(Self::CHUNK_SZ, 3);
+
+    let base = data[index];
+    let term = (data[index + 1] - base, data[index + 2] - base);
+
+    //let mut output = Vec::new();
+    let mut n_consumed = 0usize;
+    unimplemented!()
   }
 
   /// Find a DEFLATE backref for this location in the input. These are the backrefs used
@@ -249,6 +290,10 @@ impl CompressedBlock {
           let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
           *freqs.entry(*lc).or_default() += 1;
         }
+        DeflateSym::OffsetBackref(offset, length, _) => {
+
+          let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
+        }
       }
     }
     freqs
@@ -259,7 +304,7 @@ impl CompressedBlock {
     for x in self.data.iter() {
       match x {
         DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
-        DeflateSym::Backreference(_, dist) => {
+        DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_,_,dist) => {
           let dc = &DEFAULT_CODEPOINTS.lookup_dist(*dist).unwrap().codept;
           *freqs.entry(*dc).or_default() += 1;
         }

@@ -24,6 +24,7 @@ pub enum DeflateSym {
   EndOfBlock,
   Literal(u8),
   Backreference(u16, u16),
+  OffsetBackref(u8, u16, u16),
 }
 
 #[derive(Debug)]

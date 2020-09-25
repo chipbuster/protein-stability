@@ -342,6 +342,7 @@ impl CompressedBlock {
     length: u16,
     distance: u16,
     data: &mut Vec<u8>,
+    offset: u8,
   ) -> Result<(), DeflateReadError> {
     let last_data_index = data.len();
     if distance as usize > last_data_index {
@@ -356,7 +357,7 @@ impl CompressedBlock {
       loop {
         for j in first_i..last_data_index {
           let target = data[j];
-          data.push(target);
+          data.push(target + offset);
           n += 1;
           if n == length {
             return Ok(());
@@ -367,7 +368,7 @@ impl CompressedBlock {
       let last_i = first_i + length as usize - 1;
       for j in first_i..=last_i {
         let target = data[j];
-        data.push(target);
+        data.push(target + offset);
       }
       return Ok(());
     }
@@ -380,7 +381,10 @@ impl CompressedBlock {
       match sym {
         DeflateSym::Literal(ch) => literals.push(ch),
         DeflateSym::Backreference(length, distance) => {
-          Self::expand_backref(length, distance, &mut literals)?;
+          Self::expand_backref(length, distance, &mut literals, 0)?;
+        }
+        DeflateSym::OffsetBackref(offset, length, distance) => {
+          Self::expand_backref(length, distance,  &mut literals, offset)?;
         }
         DeflateSym::EndOfBlock => break,
       }
