@@ -171,13 +171,14 @@ impl CompressedBlock {
     Self { data: output }
   }
 
+  /// Assuming a match of size length-1 succeeded at this index, does a match of length succeed?
   #[inline]
   fn check_match_valid(data: &[u8], data_start: Index, match_start: Index, length: Len) -> bool {
     assert!(data_start > match_start); // Assert that we're looking back, not forwards
     let no_data_overrun = data_start + length < data.len();
     let match_no_overlap = match_start + length <= data_start;
     let data_match =
-      data[data_start..data_start + length] == data[match_start..match_start + length];
+      data[data_start + length-1] == data[match_start + length-1];
     no_data_overrun && match_no_overlap && data_match
   }
 
