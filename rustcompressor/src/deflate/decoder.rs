@@ -375,7 +375,7 @@ impl CompressedBlock {
   }
 
   // Decode this compressed block into a stream of bytes
-  pub fn into_bytes(self) -> Result<Vec<u8>, DeflateReadError> {
+  pub fn into_decompressed_bytes(self) -> Result<Vec<u8>, DeflateReadError> {
     let mut literals = Vec::new();
     for sym in self.data.into_iter() {
       match sym {
@@ -419,7 +419,7 @@ impl DeflateStream {
       match block.data {
         BlockData::Raw(mut rawdata) => literals.append(&mut rawdata.data),
         BlockData::Fix(comp) | BlockData::Dyn(comp) => {
-          let mut blockdata = comp.into_bytes()?;
+          let mut blockdata = comp.into_decompressed_bytes()?;
           literals.append(&mut blockdata);
         }
       }

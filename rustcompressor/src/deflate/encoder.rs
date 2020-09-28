@@ -137,7 +137,8 @@ impl CompressedBlock {
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
     // when it ends, hence the cleanup section afterwards.
     while index + Self::CHUNK_SZ < data.len() {
-      let (deflate_len, mut deflate_syms) = Self::find_deflate_backref(&mut deflate_match_table, &data, index);
+      let (deflate_len, mut deflate_syms) =
+        Self::find_deflate_backref(&mut deflate_match_table, &data, index);
       let mut offset_match = if use_offset {
         Self::find_offset_backref(&mut offset_match_table, &data, index)
       } else {
@@ -154,7 +155,7 @@ impl CompressedBlock {
       } else {
         (deflate_len, deflate_syms)
       };
-      
+
       index += match_len;
       output.append(&mut match_syms);
     }
@@ -179,9 +180,12 @@ impl CompressedBlock {
     assert!(data_start > match_start); // Assert that we're looking back, not forwards
     let no_data_overrun = data_start + length < data.len();
     let match_no_overlap = match_start + length <= data_start;
+    if !no_data_overrun || !match_no_overlap{
+      return false;
+    }
     let data_match =
       data[data_start + length - 1] == data[match_start + length - 1].wrapping_add(offset);
-    no_data_overrun && match_no_overlap && data_match
+    data_match
   }
 
   fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index, offset: u8) -> Len {
@@ -217,12 +221,12 @@ impl CompressedBlock {
   ) -> (Dist, Len) {
     let mut max_len = 0usize;
     let mut max_index = 0usize;
+    let min_match_dist = 3usize;
     assert!(!match_indices.is_empty());
     for m in match_indices {
       let i = **m;
       let len = if use_offset {
-        unimplemented!();
-        let offset = data[i].wrapping_sub(data[start]);
+        let offset = data[start].wrapping_sub(data[i]);
         Self::longest_match_at_index(data, start, i, offset)
       } else {
         Self::longest_match_at_index(data, start, i, 0)
@@ -251,26 +255,33 @@ impl CompressedBlock {
     assert_eq!(Self::CHUNK_SZ, 3);
 
     let base = data[index];
-    let term = (data[index + 1].wrapping_sub(base), data[index + 2].wrapping_sub(base));
+    let term = (
+      data[index + 1].wrapping_sub(base),
+      data[index + 2].wrapping_sub(base),
+    );
 
     let mut output = Vec::new();
     let mut n_consumed = 0usize;
 
     Self::prune_matches(match_table, term, index, Self::MAX_MATCH_DIST);
-    let matches = Self::get_matches(match_table, term);
+    let matches = Self::get_matches(match_table, term, index);
 
     // We don't *have* to find a match for offset backrefs (because they're an optional feature).
     // Therefore, we return None to signal that no match could be found and let the DEFLATE backref
     // function deal with the emitting of literal single bytes.
     if matches.is_empty() {
+      match_table.entry(term).or_default().push_front(index);
       return None;
     };
 
     let (dist1, len1) = Self::find_longest_match(data, index, &matches, true);
 
     // Search at index = index + 1 for a better match
-    let term2 = (data[index + 2] - base, data[index + 3] - base);
-    let matches2 = Self::get_matches(&match_table, term2);
+    let term2 = (
+      data[index + 2].wrapping_sub(data[index + 1]),
+      data[index + 3].wrapping_sub(data[index + 1]),
+    );
+    let matches2 = Self::get_matches(&match_table, term2, index);
     let (dist2, len2) = if !matches2.is_empty() {
       Self::find_longest_match(data, index + 1, &matches2, true)
     } else {
@@ -286,19 +297,14 @@ impl CompressedBlock {
       (dist1, len1, term, index)
     };
 
+    n_consumed += mlen;
     match_table.entry(term).or_default().push_front(index);
 
-    n_consumed += mlen;
-    output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
-
-    // Debugging output here
+    /* We have intentionally avoided computing the offset in this funciton so far
+    (leaving it for the subroutines to do), but now we need to know what it is
+    so that we can add it to the output stream */
     let offset = data[index].wrapping_sub(data[index - mlen]);
-    println!("Found offset match at ({}, {}, {})", offset, mlen, mdist);
-    println!("Current data is {:?}", &data[index..index + mlen]);
-    println!(
-      "Current data is {:?}",
-      &data[index - mdist..index - mdist + mlen]
-    );
+    output.push(DeflateSym::OffsetBackref(offset, mlen as u16, mdist as u16));
 
     Some((n_consumed, output))
   }
@@ -316,7 +322,7 @@ impl CompressedBlock {
     let term = &data[index..index + Self::CHUNK_SZ];
 
     Self::prune_matches(match_table, term, index, Self::MAX_MATCH_DIST);
-    let matches = Self::get_matches(&match_table, term);
+    let matches = Self::get_matches(&match_table, term, index);
 
     // If no match, add this entry to the match table and emit a literal symbol
     if matches.is_empty() {
@@ -332,7 +338,7 @@ impl CompressedBlock {
     // This is technically wrong since we're looking back too far by 1, but
     // since our max match isn't the DEFLATE maximum, it's a non-issue atm.
     let search_term_2 = &data[index + 1..index + 1 + Self::CHUNK_SZ];
-    let matches2 = Self::get_matches(&match_table, search_term_2);
+    let matches2 = Self::get_matches(&match_table, search_term_2, index);
     let (dist2, len2) = if !matches2.is_empty() {
       Self::find_longest_match(data, index + 1, &matches2, false)
     } else {
@@ -358,10 +364,10 @@ impl CompressedBlock {
   }
 
   /// Collect a vec from the VecDeque in the backref map
-  fn get_matches<S: Hash + Eq>(backref_map: &BackrefMap<S>, term: S) -> Vec<&Index> {
+  fn get_matches<S: Hash + Eq>(backref_map: &BackrefMap<S>, term: S, index: usize) -> Vec<&Index> {
     match backref_map.get(&term) {
       None => Vec::new(),
-      Some(x) => x.iter().collect(),
+      Some(x) => x.iter().filter(|x| index - **x > Self::CHUNK_SZ).collect(),
     }
   }
 
@@ -498,6 +504,8 @@ impl DeflateStream {
 
 #[cfg(test)]
 mod tests {
+  use std::iter::FromIterator;
+
   #[allow(unused_imports)]
   use super::*;
   use rand::Rng;
@@ -507,7 +515,7 @@ mod tests {
     let init_str = "hellohellohelloIamGeronimohello";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
-    let rt = comp.into_bytes().unwrap();
+    let rt = comp.into_decompressed_bytes().unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -517,7 +525,7 @@ mod tests {
     let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
-    let rt = comp.into_bytes().unwrap();
+    let rt = comp.into_decompressed_bytes().unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -527,7 +535,7 @@ mod tests {
     let init_str = "hellohellohelloIamGeronimohello";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let rt = comp.into_bytes().unwrap();
+    let rt = comp.into_decompressed_bytes().unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -537,29 +545,98 @@ mod tests {
     let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let rt = comp.into_bytes().unwrap();
+    let rt = comp.into_decompressed_bytes().unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
 
   #[test]
-  fn offset_should_create_1() {
-    let data = vec![0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18];
-    let comp = CompressedBlock::bytes_to_lz77(&data);
-    println!("{:?}", comp);
-    let rt = comp.into_bytes().unwrap();
-    assert!(false);
+  fn simple_offset_backref() {
+    let data = vec![
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+    ];
+    let mut match_table = HashMap::new();
+    match_table.insert((1, 2), VecDeque::from_iter(vec![4, 2, 1, 0].into_iter()));
+
+    let x = CompressedBlock::find_offset_backref(&mut match_table, &data, 4);
+    println!("{:?}", x);
   }
+
+  #[test]
+  fn offset_should_create_offsetbr_1() {
+    let data = vec![
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+    ];
+    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
+    let symstream = comp.data;
+    let answer = [
+      DeflateSym::Literal(0),
+      DeflateSym::Literal(1),
+      DeflateSym::Literal(2),
+      DeflateSym::Literal(3),
+      DeflateSym::Literal(4),
+      DeflateSym::Literal(5),
+      DeflateSym::Literal(6),
+      DeflateSym::Literal(7),
+      DeflateSym::Literal(8),
+      DeflateSym::OffsetBackref(9, 8, 8),
+      DeflateSym::Literal(18),
+    ];
+    assert_eq!(symstream, answer);
+  }
+
+  #[test]
+  fn simple_offsetbr_roundtrip() {
+    let data = vec![
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+    ];
+    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
+    let rt = comp.into_decompressed_bytes().unwrap();
+    assert_eq!(data, rt);
+  }
+
+  #[test]
+  fn round_trip_offset() {
+    let mut testvec = vec![1,2,3,4,3,2,1];
+    for i in 0..10 {
+      testvec.push(i);
+    }
+    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
+    println!("{:?}", comp.data);
+    assert!(comp.data.iter().any(|x| match x {
+      DeflateSym::OffsetBackref(_,_,_) => true,
+      _ => false,
+    }));
+    let rt = comp.into_decompressed_bytes().unwrap();
+
+    if rt != testvec {
+      println!(
+        "Compressed block: {:?}",
+        CompressedBlock::bytes_to_lz77(&testvec)
+      );
+      println!("Result: {:?}", rt);
+      assert_eq!(rt, testvec);
+    }
+    let mut rng = rand::thread_rng();
+    let mut testvec = Vec::new();
+    for _ in 0..1024 {
+      testvec.push(rng.gen::<u8>());
+    }
+
+  }
+
 
   #[test]
   fn round_trip_randomlike() {
     let mut rng = rand::thread_rng();
-    let mut testvec = Vec::new();
-    for _ in 0..8192 {
+    let mut testvec = vec![1,2,3,4,3,2,1];
+    for _ in 0..100 {
       testvec.push(rng.gen::<u8>());
     }
+    testvec.append(&mut vec![15,16,17,18,17,16,15]);
     let comp = CompressedBlock::bytes_to_lz77(&testvec);
-    let rt = comp.into_bytes().unwrap();
+    let rt = comp.into_decompressed_bytes().unwrap();
 
     if rt != testvec {
       println!(
@@ -573,7 +650,7 @@ mod tests {
 
   #[test]
   fn many_random_round_trips() {
-    for _ in 0..100 {
+    for _ in 0..10 {
       round_trip_randomlike()
     }
   }
