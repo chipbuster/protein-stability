@@ -19,7 +19,7 @@ backreference, then add offset (mod 255) to every element of the new sequence.
 
 The presence of an offset backref is indicated in the compressed sequence by
 the symbol value 259 in the length/literal encoding. This is followed by the
-offset value encoded directly in the length/literal encoding, then the 
+offset value encoded directly in the length/literal encoding, then the
 length and distance as is found in the standard DEFLATE encoding.
 */
 
@@ -127,8 +127,10 @@ impl CompressedBlock {
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
     // when it ends, hence the cleanup section afterwards.
     while index + Self::CHUNK_SZ < data.len() {
-      let (sz_deflate, mut match_deflate) = Self::find_deflate_backref(&mut deflate_match_table, &data, index);
-      // let (sz_offset, mut match_offset) = Self::find_offset_backref(&mut offset_match_table, &data, index);
+      let (sz_deflate, mut match_deflate) =
+        Self::find_deflate_backref(&mut deflate_match_table, &data, index);
+      //      let Some(sz_offset, mut match_offset) =
+      //        Self::find_offset_backref(&mut offset_match_table, &data, index);
       index += sz_deflate;
       output.append(&mut match_deflate);
     }
@@ -143,33 +145,64 @@ impl CompressedBlock {
 
   /// Assuming a match of size length-1 succeeded at this index, does a match of length succeed?
   #[inline]
-  fn check_match_valid(data: &[u8], data_start: Index, match_start: Index, length: Len) -> bool {
+  fn check_match_valid(
+    data: &[u8],
+    data_start: Index,
+    match_start: Index,
+    length: Len,
+    offset: u8,
+  ) -> bool {
     assert!(data_start > match_start); // Assert that we're looking back, not forwards
     let no_data_overrun = data_start + length < data.len();
     let match_no_overlap = match_start + length <= data_start;
-    let data_match = data[data_start + length - 1] == data[match_start + length - 1];
+    let data_match =
+      data[data_start + length - 1] == data[match_start + length - 1].wrapping_add(offset);
     no_data_overrun && match_no_overlap && data_match
   }
 
-  fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index) -> Len {
+  fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index, offset: u8) -> Len {
     let mut len = 3;
-    assert_eq!(
-      data[data_start..data_start + len],
-      data[match_start..match_start + len]
-    );
-    while len < MAX_LZ_LEN && Self::check_match_valid(data, data_start, match_start, len + 1) {
+    assert_eq!(len, 3); // If the min match length changes, the offset code will need to change
+    if offset == 0 {
+      assert_eq!(
+        data[data_start..data_start + len],
+        data[match_start..match_start + len]
+      );
+    } else {
+      let data_init = (data[data_start], data[data_start + 1], data[data_start + 2]);
+      let match_init = (
+        data[match_start].wrapping_add(offset),
+        data[match_start + 1].wrapping_add(offset),
+        data[match_start + 2].wrapping_add(offset),
+      );
+      assert_eq!(data_init, match_init);
+    }
+    while len < MAX_LZ_LEN
+      && Self::check_match_valid(data, data_start, match_start, len + 1, offset)
+    {
       len += 1;
     }
     len
   }
 
-  fn find_longest_match(data: &[u8], start: Index, match_indices: &Vec<&Index>) -> (Dist, Len) {
+  fn find_longest_match(
+    data: &[u8],
+    start: Index,
+    match_indices: &Vec<&Index>,
+    use_offset: bool,
+  ) -> (Dist, Len) {
     let mut max_len = 0usize;
     let mut max_index = 0usize;
     assert!(!match_indices.is_empty());
     for m in match_indices {
       let i = **m;
-      let len = Self::longest_match_at_index(data, start, i);
+      let len = if use_offset {
+        unimplemented!();
+        let offset = data[i].wrapping_sub(data[start]);
+        Self::longest_match_at_index(data, start, i, offset)
+      } else {
+        Self::longest_match_at_index(data, start, i, 0)
+      };
       if len > max_len {
         max_len = len;
         max_index = i;
@@ -181,30 +214,74 @@ impl CompressedBlock {
     (start - max_index, max_len)
   }
 
-  /// Find an offset backref for this location in the input. These are custom backrefs: 
+  /// Find an offset backref for this location in the input. These are custom backrefs:
   /// <offset, length, distance> pairs. Returns a tuple containing the symbol(s) to add
   /// to the output along with a usize indicating how far to advance the input stream.
+  // This function is similar to find_deflate_backref, but the differences are fairly crucial
   fn find_offset_backref<'a>(
     match_table: &mut BackrefMap<(u8, u8)>,
     data: &'a [u8],
     index: usize,
-  ) -> (usize, Vec<DeflateSym>) {
+  ) -> Option<(usize, Vec<DeflateSym>)> {
     // Note: if CHUNK_SZ ever changes from 3, we need to change the type of match_table
     assert_eq!(Self::CHUNK_SZ, 3);
 
     let base = data[index];
     let term = (data[index + 1] - base, data[index + 2] - base);
 
-    //let mut output = Vec::new();
+    let mut output = Vec::new();
     let mut n_consumed = 0usize;
-    unimplemented!()
+
+    Self::prune_matches(match_table, term, index, Self::MAX_MATCH_DIST);
+    let matches = Self::get_matches(match_table, term);
+
+    // We don't *have* to find a match for offset backrefs (because they're an optional feature).
+    // Therefore, we return None to signal that no match could be found and let the DEFLATE backref
+    // function deal with the emitting of literal single bytes.
+    if matches.is_empty() {
+      return None;
+    };
+
+    let (dist1, len1) = Self::find_longest_match(data, index, &matches, true);
+
+    // Search at index = index + 1 for a better match
+    let term2 = (data[index+2] - base, data[index+3] - base);
+    let matches2 = Self::get_matches(&match_table, term2);
+    let (dist2, len2) = if !matches2.is_empty() {
+      Self::find_longest_match(data, index + 1, &matches2, true)
+    } else {
+      (0, 0)
+    };
+
+    let (mdist, mlen, term, index) = if len2 > len1 {
+      // Emit a literal and then the second match
+      output.push(DeflateSym::Literal(data[index]));
+      n_consumed += 1;
+      (dist2, len2, term2, index + 1)
+    } else {
+      (dist1, len1, term, index)
+    };
+
+    match_table.entry(term).or_default().push_front(index);
+
+    n_consumed += mlen;
+    output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
+
+
+    // Debugging output here
+    let offset = data[index].wrapping_sub(data[index - mlen]);
+    println!("Found offset match at ({}, {}, {})", offset, mlen, mdist);
+    println!("Current data is {:?}", &data[index..index+mlen]);
+    println!("Current data is {:?}", &data[index - mdist..index-mdist+mlen]);
+
+    Some((n_consumed, output))
   }
 
   /// Find a DEFLATE backref for this location in the input. These are the backrefs used
   /// by DEFLATE: <length, distance> pairs. Returns a tuple containing the DEFLATE symbol(s)
   /// to add to the output along with a usize indicating how far to advance the input stream.
   fn find_deflate_backref<'a>(
-    match_table: &mut BackrefMap<&'a[u8]>,
+    match_table: &mut BackrefMap<&'a [u8]>,
     data: &'a [u8],
     index: usize,
   ) -> (usize, Vec<DeflateSym>) {
@@ -223,7 +300,7 @@ impl CompressedBlock {
     }
 
     // Find longest match starting at this index
-    let (dist1, len1) = Self::find_longest_match(data, index, &matches);
+    let (dist1, len1) = Self::find_longest_match(data, index, &matches, false);
 
     // Follow the deflate suggestion about deferred matching
     // This is technically wrong since we're looking back too far by 1, but
@@ -231,7 +308,7 @@ impl CompressedBlock {
     let search_term_2 = &data[index + 1..index + 1 + Self::CHUNK_SZ];
     let matches2 = Self::get_matches(&match_table, search_term_2);
     let (dist2, len2) = if !matches2.is_empty() {
-      Self::find_longest_match(data, index + 1, &matches2)
+      Self::find_longest_match(data, index + 1, &matches2, false)
     } else {
       (0, 0)
     };
@@ -291,7 +368,6 @@ impl CompressedBlock {
           *freqs.entry(*lc).or_default() += 1;
         }
         DeflateSym::OffsetBackref(offset, length, _) => {
-
           let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
         }
       }
@@ -304,7 +380,7 @@ impl CompressedBlock {
     for x in self.data.iter() {
       match x {
         DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
-        DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_,_,dist) => {
+        DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_, _, dist) => {
           let dc = &DEFAULT_CODEPOINTS.lookup_dist(*dist).unwrap().codept;
           *freqs.entry(*dc).or_default() += 1;
         }
