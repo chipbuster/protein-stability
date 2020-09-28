@@ -117,6 +117,14 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &Vec<u8>) -> Self {
+    Self::do_lz77(data, false)
+  }
+
+  pub fn bytes_to_lz77_offset(data: &Vec<u8>) -> Self {
+    Self::do_lz77(data, true)
+  }
+
+  fn do_lz77(data: &Vec<u8>, use_offset: bool) -> Self {
     let mut deflate_match_table = HashMap::<&[u8], VecDeque<Index>>::new();
     let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
     let mut output: Vec<DeflateSym> = Vec::new();
@@ -127,12 +135,26 @@ impl CompressedBlock {
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
     // when it ends, hence the cleanup section afterwards.
     while index + Self::CHUNK_SZ < data.len() {
-      let (sz_deflate, mut match_deflate) =
-        Self::find_deflate_backref(&mut deflate_match_table, &data, index);
-      //      let Some(sz_offset, mut match_offset) =
-      //        Self::find_offset_backref(&mut offset_match_table, &data, index);
-      index += sz_deflate;
-      output.append(&mut match_deflate);
+      let (deflate_len, mut deflate_syms) = Self::find_deflate_backref(&mut deflate_match_table, &data, index);
+      let mut offset_match = if use_offset {
+        Self::find_offset_backref(&mut offset_match_table, &data, index)
+      } else {
+        None
+      };
+
+      // Select the match to use based on input options and match lengths
+      let (match_len, mut match_syms) = if let Some((off_len, mut off_syms)) = offset_match {
+        if off_len > deflate_len + 5 {
+          (off_len, off_syms)
+        } else {
+          (deflate_len, deflate_syms)
+        }
+      } else {
+        (deflate_len, deflate_syms)
+      };
+      
+      index += match_len;
+      output.append(&mut match_syms);
     }
 
     // Cleanup: emit the last few unconsumed elements as literals (if needed).
@@ -245,7 +267,7 @@ impl CompressedBlock {
     let (dist1, len1) = Self::find_longest_match(data, index, &matches, true);
 
     // Search at index = index + 1 for a better match
-    let term2 = (data[index+2] - base, data[index+3] - base);
+    let term2 = (data[index + 2] - base, data[index + 3] - base);
     let matches2 = Self::get_matches(&match_table, term2);
     let (dist2, len2) = if !matches2.is_empty() {
       Self::find_longest_match(data, index + 1, &matches2, true)
@@ -267,12 +289,14 @@ impl CompressedBlock {
     n_consumed += mlen;
     output.push(DeflateSym::Backreference(mlen as u16, mdist as u16));
 
-
     // Debugging output here
     let offset = data[index].wrapping_sub(data[index - mlen]);
     println!("Found offset match at ({}, {}, {})", offset, mlen, mdist);
-    println!("Current data is {:?}", &data[index..index+mlen]);
-    println!("Current data is {:?}", &data[index - mdist..index-mdist+mlen]);
+    println!("Current data is {:?}", &data[index..index + mlen]);
+    println!(
+      "Current data is {:?}",
+      &data[index - mdist..index - mdist + mlen]
+    );
 
     Some((n_consumed, output))
   }
