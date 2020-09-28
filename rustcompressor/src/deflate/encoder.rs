@@ -120,6 +120,8 @@ impl CompressedBlock {
     Self::do_lz77(data, false)
   }
 
+  /// Generate a new CompressedBlock by performing LZ77 factorization with the
+  /// custom offset protocol described above.
   pub fn bytes_to_lz77_offset(data: &Vec<u8>) -> Self {
     Self::do_lz77(data, true)
   }
@@ -249,7 +251,7 @@ impl CompressedBlock {
     assert_eq!(Self::CHUNK_SZ, 3);
 
     let base = data[index];
-    let term = (data[index + 1] - base, data[index + 2] - base);
+    let term = (data[index + 1].wrapping_sub(base), data[index + 2].wrapping_sub(base));
 
     let mut output = Vec::new();
     let mut n_consumed = 0usize;
@@ -501,7 +503,7 @@ mod tests {
   use rand::Rng;
 
   #[test]
-  fn round_trip() {
+  fn round_trip_deflate_1() {
     let init_str = "hellohellohelloIamGeronimohello";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
@@ -511,13 +513,42 @@ mod tests {
   }
 
   #[test]
-  fn round_trip_2() {
+  fn round_trip_deflate_2() {
     let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
     let rt = comp.into_bytes().unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
+  }
+
+  #[test]
+  fn round_trip_offset_1() {
+    let init_str = "hellohellohelloIamGeronimohello";
+    let data = init_str.to_owned().into_bytes();
+    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
+    let rt = comp.into_bytes().unwrap();
+    let fini_str = std::str::from_utf8(&rt).unwrap();
+    assert_eq!(init_str, fini_str);
+  }
+
+  #[test]
+  fn round_trip_offset_2() {
+    let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
+    let data = init_str.to_owned().into_bytes();
+    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
+    let rt = comp.into_bytes().unwrap();
+    let fini_str = std::str::from_utf8(&rt).unwrap();
+    assert_eq!(init_str, fini_str);
+  }
+
+  #[test]
+  fn offset_should_create_1() {
+    let data = vec![0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18];
+    let comp = CompressedBlock::bytes_to_lz77(&data);
+    println!("{:?}", comp);
+    let rt = comp.into_bytes().unwrap();
+    assert!(false);
   }
 
   #[test]
