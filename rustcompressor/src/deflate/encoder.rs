@@ -396,6 +396,9 @@ impl CompressedBlock {
         }
         DeflateSym::OffsetBackref(offset, length, _) => {
           let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
+          *freqs.entry(*lc).or_default() += 1;
+          *freqs.entry(*offset as u16).or_default() += 1;
+          *freqs.entry(OFFSET_SIGIL).or_default() += 1;
         }
       }
     }
