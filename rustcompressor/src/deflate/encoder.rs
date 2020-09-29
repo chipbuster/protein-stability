@@ -438,6 +438,8 @@ impl CompressedBlock {
     let length_tree = compile_write_tree(length_codes).unwrap();
     let dist_tree = compile_write_tree(dist_codes).unwrap();
 
+    // TODO: Write out the huffman trees you fucking idiot
+
     for sym in self.data.iter() {
       sym.write_to_stream(bit_sink, &length_tree, Some(&dist_tree))?;
     }
