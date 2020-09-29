@@ -153,7 +153,7 @@ impl GzipData {
 
   // Consume this reader to create a
   pub fn into_decoded(self) -> Result<Vec<u8>, DeflateReadError> {
-    let stream = DeflateStream::new_from_source(self.data.as_slice())?;
+    let stream = DeflateStream::new_from_deflate_encoded_bits(self.data.as_slice())?;
     let crc32 = self.crc32;
     let isz = self.isz;
     stream.into_byte_stream_checked(crc32, isz)

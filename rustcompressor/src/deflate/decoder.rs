@@ -3,8 +3,8 @@ use super::default_data::default_hufftree::default_read_hufftree;
 use super::*;
 use crate::huff_tree::huffcode_from_lengths;
 
-use std::collections::HashMap;
 use std::io::Read;
+use std::{collections::HashMap, convert::TryInto};
 
 use bitstream_io::huffman::compile_read_tree;
 use bitstream_io::{BitReader, LittleEndian};
@@ -68,6 +68,20 @@ impl DeflateSym {
     } else if sym <= 255 {
       debug_log!("Literal {}\n", sym);
       Ok(Self::Literal(sym as u8)) // Sym is within valid range for u8
+    } else if sym == OFFSET_SIGIL {
+      debug_log!("Offset Encoded\n");
+      if !use_offset {
+        return Err(DeflateReadError::UnexpectedEndOfData);
+      }
+      let offset_raw = bit_src.read_huffman(length_tree)?;
+      let len_sym = bit_src.read_huffman(length_tree)?;
+      let (len, dist) = Self::read_length_dist_pair(bit_src, dist_tree, len_sym)?;
+
+      let offset: u8 = match offset_raw.try_into() {
+        Ok(x) => x,
+        Err(p) => return Err(DeflateReadError::CodeOutOfRange(offset_raw)),
+      };
+      Ok(Self::OffsetBackref(offset, len, dist))
     } else {
       let (len, dist) = Self::read_length_dist_pair(bit_src, dist_tree, sym)?;
       Ok(Self::Backreference(len, dist)) // Sym is within valid range for u8
@@ -165,6 +179,28 @@ fn compressed_block_from_stream<R: Read>(
       Err(e) => return Err(e),
     }
   }
+}
+
+fn offset_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+) -> Result<CompressedBlock, DeflateReadError> {
+  debug_log!("Decompressing dynamic block\n");
+  // First, read appropriate values
+  let hlit: u8 = bit_src.read(5)?;
+  let hdist: u8 = bit_src.read(5)?;
+  let hclen: u8 = bit_src.read(4)?;
+
+  let size_codes = read_code_length_codeslength(bit_src, hclen + 4)?;
+
+  let num_literals = 257 + hlit as u16;
+  let num_dists = 1 + hdist as u16;
+
+  debug_log!("{}, {}\n", num_literals, num_dists);
+
+  let (length_tree, dist_tree) =
+    decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;
+
+  compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
 }
 
 fn fixed_block_from_stream<R: Read>(
@@ -317,9 +353,17 @@ fn dynamic_block_from_stream<R: Read>(
 impl BlockData {
   pub fn new_from_compressed_stream<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
+    use_offset: bool,
   ) -> Result<Self, DeflateReadError> {
     let btype = bit_src.read::<u8>(2)?;
     debug_log!("Block type is {}\n", btype);
+    if use_offset {
+      assert!(
+        btype == 0b10,
+        "Requested to decode with offset-backreferences, but block is not dynamically encoded!"
+      );
+    }
+
     match btype {
       0b00 => Ok(Self::Raw(uncompressed_block_from_stream(bit_src)?)),
       0b01 => Ok(Self::Fix(fixed_block_from_stream(bit_src)?)),
@@ -336,10 +380,11 @@ impl BlockData {
 impl Block {
   pub fn new_from_compressed_stream<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
+    use_offset: bool,
   ) -> Result<Self, DeflateReadError> {
     let final_block = bit_src.read_bit()?;
     debug_log!("Got final block bit {}\n", final_block);
-    let data = BlockData::new_from_compressed_stream(bit_src)?;
+    let data = BlockData::new_from_compressed_stream(bit_src, use_offset)?;
     Ok(Block {
       bfinal: final_block,
       data,
@@ -405,12 +450,19 @@ impl CompressedBlock {
 }
 
 impl DeflateStream {
-  pub fn new_from_source<R: Read>(src: R) -> Result<Self, DeflateReadError> {
+  pub fn new_from_offset_encoded_bits<R: Read>(src: R) -> Result<Self, DeflateReadError> {
+    Self::new_from_encoded_bits(src, true)
+  }
+  pub fn new_from_deflate_encoded_bits<R: Read>(src: R) -> Result<Self, DeflateReadError> {
+    Self::new_from_encoded_bits(src, false)
+  }
+
+  fn new_from_encoded_bits<R: Read>(src: R, use_offset: bool) -> Result<Self, DeflateReadError> {
     let mut bit_src = BitReader::<R, LittleEndian>::new(src);
     let mut blocks = Vec::new();
     let mut has_more_blocks = true;
     while has_more_blocks {
-      let res = Block::new_from_compressed_stream(&mut bit_src)?;
+      let res = Block::new_from_compressed_stream(&mut bit_src, use_offset)?;
       has_more_blocks = !res.bfinal;
       blocks.push(res);
     }
@@ -463,7 +515,7 @@ mod tests {
   #[test]
   fn hello_uncompressed() {
     let data = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0xe7, 0x2, 0x0u8];
-    let strm = DeflateStream::new_from_source(&data[..]).unwrap();
+    let strm = DeflateStream::new_from_deflate_encoded_bits(&data[..]).unwrap();
     let decoded = strm.into_byte_stream().unwrap();
     let correct_answer = [72, 101, 108, 108, 111, 10u8];
     assert_eq!(decoded, correct_answer);

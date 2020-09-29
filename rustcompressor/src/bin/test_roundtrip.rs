@@ -30,15 +30,15 @@ fn main() {
   println!("Decoding Compressed data...");
   let data = gzblob.get_data_copy();
   let decoded = {
-    let strm = DeflateStream::new_from_source(data.as_slice()).unwrap();
+    let strm = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap();
     strm.into_byte_stream().unwrap()
   };
 
   println!("Repacking Data without recomputing LZ77");
-  let stream = DeflateStream::new_from_source(data.as_slice()).unwrap();
+  let stream = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap();
   let z: Vec<u8> = Vec::new();
   let _out = stream.write_to_bitstream(z).unwrap();
-  let newbyte = DeflateStream::new_from_source(data.as_slice()).unwrap().into_byte_stream().unwrap();
+  let newbyte = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap().into_byte_stream().unwrap();
   let _newstr = std::str::from_utf8(&newbyte[..]);
 
   assert_eq!(newbyte, decoded);
@@ -49,7 +49,7 @@ fn main() {
   let stream = DeflateStream::new_from_raw_bytes(&decoded);
   let z: Vec<u8> = Vec::new();
   let _out = stream.write_to_bitstream(z).unwrap();
-  let newdecoded = DeflateStream::new_from_source(data.as_slice()).unwrap().into_byte_stream().unwrap();
+  let newdecoded = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap().into_byte_stream().unwrap();
 
   assert_eq!(newdecoded, decoded);
   println!("Outputs are equal after re-computing LZ77");

@@ -10,19 +10,6 @@ use std::{
 };
 use thiserror::Error;
 
-/* Custom DEFLATE extension: an offset backref. This is similar to a DEFLATE
-backref, but the entire sequence is offset by a fixed amount, modulo 255.
-
-That is, to compute the expansion of an offset backref <off, length, dist>, do
-the same thing with the <length, dist> values as you would for an ordinary DEFLATE
-backreference, then add offset (mod 255) to every element of the new sequence.
-
-The presence of an offset backref is indicated in the compressed sequence by
-the symbol value 259 in the length/literal encoding. This is followed by the
-offset value encoded directly in the length/literal encoding, then the
-length and distance as is found in the standard DEFLATE encoding.
-*/
-
 const MAX_HUFF_LEN: Option<usize> = Some(15);
 const MAX_LZ_LEN: usize = 258;
 
@@ -145,11 +132,13 @@ impl CompressedBlock {
         None
       };
 
+      /*
       println!("Data is {:?}", &data[index..index+3]);
       if let Some(x) = offset_match.as_ref(){
         println!("Match is {:?}", x.1);
       }
       println!("{}: {:?}, ({}, {:?})", index, offset_match, deflate_len, deflate_syms);
+      */
 
       // Select the match to use based on input options and match lengths
       let (match_len, mut match_syms) = if let Some((off_len, mut off_syms)) = offset_match {
@@ -498,11 +487,21 @@ impl DeflateStream {
     bit_sink.byte_align()?;
     Ok(bit_sink.into_writer())
   }
+
   pub fn new_from_raw_bytes(data: &Vec<u8>) -> Self {
     Self {
       blocks: vec![Block {
         bfinal: true,
         data: BlockData::Dyn(CompressedBlock::bytes_to_lz77(&data)),
+      }],
+    }
+  }
+
+  pub fn new_from_raw_bytes_offset(data: &Vec<u8>) -> Self {
+    Self {
+      blocks: vec![Block {
+        bfinal: true,
+        data: BlockData::Dyn(CompressedBlock::bytes_to_lz77_offset(&data)),
       }],
     }
   }
@@ -669,7 +668,6 @@ mod tests {
     testvec.append(&mut vec![15,16,17,18,17,16,15]);
     let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
 
-    println!("{:?}", comp.data);
     assert!(comp.data.iter().any(|x| match x {
       DeflateSym::OffsetBackref(_,_,_) => true,
       _ => false,

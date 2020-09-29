@@ -30,7 +30,7 @@ fn main() {
   println!("Attempting to decode data...");
   let data = gzblob.get_data_copy();
   let decoded = {
-    let strm = DeflateStream::new_from_source(data.as_slice()).unwrap();
+    let strm = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap();
     strm.into_byte_stream().unwrap()
   };
   println!("Decoded data is {} bytes", &decoded.len());
