@@ -5,6 +5,7 @@ use std::vec::Vec;
 
 const LDSEP: usize = 30; // The point in DecodeInfo where we switch from
                          // length codes to distance codes.
+pub const OFFSET_SIGIL: u16 = 286;
 
 #[derive(Debug, Copy, Clone)]
 pub struct DecodeCodepoint {

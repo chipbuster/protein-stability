@@ -1,4 +1,4 @@
-use super::default_data::default_codepoints::DecodeInfo;
+use super::default_data::default_codepoints::{DecodeInfo, OFFSET_SIGIL};
 use super::default_data::default_hufftree::default_read_hufftree;
 use super::*;
 use crate::huff_tree::huffcode_from_lengths;
@@ -59,6 +59,7 @@ impl DeflateSym {
     bit_src: &mut BitReader<R, LittleEndian>,
     length_tree: &[DeflateReadTree],
     dist_tree: Option<&[DeflateReadTree]>,
+    use_offset: bool,
   ) -> Result<Self, DeflateReadError> {
     let sym = bit_src.read_huffman(length_tree)?;
     if sym == BLOCK_END {
@@ -68,46 +69,55 @@ impl DeflateSym {
       debug_log!("Literal {}\n", sym);
       Ok(Self::Literal(sym as u8)) // Sym is within valid range for u8
     } else {
-      let len_sym = sym;
-      let len_codept = DEFAULT_CODEPOINTS.lookup_codept(len_sym);
-      assert_eq!(len_codept.codept, len_sym);
-      if len_codept.codept < 255 {
-        println!("Got code {} when looking for a length", len_codept.codept);
-        return Err(DeflateReadError::CodeOutOfRange(sym));
-      }
-      debug_log!("Got length code {} ", len_codept.codept);
-      let len = len_codept.read_value_from_bitstream(bit_src)?;
-      debug_log!("corresponding to match length {}\n", len);
-
-      // Perform second read to get the distance. These are coded by 5 literal
-      // bits, not using the huffman coding of the literal/length bits
-      let dist_sym;
-      if let Some(t) = dist_tree {
-        dist_sym = bit_src.read_huffman(t)?;
-      } else {
-        debug_log!("Using raw bits for distance");
-        // Read the bits in reverse order (for some reason??)
-        let temp: u8 = bit_src.read(5)?;
-        let mut out = 0u8;
-        out |= (temp & 0b00001) << 4;
-        out |= (temp & 0b00010) << 2;
-        out |= temp & 0b00100;
-        out |= (temp & 0b01000) >> 2;
-        out |= (temp & 0b10000) >> 4;
-        dist_sym = out as u16;
-      }
-      let dist_codept = DEFAULT_CODEPOINTS.lookup_codept(dist_sym);
-      assert_eq!(dist_codept.codept, dist_sym);
-      if dist_codept.codept > 29 {
-        println!("Got code {} when looking for a dist", dist_codept.codept);
-        return Err(DeflateReadError::CodeOutOfRange(sym));
-      }
-      debug_log!("Got distance code {} ", dist_codept.codept);
-      let dist = dist_codept.read_value_from_bitstream(bit_src)?;
-      debug_log!("corresponding to match distance {}\n", dist);
-
+      let (len, dist) = Self::read_length_dist_pair(bit_src, dist_tree, sym)?;
       Ok(Self::Backreference(len, dist)) // Sym is within valid range for u8
     }
+  }
+
+  fn read_length_dist_pair<R: Read>(
+    bit_src: &mut BitReader<R, LittleEndian>,
+    dist_tree: Option<&[DeflateReadTree]>,
+    sym: u16,
+  ) -> Result<(u16, u16), DeflateReadError> {
+    let len_sym = sym;
+    let len_codept = DEFAULT_CODEPOINTS.lookup_codept(len_sym);
+    assert_eq!(len_codept.codept, len_sym);
+    if len_codept.codept < 255 {
+      println!("Got code {} when looking for a length", len_codept.codept);
+      return Err(DeflateReadError::CodeOutOfRange(sym));
+    }
+    debug_log!("Got length code {} ", len_codept.codept);
+    let len = len_codept.read_value_from_bitstream(bit_src)?;
+    debug_log!("corresponding to match length {}\n", len);
+
+    // Perform second read to get the distance. These are coded by 5 literal
+    // bits, not using the huffman coding of the literal/length bits
+    let dist_sym;
+    if let Some(t) = dist_tree {
+      dist_sym = bit_src.read_huffman(t)?;
+    } else {
+      debug_log!("Using raw bits for distance");
+      // Read the bits in reverse order (for some reason??)
+      let temp: u8 = bit_src.read(5)?;
+      let mut out = 0u8;
+      out |= (temp & 0b00001) << 4;
+      out |= (temp & 0b00010) << 2;
+      out |= temp & 0b00100;
+      out |= (temp & 0b01000) >> 2;
+      out |= (temp & 0b10000) >> 4;
+      dist_sym = out as u16;
+    }
+    let dist_codept = DEFAULT_CODEPOINTS.lookup_codept(dist_sym);
+    assert_eq!(dist_codept.codept, dist_sym);
+    if dist_codept.codept > 29 {
+      println!("Got code {} when looking for a dist", dist_codept.codept);
+      return Err(DeflateReadError::CodeOutOfRange(sym));
+    }
+    debug_log!("Got distance code {} ", dist_codept.codept);
+    let dist = dist_codept.read_value_from_bitstream(bit_src)?;
+    debug_log!("corresponding to match distance {}\n", dist);
+
+    Ok((len, dist))
   }
 }
 
@@ -143,11 +153,12 @@ fn compressed_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
   length_tree: &[DeflateReadTree],
   dist_tree: Option<&[DeflateReadTree]>,
+  use_offset: bool,
 ) -> Result<CompressedBlock, DeflateReadError> {
   let mut contents = Vec::new();
 
   loop {
-    let sym = DeflateSym::next_from_bitsource(bit_src, length_tree, dist_tree);
+    let sym = DeflateSym::next_from_bitsource(bit_src, length_tree, dist_tree, use_offset);
     match sym {
       Ok(DeflateSym::EndOfBlock) => return Ok(CompressedBlock { data: contents }),
       Ok(x) => contents.push(x),
@@ -160,7 +171,7 @@ fn fixed_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing fixed block\n");
-  compressed_block_from_stream(bit_src, &DEFAULT_READ_TREE, None)
+  compressed_block_from_stream(bit_src, &DEFAULT_READ_TREE, None, false)
 }
 
 /// Unpack the next set of code lengths
@@ -300,7 +311,7 @@ fn dynamic_block_from_stream<R: Read>(
   let (length_tree, dist_tree) =
     decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;
 
-  compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree))
+  compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
 }
 
 impl BlockData {
@@ -384,7 +395,7 @@ impl CompressedBlock {
           Self::expand_backref(length, distance, &mut literals, 0)?;
         }
         DeflateSym::OffsetBackref(offset, length, distance) => {
-          Self::expand_backref(length, distance,  &mut literals, offset)?;
+          Self::expand_backref(length, distance, &mut literals, offset)?;
         }
         DeflateSym::EndOfBlock => break,
       }

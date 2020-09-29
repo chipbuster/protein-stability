@@ -1,4 +1,4 @@
-use super::default_data::default_codepoints::DecodeInfo;
+use super::default_data::default_codepoints::{DecodeInfo, OFFSET_SIGIL};
 use super::*;
 use crate::huff_tree::huffcode_from_freqs;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
@@ -25,7 +25,7 @@ length and distance as is found in the standard DEFLATE encoding.
 
 const MAX_HUFF_LEN: Option<usize> = Some(15);
 const MAX_LZ_LEN: usize = 258;
-const OFFSET_SIGIL: u16 = 259;
+
 lazy_static! {
   static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
 }
