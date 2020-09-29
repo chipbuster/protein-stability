@@ -276,6 +276,8 @@ impl CompressedBlock {
       data[index + 2].wrapping_sub(data[index + 1]),
       data[index + 3].wrapping_sub(data[index + 1]),
     );
+
+    Self::prune_matches(match_table, term2, index + 1, Self::MAX_MATCH_DIST);
     let matches2 = Self::get_matches(&match_table, term2, index);
     let (dist2, len2) = if !matches2.is_empty() {
       Self::find_longest_match(data, index + 1, &matches2, true)
@@ -300,6 +302,9 @@ impl CompressedBlock {
     so that we can add it to the output stream */
     let offset = data[index].wrapping_sub(data[index - mdist]);
     output.push(DeflateSym::OffsetBackref(offset, mlen as u16, mdist as u16));
+
+    assert_eq!(data[index], data[index - mdist].wrapping_add(offset));
+    assert!(mdist <= Self::MAX_MATCH_DIST);
 
     Some((n_consumed, output))
   }
@@ -333,6 +338,7 @@ impl CompressedBlock {
     // This is technically wrong since we're looking back too far by 1, but
     // since our max match isn't the DEFLATE maximum, it's a non-issue atm.
     let search_term_2 = &data[index + 1..index + 1 + Self::CHUNK_SZ];
+    Self::prune_matches(match_table, search_term_2, index + 1, Self::MAX_MATCH_DIST);
     let matches2 = Self::get_matches(&match_table, search_term_2, index);
     let (dist2, len2) = if !matches2.is_empty() {
       Self::find_longest_match(data, index + 1, &matches2, false)
@@ -350,6 +356,7 @@ impl CompressedBlock {
     };
 
     assert!(&data[index - mdist..index - mdist + mlen] == &data[index..index + mlen]);
+    assert!(mdist <= Self::MAX_MATCH_DIST);
     match_table.entry(term).or_default().push_front(index);
 
     n_consumed += mlen;
