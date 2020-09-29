@@ -145,9 +145,15 @@ impl CompressedBlock {
         None
       };
 
+      println!("Data is {:?}", &data[index..index+3]);
+      if let Some(x) = offset_match.as_ref(){
+        println!("Match is {:?}", x.1);
+      }
+      println!("{}: {:?}, ({}, {:?})", index, offset_match, deflate_len, deflate_syms);
+
       // Select the match to use based on input options and match lengths
       let (match_len, mut match_syms) = if let Some((off_len, mut off_syms)) = offset_match {
-        if off_len > deflate_len + 5 {
+        if off_len > deflate_len + 3 {
           (off_len, off_syms)
         } else {
           (deflate_len, deflate_syms)
@@ -303,7 +309,7 @@ impl CompressedBlock {
     /* We have intentionally avoided computing the offset in this funciton so far
     (leaving it for the subroutines to do), but now we need to know what it is
     so that we can add it to the output stream */
-    let offset = data[index].wrapping_sub(data[index - mlen]);
+    let offset = data[index].wrapping_sub(data[index - mdist]);
     output.push(DeflateSym::OffsetBackref(offset, mlen as u16, mdist as u16));
 
     Some((n_consumed, output))
@@ -613,7 +619,7 @@ mod tests {
     if rt != testvec {
       println!(
         "Compressed block: {:?}",
-        CompressedBlock::bytes_to_lz77(&testvec)
+        CompressedBlock::bytes_to_lz77_offset(&testvec)
       );
       println!("Result: {:?}", rt);
       assert_eq!(rt, testvec);
@@ -628,7 +634,7 @@ mod tests {
 
 
   #[test]
-  fn round_trip_randomlike() {
+  fn round_trip_randomlike_deflate() {
     let mut rng = rand::thread_rng();
     let mut testvec = vec![1,2,3,4,3,2,1];
     for _ in 0..100 {
@@ -636,6 +642,38 @@ mod tests {
     }
     testvec.append(&mut vec![15,16,17,18,17,16,15]);
     let comp = CompressedBlock::bytes_to_lz77(&testvec);
+
+
+    let rt = comp.into_decompressed_bytes().unwrap();
+
+
+    if rt != testvec {
+      println!(
+        "Compressed block: {:?}",
+        CompressedBlock::bytes_to_lz77(&testvec)
+      );
+      println!("Result: {:?}", rt);
+      assert_eq!(rt, testvec);
+    }
+  }
+
+  #[test]
+  /// Make sure that, even past a huge glob of claptrap, we're still triggering
+  /// the offset detector.
+  fn round_trip_randomlike_offset(){
+    let mut rng = rand::thread_rng();
+    let mut testvec = vec![1,2,3,4,3,2,1];
+    for _ in 0..100 {
+      testvec.push(rng.gen::<u8>());
+    }
+    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
+
+    println!("{:?}", comp.data);
+    assert!(comp.data.iter().any(|x| match x {
+      DeflateSym::OffsetBackref(_,_,_) => true,
+      _ => false,
+    }));
     let rt = comp.into_decompressed_bytes().unwrap();
 
     if rt != testvec {
@@ -649,9 +687,9 @@ mod tests {
   }
 
   #[test]
-  fn many_random_round_trips() {
+  fn many_random_round_trips_deflate() {
     for _ in 0..10 {
-      round_trip_randomlike()
+      round_trip_randomlike_deflate()
     }
   }
 }
