@@ -19,6 +19,8 @@ fn main() {
   let stream = DeflateStream::new_from_raw_bytes_deflate(&bytes);
   let z: Vec<u8> = Vec::new();
   let out = stream.write_to_bitstream(z).unwrap();
+  let out_nbytes = out.len();
 
-  std::fs::write(&args[2], out);
+  std::fs::write(&args[2], out).unwrap();
+  println!("File size is {} bytes", out_nbytes);
 }
