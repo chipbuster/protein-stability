@@ -46,7 +46,7 @@ fn main() {
 
   println!("=================");
   println!("Repacking Data by recomputing LZ77");
-  let stream = DeflateStream::new_from_raw_bytes(&decoded);
+  let stream = DeflateStream::new_from_raw_bytes_deflate(&decoded);
   let z: Vec<u8> = Vec::new();
   let _out = stream.write_to_bitstream(z).unwrap();
   let newdecoded = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap().into_byte_stream().unwrap();

@@ -438,7 +438,8 @@ impl CompressedBlock {
     let length_tree = compile_write_tree(length_codes).unwrap();
     let dist_tree = compile_write_tree(dist_codes).unwrap();
 
-    // TODO: Write out the huffman trees you fucking idiot
+    // TODO: Write out the huffman trees you fucking idiot what the fuck do you
+    // think you're doing holy shit you're so bad at this, I mean fuck me
 
     for sym in self.data.iter() {
       sym.write_to_stream(bit_sink, &length_tree, Some(&dist_tree))?;
@@ -490,7 +491,7 @@ impl DeflateStream {
     Ok(bit_sink.into_writer())
   }
 
-  pub fn new_from_raw_bytes(data: &Vec<u8>) -> Self {
+  pub fn new_from_raw_bytes_deflate(data: &Vec<u8>) -> Self {
     Self {
       blocks: vec![Block {
         bfinal: true,
@@ -516,6 +517,7 @@ mod tests {
   #[allow(unused_imports)]
   use super::*;
   use rand::Rng;
+
 
   #[test]
   fn round_trip_deflate_1() {

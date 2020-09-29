@@ -15,7 +15,7 @@ fn main() {
   let infilename = &args[1];
   let bytes = std::fs::read(infilename).unwrap();
 
-  let stream = DeflateStream::new_from_raw_bytes(&bytes);
+  let stream = DeflateStream::new_from_raw_bytes_deflate(&bytes);
   let z: Vec<u8> = Vec::new();
   let out = stream.write_to_bitstream(z).unwrap();
 
