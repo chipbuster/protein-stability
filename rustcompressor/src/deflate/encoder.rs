@@ -124,9 +124,9 @@ impl CompressedBlock {
     // expanding matches as needed. This loop does not guarantee that all input has been encoded
     // when it ends, hence the cleanup section afterwards.
     while index + Self::CHUNK_SZ < data.len() {
-      let (deflate_len, mut deflate_syms) =
+      let (deflate_len, deflate_syms) =
         Self::find_deflate_backref(&mut deflate_match_table, &data, index);
-      let mut offset_match = if use_offset {
+      let offset_match = if use_offset {
         Self::find_offset_backref(&mut offset_match_table, &data, index)
       } else {
         None
@@ -141,7 +141,7 @@ impl CompressedBlock {
       */
 
       // Select the match to use based on input options and match lengths
-      let (match_len, mut match_syms) = if let Some((off_len, mut off_syms)) = offset_match {
+      let (match_len, mut match_syms) = if let Some((off_len, off_syms)) = offset_match {
         if off_len > deflate_len + 3 {
           (off_len, off_syms)
         } else {
@@ -216,7 +216,6 @@ impl CompressedBlock {
   ) -> (Dist, Len) {
     let mut max_len = 0usize;
     let mut max_index = 0usize;
-    let min_match_dist = 3usize;
     assert!(!match_indices.is_empty());
     for m in match_indices {
       let i = **m;

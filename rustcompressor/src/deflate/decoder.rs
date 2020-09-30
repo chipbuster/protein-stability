@@ -79,7 +79,7 @@ impl DeflateSym {
 
       let offset: u8 = match offset_raw.try_into() {
         Ok(x) => x,
-        Err(p) => return Err(DeflateReadError::CodeOutOfRange(offset_raw)),
+        Err(_) => return Err(DeflateReadError::CodeOutOfRange(offset_raw)),
       };
       Ok(Self::OffsetBackref(offset, len, dist))
     } else {
