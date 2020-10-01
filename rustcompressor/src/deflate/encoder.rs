@@ -441,17 +441,22 @@ impl CompressedBlock {
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
     let lit_freq = self.compute_lengthlit_freq();
-    let dist_freq = self.compute_dist_freq();
     let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
-    let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
     let length_tree = compile_write_tree(length_codes).unwrap();
-    let dist_tree = compile_write_tree(dist_codes).unwrap();
+
+    let dist_freq = self.compute_dist_freq();
+    let dist_tree = if dist_freq.is_empty() {
+        None
+    } else {
+        let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
+        Some(compile_write_tree(dist_codes).expect("Could not compile write tree"))
+    };
 
     // TODO: Write out the huffman trees you fucking idiot what the fuck do you
     // think you're doing holy shit you're so bad at this, I mean fuck me
 
     for sym in self.data.iter() {
-      sym.write_to_stream(bit_sink, &length_tree, Some(&dist_tree))?;
+      sym.write_to_stream(bit_sink, &length_tree, dist_tree.as_ref())?;
     }
     Ok(())
   }

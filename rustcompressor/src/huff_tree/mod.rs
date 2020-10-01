@@ -108,8 +108,20 @@ pub fn huffcode_from_freqs<S>(
 where
   S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug + Copy,
 {
+  assert_ne!(codefreqs.len(), 0);
   let maxlen = maxlen_inp.unwrap_or_else(|| usize::MAX);
-  let codelens = get_codeslens_restricted(&codefreqs, maxlen);
+  let codelens = if codefreqs.len() == 1 {
+    // A stupid workaround for the package-merge algorithm creating blanks
+    // if fed a singleton. Fix this later.
+    let k1: Vec<&S> = codefreqs.keys().collect();
+    let k = k1[0].clone();
+    let v = 1;
+    let mut x = HashMap::new();
+    x.insert(k,v);
+    x
+  } else {
+    get_codeslens_restricted(&codefreqs, maxlen)
+  };
   huffcode_from_lengths(&codelens)
 }
 
