@@ -1,8 +1,7 @@
-use super::default_data::default_codepoints::{DecodeInfo, OFFSET_SIGIL};
+use super::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
 use super::*;
 use crate::huff_tree::huffcode_from_freqs;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
-use lazy_static::lazy_static;
 use std::io::Write;
 use std::{
   collections::{HashMap, VecDeque},
@@ -12,10 +11,6 @@ use thiserror::Error;
 
 const MAX_HUFF_LEN: Option<usize> = Some(15);
 const MAX_LZ_LEN: usize = 258;
-
-lazy_static! {
-  static ref DEFAULT_CODEPOINTS: DecodeInfo = DecodeInfo::new();
-}
 
 type BackrefMap<S> = HashMap<S, VecDeque<Index>>;
 
@@ -37,59 +32,19 @@ impl DeflateSym {
     dist_tree: Option<&DeflateWriteTree>,
   ) -> Result<(), DeflateWriteError> {
     match self {
+      DeflateSym::Literal(x) => bit_sink.write_huffman(length_tree, (*x) as u16)?,
       DeflateSym::EndOfBlock => bit_sink.write_huffman(length_tree, 256)?,
-      DeflateSym::Literal(sym) => bit_sink.write_huffman(length_tree, *sym as u16)?,
-      DeflateSym::Backreference(length, dist) => {
-        Self::write_length_to_stream(bit_sink, *length, length_tree)?;
-        Self::write_dist_to_stream(bit_sink, *dist, dist_tree)?;
+      DeflateSym::Backreference(len, dist) => {
+        DEFAULT_CODEPOINTS.write_length(*len, length_tree, bit_sink)?;
+        DEFAULT_CODEPOINTS.write_dist(*dist, dist_tree, bit_sink)?;
       }
-      DeflateSym::OffsetBackref(offset, length, dist) => {
-        bit_sink.write_huffman(length_tree, OFFSET_SIGIL)?;
-        bit_sink.write_huffman(length_tree, *offset as u16)?;
-        Self::write_length_to_stream(bit_sink, *length, length_tree)?;
-        Self::write_dist_to_stream(bit_sink, *dist, dist_tree)?;
+      DeflateSym::OffsetBackref(offset, len, dist) => {
+        DEFAULT_CODEPOINTS.write_offset(*offset, length_tree, bit_sink)?;
+        DEFAULT_CODEPOINTS.write_length(*len, length_tree, bit_sink)?;
+        DEFAULT_CODEPOINTS.write_dist(*dist, dist_tree, bit_sink)?;
       }
     }
     Ok(())
-  }
-
-  fn write_dist_to_stream<W: Write>(
-    bit_sink: &mut BitWriter<W, LittleEndian>,
-    dist: u16,
-    dist_tree: Option<&DeflateWriteTree>,
-  ) -> Result<(), DeflateWriteError> {
-    if let Some(c) = &DEFAULT_CODEPOINTS.lookup_dist(dist) {
-      let extra_bits = dist - c.lo;
-      if let Some(d) = dist_tree {
-        bit_sink.write_huffman(d, c.codept)?;
-      } else {
-        let temp = c.codept;
-        let mut out = 0u16;
-        out |= (temp & 0b00001) << 4;
-        out |= (temp & 0b00010) << 2;
-        out |= temp & 0b00100;
-        out |= (temp & 0b01000) >> 2;
-        out |= (temp & 0b10000) >> 4;
-        bit_sink.write(5, out)?;
-      }
-      bit_sink.write(c.nbits as u32, extra_bits)?;
-      return Ok(());
-    }
-    Err(DeflateWriteError::DistOutOfRange(dist))
-  }
-
-  fn write_length_to_stream<W: Write>(
-    bit_sink: &mut BitWriter<W, LittleEndian>,
-    length: u16,
-    length_tree: &DeflateWriteTree,
-  ) -> Result<(), DeflateWriteError> {
-    if let Some(c) = &DEFAULT_CODEPOINTS.lookup_length(length) {
-      let extra_bits = length - c.lo;
-      bit_sink.write_huffman(length_tree, c.codept)?;
-      bit_sink.write(c.nbits as u32, extra_bits)?;
-      return Ok(());
-    }
-    Err(DeflateWriteError::LengthOutOfRange(length))
   }
 }
 
@@ -397,11 +352,11 @@ impl CompressedBlock {
         DeflateSym::Literal(sym) => *freqs.entry(*sym as u16).or_default() += 1,
         DeflateSym::EndOfBlock => *freqs.entry(256).or_default() += 1,
         DeflateSym::Backreference(length, _) => {
-          let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
+          let lc = &DEFAULT_CODEPOINTS.get_codepoint_for_length(*length).code();
           *freqs.entry(*lc).or_default() += 1;
         }
         DeflateSym::OffsetBackref(offset, length, _) => {
-          let lc = &DEFAULT_CODEPOINTS.lookup_length(*length).unwrap().codept;
+          let lc = &DEFAULT_CODEPOINTS.get_codepoint_for_length(*length).code();
           *freqs.entry(*lc).or_default() += 1;
           *freqs.entry(*offset as u16).or_default() += 1;
           *freqs.entry(OFFSET_SIGIL).or_default() += 1;
@@ -417,7 +372,7 @@ impl CompressedBlock {
       match x {
         DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
         DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_, _, dist) => {
-          let dc = &DEFAULT_CODEPOINTS.lookup_dist(*dist).unwrap().codept;
+          let dc = &DEFAULT_CODEPOINTS.get_codepoint_for_dist(*dist).code();
           *freqs.entry(*dc).or_default() += 1;
         }
       }

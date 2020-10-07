@@ -22,8 +22,9 @@ encodings specified in RFC 1951.
 For simplicity, offset encoding is always used with a dynamic huffman code.
 */
 
-pub mod decoder;
 mod default_data;
+mod codepoints;
+pub mod decoder;
 pub mod encoder;
 
 use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
@@ -87,7 +88,6 @@ mod test {
     let decoded = DeflateStream::new_from_deflate_encoded_bits(&encoded[..]).unwrap();
     decoded.into_byte_stream().unwrap()
   }
-
 
   // Take some string of bytes and roundtrip it down to the bit level
   fn roundtrip_bitlevel_offset(data: &Vec<u8>) -> Vec<u8>{
