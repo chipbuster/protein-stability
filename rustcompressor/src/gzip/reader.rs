@@ -107,7 +107,6 @@ impl GzipData {
       )));
     }
     let isize_bytes = remainder.split_off(remainder.len() - 4);
-    println!("{:?}", isize_bytes);
     let crc32_bytes = remainder.split_off(remainder.len() - 4);
     let isz = u32::from_le_bytes(isize_bytes.as_slice().try_into().unwrap());
     let crc32 = u32::from_le_bytes(crc32_bytes.as_slice().try_into().unwrap());

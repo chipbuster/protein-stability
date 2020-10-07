@@ -4,7 +4,7 @@ pub mod writer;
 use bitflags::bitflags;
 use crc32fast::Hasher;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::fmt;
+use std::fmt::{self, Write};
 use std::num::NonZeroU32;
 
 /* Structure from RFC 1952
@@ -204,10 +204,8 @@ impl GzipData {
   }
 
   // Intentionally ignore EXTRA for the moment.
-}
 
-impl fmt::Display for GzipData {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  pub fn fmt_header<W:Write>(&self, f: &mut W) -> fmt::Result {
     write!(
       f,
       r#"GZip Data:
@@ -235,8 +233,10 @@ impl fmt::Display for GzipData {
     }
 
     write!(f, "CRC32: {:x?}\n", self.crc32)?;
-    write!(f, "Num Bytes: {}\n", self.isz)?;
+    write!(f, "Num Bytes: {}\n", self.isz)
+  }
 
+  pub fn fmt_data<W: Write>(&self, f: &mut W) -> fmt::Result {
     let mut i = 0usize;
     write!(f, "Data: [")?;
     'dataprint: loop {
@@ -250,6 +250,13 @@ impl fmt::Display for GzipData {
       write!(f, "\n")?;
     }
     write!(f, "];\n")
+  }
+}
+
+impl fmt::Display for GzipData {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    self.fmt_header(f)?;
+    self.fmt_data(f)
   }
 }
 
