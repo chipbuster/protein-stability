@@ -16,6 +16,9 @@
 #define D_BTMODE 1
 #define D_NUMOFHASHBYTES 4
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
 static bool init_encoder(lzma_stream *strm) {
   // The lzma_options_lzma structure and the lzma_lzma_preset() function
   // are declared in lzma/lzma.h (src/liblzma/api/lzma/lzma.h in the
@@ -54,7 +57,6 @@ static bool init_encoder(lzma_stream *strm) {
   case LZMA_MEM_ERROR:
     msg = "Memory allocation failed";
     break;
-
   case LZMA_OPTIONS_ERROR:
     msg = "Specified filter chain is not supported";
     break;
@@ -76,45 +78,49 @@ static bool init_encoder(lzma_stream *strm) {
 size_t compress_data(lzma_stream *strm, const uint8_t *data, size_t length) {
   lzma_action action = LZMA_RUN;
  
-  size_t bufsz = length + length / 5; // Some slack for too-large buffers
+  // Our compressed output might be larger than the input (slightly). Add some
+  // padding to account for this.
+  size_t padding = MAX(100, length / 10);
+  size_t outlength = length + padding;
 
-  uint8_t *outbuf = malloc(bufsz);
+  uint8_t *outbuf = malloc(outlength);
 
   strm->next_in = data;
   strm->avail_in = length;
   strm->next_out = outbuf;
-  strm->avail_out = bufsz;
+  strm->avail_out = outlength;
 
   lzma_ret ret = lzma_code(strm, action);
   lzma_ret ret2 = lzma_code(strm, LZMA_FINISH);
+  while (ret2 == LZMA_OK) {
+    // From example: It is important to check for LZMA_STREAM_END. Do not assume
+    // that getting ret != LZMA_OK would mean that everything has gone well.
+    ret2 = lzma_code(strm, LZMA_FINISH);
+  }
 
   free(outbuf);
 
   if (ret == LZMA_OK && ret2 == LZMA_STREAM_END) {
-    return bufsz - strm->avail_out;
+    return outlength - strm->avail_out;
   } else {
+    // Check which one failed. If both failed, prefer the first failure.
+    lzma_ret err_code = ret != LZMA_OK ? ret : ret2;
+
     const char *msg;
-    switch (ret) {
-    case LZMA_MEM_ERROR:
+    if (err_code == LZMA_MEM_ERROR) {
       msg = "Memory allocation failed";
-      break;
-
-    case LZMA_DATA_ERROR:
+    } else if (err_code == LZMA_DATA_ERROR) {
       msg = "File size limits exceeded";
-      break;
-
-    case LZMA_BUF_ERROR:
+    } else if (err_code == LZMA_OK) {
+      msg = "Internal library error--LZMA_OK should be impossible";
+    } else if (err_code == LZMA_BUF_ERROR) {
       // Last time, caused by having too small an output buffer. Fixed by adding
       // a factor of length/5 to the output, to account for files larger than in
-      msg = "Buffer error: no progress is possible";
-      break;
-
-    default:
+      msg = "LZMA_BUF_ERROR, no progress possible. Likely an internal library error";
+    } else {
       msg = "Unknown error, possibly a bug";
-      break;
     }
-
-    fprintf(stderr, "Encoder error: %s (error code %u)\n", msg, ret);
+    fprintf(stderr, "Encoder error: %s (error code %u, %u)\n", msg, ret, ret2);
     return -1;
   }
 }

@@ -107,7 +107,7 @@ function bond_length_trace(trace, output=nothing)
         output
     end
     @inbounds for t in 1:nsteps
-        bond_lengths[:,t] = bond_length_frame(dataset[:,:,t])
+        bond_lengths[:,t] = bond_length_frame(trace[:,:,t])
     end
     return bond_lengths
 end
@@ -121,7 +121,7 @@ function bond_angle_trace(trace, output=nothing)
         output
     end
     @inbounds for t in 1:nsteps
-        bond_angles[:,t] = bond_angle_frame(dataset[:,:,t])
+        bond_angles[:,t] = bond_angle_frame(trace[:,:,t])
     end
     return bond_angles
 end
@@ -135,7 +135,7 @@ function bond_dihedral_trace(trace, output=nothing)
         output
     end
     @inbounds for t in 1:nsteps
-        bond_dihedrals[:,t] = bond_dihedral_frame(dataset[:,:,t])
+        bond_dihedrals[:,t] = bond_dihedral_frame(trace[:,:,t])
     end
     return bond_dihedrals
 end
