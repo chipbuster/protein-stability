@@ -26,6 +26,7 @@ pub mod default_data;
 mod deflate_header;
 mod codepoints;
 pub mod decoder;
+pub mod display;
 pub mod encoder;
 
 use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
@@ -59,6 +60,7 @@ pub struct UncompressedBlock {
 
 #[derive(Debug)]
 pub struct CompressedBlock {
+  tree: Vec<(u16, Vec<u8>)>,
   data: Vec<DeflateSym>,
 }
 
