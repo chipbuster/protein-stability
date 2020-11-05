@@ -1,4 +1,4 @@
-use crate::deflate::{DeflateReadTree, DeflateWriteTree};
+use crate::deflate::{DeflateReadTree, DeflateWriteTree, CodeDict};
 use bitstream_io::huffman::{compile_read_tree, compile_write_tree};
 use std::vec::Vec;
 
@@ -24,7 +24,7 @@ pub fn increment_bit_slice(mut arg: Vec<u8>) -> Option<Vec<u8>> {
   Some(arg)
 }
 
-fn default_hufftree() -> Vec<(u16, Vec<u8>)> {
+fn default_hufftree() -> CodeDict<u16> {
   let mut huff_values = Vec::with_capacity(288);
 
   // Code Block 1: 00110000 through 10111111 for values 0-143

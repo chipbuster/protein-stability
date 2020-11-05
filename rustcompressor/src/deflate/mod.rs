@@ -22,7 +22,8 @@ encodings specified in RFC 1951.
 For simplicity, offset encoding is always used with a dynamic huffman code.
 */
 
-mod default_data;
+pub mod default_data;
+mod deflate_header;
 mod codepoints;
 pub mod decoder;
 pub mod encoder;
@@ -32,6 +33,12 @@ use bitstream_io::LittleEndian;
 
 type DeflateReadTree = ReadHuffmanTree<LittleEndian, u16>;
 type DeflateWriteTree = WriteHuffmanTree<LittleEndian, u16>;
+
+/// A dictionary of code-length per symbol
+type CodeLengthDict<S> = Vec<(S, u8)>;
+
+/// An encoding dictionary, pre-compilation
+type CodeDict<S> = Vec<(S, Vec<u8>)>;
 
 /** Represents a compressed symbol in the DEFLATE stream: either a literal in
 0-255 or <length, distance> pair.
@@ -98,17 +105,13 @@ mod test {
     decoded.into_byte_stream().unwrap()
   }
 
-  /* Round trip tests are broken pending implementation of huffman tree writing
-     for dynamic blocks because I'M SO BAD AT THIS HOLY SHIT */
-
-     /*
   #[test]
   pub fn toplevel_roundtrip_1(){
     let data = "hellohellohelloIamGeronimohello".into();
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
-    let rt_offset = roundtrip_bitlevel_offset(&data);
-
     assert_eq!(rt_deflate, data);
+
+    let rt_offset = roundtrip_bitlevel_offset(&data);
     assert_eq!(rt_offset, data);
   }
 
@@ -147,5 +150,4 @@ mod test {
     assert_eq!(rt_deflate, data);
     assert_eq!(rt_offset, data);
   }
-*/
 }

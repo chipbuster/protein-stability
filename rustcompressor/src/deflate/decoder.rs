@@ -1,6 +1,8 @@
 use super::codepoints::DEFAULT_CODEPOINTS;
 use super::default_data::default_hufftree::default_read_hufftree;
 use super::*;
+use super::deflate_header::*;
+use crate::deflate::deflate_header::decode_huffman_alphabets;
 use crate::huff_tree::huffcode_from_lengths;
 
 use std::io::Read;
@@ -104,21 +106,9 @@ fn compressed_block_from_stream<R: Read>(
 fn offset_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
 ) -> Result<CompressedBlock, DeflateReadError> {
-  debug_log!("Decompressing dynamic block\n");
-  // First, read appropriate values
-  let hlit: u8 = bit_src.read(5)?;
-  let hdist: u8 = bit_src.read(5)?;
-  let hclen: u8 = bit_src.read(4)?;
-
-  let size_codes = read_code_length_codeslength(bit_src, hclen + 4)?;
-
-  let num_literals = 257 + hlit as u16;
-  let num_dists = 1 + hdist as u16;
-
-  debug_log!("{}, {}\n", num_literals, num_dists);
-
+  debug_log!("Decompressing offset block\n");
   let (length_tree, dist_tree) =
-    decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;
+    read_header(bit_src)?;
 
   compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
 }
@@ -130,142 +120,13 @@ fn fixed_block_from_stream<R: Read>(
   compressed_block_from_stream(bit_src, &DEFAULT_READ_TREE, None, false)
 }
 
-/// Unpack the next set of code lengths
-fn read_code_length_codeslength<R: Read>(
-  bit_src: &mut BitReader<R, LittleEndian>,
-  num_codes: u8,
-) -> Result<Box<[DeflateReadTree]>, DeflateReadError> {
-  let nc = num_codes as usize;
-  let raw_code_order = vec![
-    16u16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
-  ];
-  let mut codecodelen = HashMap::new();
-  let codes = &raw_code_order[0..nc];
-  for code in codes.into_iter() {
-    let ccl: usize = bit_src.read::<u8>(3)? as usize;
-    codecodelen.insert(*code, ccl);
-  }
-
-  let lens = huffcode_from_lengths(&codecodelen);
-
-  match bitstream_io::huffman::compile_read_tree(lens) {
-    Ok(x) => Ok(x),
-    Err(_) => Err(DeflateReadError::HuffTreeError),
-  }
-}
-
-/// Read the bitstream and get codelengths for the literal/distance alphabet
-/// in accordance with 3.2.7 of RFC 1951
-fn decode_huffman_alphabets<R: Read>(
-  bit_src: &mut BitReader<R, LittleEndian>,
-  size_huffman: &[DeflateReadTree],
-  num_literals: u16,
-  num_distances: u16,
-) -> Result<(Box<[DeflateReadTree]>, Box<[DeflateReadTree]>), DeflateReadError> {
-  let num_symbols = num_literals + num_distances;
-  let mut lengths = Vec::new();
-  let mut ctr = 0u16;
-  while ctr < num_symbols {
-    let s = bit_src.read_huffman(size_huffman)?;
-    match s {
-      0..=15 => {
-        debug_log!("Adding codelength of length-{}\n", s);
-        lengths.push(s);
-        ctr += 1;
-      }
-      16 => {
-        let r: u8 = bit_src.read(2)?;
-        let repeat_length = 3 + r;
-        let repeat_code = *lengths.last().unwrap();
-        debug_log!(
-          "Adding {} codelengths of length-{}\n",
-          repeat_length,
-          repeat_code
-        );
-        for _ in 0..repeat_length {
-          lengths.push(repeat_code);
-        }
-        ctr += repeat_length as u16;
-      }
-      17 => {
-        let r: u8 = bit_src.read(3)?;
-        let repeat_length = 3 + r;
-        debug_log!("Adding {} 0-length codes\n", repeat_length);
-        for _ in 0..repeat_length {
-          lengths.push(0);
-        }
-        ctr += repeat_length as u16;
-      }
-      18 => {
-        let r: u8 = bit_src.read(7)?;
-        let repeat_length = 11 + r;
-        debug_log!("Adding {} 0-length codes\n", repeat_length);
-        for _ in 0..repeat_length {
-          lengths.push(0);
-        }
-        ctr += repeat_length as u16;
-      }
-      _ => return Err(DeflateReadError::CodeOutOfRange(s)),
-    }
-  }
-
-  assert!(num_distances < num_literals);
-  assert_eq!(lengths.len(), (num_literals + num_distances) as usize);
-  // We now have the codelengths for distances and sizes. Get Huffman Code by
-  // generating appropriate hashmaps;
-  let mut literal_lengths = HashMap::<u16, usize>::new();
-  let mut dist_lengths = HashMap::<u16, usize>::new();
-  let max_literal = num_literals as usize - 1;
-  // What the actual fuck am I doing here this is a monstrosity
-  for (j, length) in lengths.into_iter().enumerate() {
-    let symbol = j as u16;
-    let symlen = length as usize;
-    if j <= max_literal {
-      literal_lengths.insert(symbol, symlen);
-    } else {
-      let symbol = j - max_literal - 1;
-      let symbol = symbol as u16;
-      dist_lengths.insert(symbol, symlen);
-    }
-  }
-  debug_log!(
-    "{} literals and {} distance\n",
-    literal_lengths.len(),
-    dist_lengths.len()
-  );
-  let litlen_code = huffcode_from_lengths(&literal_lengths);
-  let dist_code = huffcode_from_lengths(&dist_lengths);
-
-  let litlen_tree = match compile_read_tree(litlen_code) {
-    Ok(x) => x,
-    Err(_) => return Err(DeflateReadError::HuffTreeError),
-  };
-  let dist_tree = match compile_read_tree(dist_code) {
-    Ok(x) => x,
-    Err(_) => return Err(DeflateReadError::HuffTreeError),
-  };
-
-  Ok((litlen_tree, dist_tree))
-}
-
 fn dynamic_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing dynamic block\n");
-  // First, read appropriate values
-  let hlit: u8 = bit_src.read(5)?;
-  let hdist: u8 = bit_src.read(5)?;
-  let hclen: u8 = bit_src.read(4)?;
-
-  let size_codes = read_code_length_codeslength(bit_src, hclen + 4)?;
-
-  let num_literals = 257 + hlit as u16;
-  let num_dists = 1 + hdist as u16;
-
-  debug_log!("{}, {}\n", num_literals, num_dists);
 
   let (length_tree, dist_tree) =
-    decode_huffman_alphabets(bit_src, &size_codes, num_literals, num_dists)?;
+    read_header(bit_src)?;
 
   compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
 }

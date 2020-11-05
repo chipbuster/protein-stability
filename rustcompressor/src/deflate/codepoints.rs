@@ -221,7 +221,6 @@ impl CodepointEncoder {
 
   /// Given a length to encode, find the appropriate codepoint for it.
   pub fn get_codepoint_for_length(&self, val: u16) -> Codepoint {
-    assert!(val >= MIN_LENGTH_CODE && val <= MAX_LENGTH_CODE);
     for pt in self.length_codepoints.iter() {
       if val >= pt.lo && val <= pt.hi {
         return *pt;
@@ -232,7 +231,6 @@ impl CodepointEncoder {
 
   /// Given a distance to encode, find the appropriate codepoint for it.
   pub fn get_codepoint_for_dist(&self, val: u16) -> Codepoint {
-    assert!(val >= MIN_DIST_CODE && val <= MAX_DIST_CODE);
     for pt in self.dist_codepoints.iter() {
       if val >= pt.lo && val <= pt.hi {
         return *pt;

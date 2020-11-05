@@ -43,7 +43,7 @@ fn bitvec_to_bytes(v: &BitVec) -> Vec<u8> {
   out
 }
 
-/// Given the code lengths per symbol,
+/// Given the code lengths per symbol, compute a canonical huffman code
 pub fn huffcode_from_lengths<S>(codelens: &HashMap<S, usize>) -> Vec<(S, Vec<u8>)>
 where
   S: Eq + PartialEq + Hash + PartialOrd + Ord + Clone + Debug,
@@ -101,6 +101,8 @@ where
   output
 }
 
+// Given a set of code frequencies, compute the canonical huffman coding. Optionally
+// can limit the maximum codelength used.
 pub fn huffcode_from_freqs<S>(
   codefreqs: &HashMap<S, usize>,
   maxlen_inp: Option<usize>,

@@ -1,6 +1,7 @@
 use super::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
 use super::*;
 use crate::huff_tree::huffcode_from_freqs;
+use crate::deflate::deflate_header::write_header;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
 use std::io::Write;
 use std::{
@@ -31,6 +32,7 @@ impl DeflateSym {
     length_tree: &DeflateWriteTree,
     dist_tree: Option<&DeflateWriteTree>,
   ) -> Result<(), DeflateWriteError> {
+    println!("Writing {:?} to stream", self);
     match self {
       DeflateSym::Literal(x) => bit_sink.write_huffman(length_tree, (*x) as u16)?,
       DeflateSym::EndOfBlock => bit_sink.write_huffman(length_tree, 256)?,
@@ -115,6 +117,9 @@ impl CompressedBlock {
       output.push(DeflateSym::Literal(data[index]));
       index += 1
     }
+
+    // Add an end-of-stream indicator
+    output.push(DeflateSym::EndOfBlock);
     Self { data: output }
   }
 
@@ -397,18 +402,19 @@ impl CompressedBlock {
   ) -> Result<(), DeflateWriteError> {
     let lit_freq = self.compute_lengthlit_freq();
     let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
-    let length_tree = compile_write_tree(length_codes).unwrap();
+    let length_tree = compile_write_tree(length_codes.clone()).unwrap();
 
     let dist_freq = self.compute_dist_freq();
+    let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
     let dist_tree = if dist_freq.is_empty() {
         None
     } else {
-        let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
-        Some(compile_write_tree(dist_codes).expect("Could not compile write tree"))
+        Some(compile_write_tree(dist_codes.clone()).expect("Could not compile write tree"))
     };
 
-    // TODO: Write out the huffman trees you fucking idiot what the fuck do you
-    // think you're doing holy shit you're so bad at this, I mean fuck me
+    write_header(bit_sink, &length_codes, &dist_codes)?;
+
+    println!("Header Written!");
 
     for sym in self.data.iter() {
       sym.write_to_stream(bit_sink, &length_tree, dist_tree.as_ref())?;
