@@ -1,7 +1,7 @@
 use super::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
 use super::*;
-use crate::huff_tree::huffcode_from_freqs;
 use crate::deflate::deflate_header::write_header;
+use crate::huff_tree::huffcode_from_freqs;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
 use std::io::Write;
 use std::{
@@ -135,7 +135,7 @@ impl CompressedBlock {
     assert!(data_start > match_start); // Assert that we're looking back, not forwards
     let no_data_overrun = data_start + length < data.len();
     let match_no_overlap = match_start + length <= data_start;
-    if !no_data_overrun || !match_no_overlap{
+    if !no_data_overrun || !match_no_overlap {
       return false;
     }
     let data_match =
@@ -405,14 +405,20 @@ impl CompressedBlock {
     let length_tree = compile_write_tree(length_codes.clone()).unwrap();
 
     let dist_freq = self.compute_dist_freq();
-    let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
-    let dist_tree = if dist_freq.is_empty() {
-        None
+    let dist_freq = if dist_freq.is_empty() {
+      None
     } else {
-        Some(compile_write_tree(dist_codes.clone()).expect("Could not compile write tree"))
+      Some(dist_freq)
     };
 
-    write_header(bit_sink, &length_codes, &dist_codes)?;
+    let dist_codes = dist_freq
+      .as_ref()
+      .map(|codefreqs| huffcode_from_freqs(codefreqs, MAX_HUFF_LEN));
+    let dist_tree = dist_codes.as_ref().map(|dist_codes| {
+      compile_write_tree(dist_codes.clone()).expect("Could not compile write tree")
+    });
+
+    write_header(bit_sink, &length_codes, dist_codes.as_ref().unwrap_or(&Vec::new()))?;
 
     println!("Header Written!");
 
@@ -493,7 +499,6 @@ mod tests {
   use super::*;
   use rand::Rng;
 
-
   #[test]
   fn round_trip_deflate_1() {
     let init_str = "hellohellohelloIamGeronimohello";
@@ -565,6 +570,7 @@ mod tests {
       DeflateSym::Literal(8),
       DeflateSym::OffsetBackref(9, 8, 8),
       DeflateSym::Literal(18),
+      DeflateSym::EndOfBlock,
     ];
     assert_eq!(symstream, answer);
   }
@@ -581,15 +587,15 @@ mod tests {
 
   #[test]
   fn round_trip_offset() {
-    let mut testvec = vec![1,2,3,4,3,2,1];
+    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
     for i in 0..10 {
       testvec.push(i);
     }
-    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
     println!("{:?}", comp.data);
     assert!(comp.data.iter().any(|x| match x {
-      DeflateSym::OffsetBackref(_,_,_) => true,
+      DeflateSym::OffsetBackref(_, _, _) => true,
       _ => false,
     }));
     let rt = comp.into_decompressed_bytes().unwrap();
@@ -607,23 +613,19 @@ mod tests {
     for _ in 0..1024 {
       testvec.push(rng.gen::<u8>());
     }
-
   }
-
 
   #[test]
   fn round_trip_randomlike_deflate() {
     let mut rng = rand::thread_rng();
-    let mut testvec = vec![1,2,3,4,3,2,1];
+    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
     for _ in 0..100 {
       testvec.push(rng.gen::<u8>());
     }
-    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77(&testvec);
 
-
     let rt = comp.into_decompressed_bytes().unwrap();
-
 
     if rt != testvec {
       println!(
@@ -638,17 +640,17 @@ mod tests {
   #[test]
   /// Make sure that, even past a huge glob of claptrap, we're still triggering
   /// the offset detector.
-  fn round_trip_randomlike_offset(){
+  fn round_trip_randomlike_offset() {
     let mut rng = rand::thread_rng();
-    let mut testvec = vec![1,2,3,4,3,2,1];
+    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
     for _ in 0..100 {
       testvec.push(rng.gen::<u8>());
     }
-    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
 
     assert!(comp.data.iter().any(|x| match x {
-      DeflateSym::OffsetBackref(_,_,_) => true,
+      DeflateSym::OffsetBackref(_, _, _) => true,
       _ => false,
     }));
     let rt = comp.into_decompressed_bytes().unwrap();

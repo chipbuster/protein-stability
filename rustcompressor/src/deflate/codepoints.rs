@@ -297,7 +297,7 @@ impl CodepointEncoder {
       None => bit_src.read_huffman(length_tree)?,
       Some(x) => x,
     };
-    println!("Got code {}", code);
+    println!("Use offset is {}, Got code {}", use_offset, code);
     match code {
       0..=255 => Ok(DeflateSym::Literal(code as u8)),
       256 => Ok(DeflateSym::EndOfBlock),
@@ -342,7 +342,7 @@ impl CodepointEncoder {
       assert_eq!(val, OFFSET_SIGIL, "Attempted to read offset with non-offset code.");
     };
     // Need to read offset here 
-    unimplemented!("Cannot read offsets yet due to code regression");
+    Ok(bit_src.read_huffman(length_tree)?)
   }
 
   fn read_length<R: Read>(

@@ -1,7 +1,7 @@
 use super::codepoints::DEFAULT_CODEPOINTS;
 use super::default_data::default_hufftree::default_read_hufftree;
-use super::*;
 use super::deflate_header::*;
+use super::*;
 use crate::deflate::deflate_header::decode_huffman_alphabets;
 use crate::huff_tree::huffcode_from_lengths;
 
@@ -103,10 +103,30 @@ fn compressed_block_from_stream<R: Read>(
   }
 }
 
-fn compile_read_tree_local(dict: CodeDict<u16>) -> Result<Box<[DeflateReadTree]>, DeflateReadError>{
+fn compile_read_tree_local(
+  mut dict: CodeDict<u16>,
+) -> Result<Box<[DeflateReadTree]>, DeflateReadError> {
+
+  /* Thanks to some faffery in the bitstream-io library, we can't compile
+     singleton trees. If we encounter this, we know that the only symbol in the
+     dict has to be zero (due to how canonical huffman coding works), so we can
+     specify another symbol to be encoded as 1, even though it will never be read */
+  if dict.len() == 1 {
+    let (x, y) = &dict[0];
+    assert!(y.len() == 1 && y[0] == 0, "Invalid canonical code for singleton");
+    if *x == 0 {
+      dict.push((1, vec![1]));
+    } else {
+      dict.push((0, vec![1]));
+    }
+  }
+
   match compile_read_tree(dict) {
     Ok(x) => Ok(x),
-    Err(_) => Err(DeflateReadError::HuffTreeError),
+    Err(e) => {
+      println!("WARN: Got {:?} when compiling tree. Probably a bad sign", e); 
+      Err(DeflateReadError::HuffTreeError)
+    }
   }
 }
 
@@ -114,13 +134,22 @@ fn offset_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing offset block\n");
-  let (length_dict, dist_dict) =
-    read_header(bit_src)?;
+  let (length_dict, dist_dict) = read_header(bit_src)?;
 
   let length_tree = compile_read_tree_local(length_dict)?;
-  let dist_tree = compile_read_tree_local(dist_dict)?;
 
-  compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
+  let dist_tree = if dist_dict.is_empty() {
+    None
+  } else {
+    Some(compile_read_tree_local(dist_dict)?)
+  };
+
+  compressed_block_from_stream(
+    bit_src,
+    &length_tree,
+    dist_tree.as_ref().map(|x| x.as_ref()),
+    true,
+  )
 }
 
 fn fixed_block_from_stream<R: Read>(
@@ -135,13 +164,22 @@ fn dynamic_block_from_stream<R: Read>(
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing dynamic block\n");
 
-  let (length_dict, dist_dict) =
-    read_header(bit_src)?;
+  let (length_dict, dist_dict) = read_header(bit_src)?;
 
   let length_tree = compile_read_tree_local(length_dict)?;
-  let dist_tree = compile_read_tree_local(dist_dict)?;
 
-  compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
+  let dist_tree = if dist_dict.is_empty() {
+    None
+  } else {
+    Some(compile_read_tree_local(dist_dict)?)
+  };
+
+  compressed_block_from_stream(
+    bit_src,
+    &length_tree,
+    dist_tree.as_ref().map(|x| x.as_ref()),
+    false,
+  )
 }
 
 impl BlockData {
@@ -161,7 +199,11 @@ impl BlockData {
     match btype {
       0b00 => Ok(Self::Raw(uncompressed_block_from_stream(bit_src)?)),
       0b01 => Ok(Self::Fix(fixed_block_from_stream(bit_src)?)),
-      0b10 => Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?)),
+      0b10 => if use_offset {
+        Ok(Self::Dyn(offset_block_from_stream(bit_src)?))
+      } else {
+        Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?))
+      }
       0b11 => Err(DeflateReadError::ReservedValueUsed),
       _ => {
         println!("type = {}", btype);

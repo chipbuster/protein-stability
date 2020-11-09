@@ -103,8 +103,7 @@ pub fn read_header<R: Read>(
   let (length_tree, dist_tree) =
     decode_huffman_alphabets(bit_src, &size_code_tree, num_literals, num_dists)?;
 
-  println!("Got mah trees");
-
+    println!("Got trees");
   Ok((length_tree, dist_tree))
 }
 
