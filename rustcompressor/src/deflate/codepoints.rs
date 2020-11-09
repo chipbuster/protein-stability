@@ -256,17 +256,12 @@ impl CodepointEncoder {
   pub fn write_dist<W: Write>(
     &self,
     dist: u16,
-    dist_tree: Option<&DeflateWriteTree>,
+    dist_tree: &DeflateWriteTree,
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
     let c = &DEFAULT_CODEPOINTS.get_codepoint_for_dist(dist);
     let extra_bits = dist - c.lo;
-    if let Some(d) = dist_tree {
-      bit_sink.write_huffman(d, c.code)?;
-    } else {
-      let out = bitreverse5(c.code);
-      bit_sink.write(5, out)?;
-    }
+    bit_sink.write_huffman(dist_tree, c.code)?;
     bit_sink.write(c.nbits as u32, extra_bits)?;
 
     Ok(())
@@ -288,7 +283,7 @@ impl CodepointEncoder {
     &self,
     bit_src: &mut BitReader<R, LittleEndian>,
     length_tree: &[DeflateReadTree],
-    dist_tree: Option<&[DeflateReadTree]>,
+    dist_tree: &[DeflateReadTree],
     code: Option<u16>,
     use_offset: bool,
   ) -> Result<DeflateSym, DeflateReadError> {
@@ -361,16 +356,13 @@ impl CodepointEncoder {
   fn read_dist<R: Read>(
     &self,
     bit_src: &mut BitReader<R, LittleEndian>,
-    dist_tree: Option<&[DeflateReadTree]>,
+    dist_tree: &[DeflateReadTree],
     code: Option<u16>,
   ) -> Result<u16, DeflateReadError> {
     let val = if let Some(c) = code {
       c
-    } else if let Some(tree) = dist_tree {
-        bit_src.read_huffman(tree)?
     } else {
-        let revcode = bit_src.read(5)?;
-        bitreverse5(revcode)
+        bit_src.read_huffman(dist_tree)?
     };
     assert!(val >= MIN_DIST_CODE && val <= MAX_DIST_CODE, "Attempted to read dist with invalid code {}",val);
 

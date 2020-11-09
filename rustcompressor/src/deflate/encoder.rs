@@ -1,4 +1,5 @@
 use super::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
+use super::default_data::default_huffcode::*;
 use super::*;
 use crate::deflate::deflate_header::write_header;
 use crate::huff_tree::huffcode_from_freqs;
@@ -30,7 +31,7 @@ impl DeflateSym {
     &self,
     bit_sink: &mut BitWriter<W, LittleEndian>,
     length_tree: &DeflateWriteTree,
-    dist_tree: Option<&DeflateWriteTree>,
+    dist_tree: &DeflateWriteTree,
   ) -> Result<(), DeflateWriteError> {
     match self {
       DeflateSym::Literal(x) => bit_sink.write_huffman(length_tree, (*x) as u16)?,
@@ -69,6 +70,24 @@ impl CompressedBlock {
     Self::do_lz77(data, true)
   }
 
+  /// Compute the lengthlit and dist codes that will be needed for a given input.
+  fn compute_codes(data: &[DeflateSym]) -> (CodeDict<u16>, CodeDict<u16>) {
+    let lit_freq = Self::compute_lengthlit_freq(data);
+    let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
+    /* If we have distances in the LZ77 encoding, use them to describe a dict.
+    Otherwise, it doesn't really matter what we use, so it might as well
+    be the default dictionary */
+    let dist_freq = Self::compute_dist_freq(data);
+    let dist_codes = if dist_freq.is_empty() {
+      DEFAULT_DIST_CODE.clone()
+    } else {
+      huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN)
+    };
+    (length_codes, dist_codes)
+  }
+
+  /// Computes the compressed representation of a stream of bytes as well as the
+  /// huffman trees that will be used to encode it in DEFLATE
   fn do_lz77(data: &Vec<u8>, use_offset: bool) -> Self {
     let mut deflate_match_table = HashMap::<&[u8], VecDeque<Index>>::new();
     let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
@@ -87,14 +106,6 @@ impl CompressedBlock {
       } else {
         None
       };
-
-      /*
-      println!("Data is {:?}", &data[index..index+3]);
-      if let Some(x) = offset_match.as_ref(){
-        println!("Match is {:?}", x.1);
-      }
-      println!("{}: {:?}, ({}, {:?})", index, offset_match, deflate_len, deflate_syms);
-      */
 
       // Select the match to use based on input options and match lengths
       let (match_len, mut match_syms) = if let Some((off_len, off_syms)) = offset_match {
@@ -119,7 +130,13 @@ impl CompressedBlock {
 
     // Add an end-of-stream indicator
     output.push(DeflateSym::EndOfBlock);
-    Self { data: output }
+
+    let (lenlit_code, dist_code) = Self::compute_codes(&output[..]);
+    Self {
+      lenlit_code,
+      dist_code,
+      data: output,
+    }
   }
 
   /// Assuming a match of size length-1 succeeded at this index, does a match of length succeed?
@@ -349,9 +366,9 @@ impl CompressedBlock {
     }
   }
 
-  fn compute_lengthlit_freq(&self) -> HashMap<u16, usize> {
+  fn compute_lengthlit_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
     let mut freqs = HashMap::new();
-    for x in self.data.iter() {
+    for x in data.iter() {
       match x {
         DeflateSym::Literal(sym) => *freqs.entry(*sym as u16).or_default() += 1,
         DeflateSym::EndOfBlock => *freqs.entry(256).or_default() += 1,
@@ -370,9 +387,9 @@ impl CompressedBlock {
     freqs
   }
 
-  fn compute_dist_freq(&self) -> HashMap<u16, usize> {
+  fn compute_dist_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
     let mut freqs = HashMap::new();
-    for x in self.data.iter() {
+    for x in data.iter() {
       match x {
         DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
         DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_, _, dist) => {
@@ -388,9 +405,13 @@ impl CompressedBlock {
     &self,
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
-    let length_tree = super::default_data::default_hufftree::default_write_hufftree();
+    let length_codes = DEFAULT_LENGTH_CODE.clone();
+    let dist_codes = DEFAULT_DIST_CODE.clone();
+    let length_tree =
+      compile_write_tree(length_codes).expect("Could not compile default length tree!");
+    let dist_tree = compile_write_tree(dist_codes).expect("Could not compile default dist tree!");
     for sym in self.data.iter() {
-      sym.write_to_stream(bit_sink, &length_tree, None)?;
+      sym.write_to_stream(bit_sink, &length_tree, &dist_tree)?;
     }
     Ok(())
   }
@@ -399,32 +420,13 @@ impl CompressedBlock {
     &self,
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
-    let lit_freq = self.compute_lengthlit_freq();
-    let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
-    let length_tree = compile_write_tree(length_codes.clone()).unwrap();
+    write_header(bit_sink, &self.lenlit_code, &self.dist_code)?;
 
-    let dist_freq = self.compute_dist_freq();
-    let dist_freq = if dist_freq.is_empty() {
-      None
-    } else {
-      Some(dist_freq)
-    };
-
-    let dist_codes = dist_freq
-      .as_ref()
-      .map(|codefreqs| huffcode_from_freqs(codefreqs, MAX_HUFF_LEN));
-    let dist_tree = dist_codes.as_ref().map(|dist_codes| {
-      compile_write_tree(dist_codes.clone()).expect("Could not compile write tree")
-    });
-
-    write_header(
-      bit_sink,
-      &length_codes,
-      dist_codes.as_ref().unwrap_or(&Vec::new()),
-    )?;
+    let length_tree = compile_write_tree(self.lenlit_code.clone()).unwrap();
+    let dist_tree = compile_write_tree(self.dist_code.clone()).unwrap();
 
     for sym in self.data.iter() {
-      sym.write_to_stream(bit_sink, &length_tree, dist_tree.as_ref())?;
+      sym.write_to_stream(bit_sink, &length_tree, &dist_tree)?;
     }
     Ok(())
   }

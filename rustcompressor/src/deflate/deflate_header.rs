@@ -542,8 +542,9 @@ mod test {
 
     let mut buf = [0u8; 16384];
 
-    let readtree = super::super::default_data::default_hufftree::default_read_hufftree();
-    let writetree = super::super::default_data::default_hufftree::default_write_hufftree();
+    let lengthcode = super::super::default_data::default_huffcode::default_length_huffcode();
+    let readtree = compile_read_tree(lengthcode.clone()).unwrap();
+    let writetree = compile_write_tree(lengthcode.clone()).unwrap();
 
     let mut w = BitWriter::new(&mut buf[..]);
 

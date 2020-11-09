@@ -60,6 +60,8 @@ pub struct UncompressedBlock {
 
 #[derive(Debug)]
 pub struct CompressedBlock {
+  lenlit_code: CodeDict<u16>,
+  dist_code: CodeDict<u16>,
   data: Vec<DeflateSym>,
 }
 

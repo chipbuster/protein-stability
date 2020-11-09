@@ -1,5 +1,5 @@
 use super::codepoints::DEFAULT_CODEPOINTS;
-use super::default_data::default_hufftree::default_read_hufftree;
+use super::default_data::default_huffcode::*;
 use super::deflate_header::*;
 use super::*;
 
@@ -8,7 +8,6 @@ use std::io::Read;
 use bitstream_io::huffman::compile_read_tree;
 use bitstream_io::{BitReader, LittleEndian};
 
-use lazy_static::lazy_static;
 use thiserror::Error;
 
 const VERBOSE: bool = false;
@@ -21,10 +20,6 @@ macro_rules! debug_log {
       print!("")
     }
   }
-}
-
-lazy_static! {
-  pub static ref DEFAULT_READ_TREE: Box<[DeflateReadTree]> = default_read_hufftree();
 }
 
 #[derive(Error, Debug)]
@@ -47,8 +42,6 @@ pub enum DeflateReadError {
   ChecksumMismatch(u32, u32),
   #[error("Datasize mismatch: expected {0} but data was {1}")]
   DatasizeMismatch(u32, usize),
-  #[error("Huffman Tree Construction Error")]
-  HuffTreeError,
   #[error("Other IO error: {0}")]
   IOError(#[from] std::io::Error),
 }
@@ -83,25 +76,52 @@ pub fn uncompressed_block_from_stream<R: Read>(
 
 fn compressed_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
-  length_tree: &[DeflateReadTree],
-  dist_tree: Option<&[DeflateReadTree]>,
+  length_codes: CodeDict<u16>,
+  dist_codes: CodeDict<u16>,
   use_offset: bool,
 ) -> Result<CompressedBlock, DeflateReadError> {
   let mut contents = Vec::new();
 
+  let length_tree = compile_read_tree_local(length_codes.clone())
+    .expect("Empty length/literal dictionary. Programming bug?");
+  // If dist_codes are empty (i.e. they were not provided), we use the default
+  // tree.
+  let dist_tree = if dist_codes.is_empty() {
+    compile_read_tree_local(DEFAULT_DIST_CODE.clone())
+  } else {
+    compile_read_tree_local(dist_codes.clone())
+  }.expect("Could not compile a dist tree");
+
   loop {
-    let sym = DEFAULT_CODEPOINTS.read_sym(bit_src, length_tree, dist_tree, None, use_offset);
+    let sym = DEFAULT_CODEPOINTS.read_sym(
+      bit_src,
+      length_tree.as_ref(),
+      dist_tree.as_ref(),
+      None,
+      use_offset,
+    );
     match sym {
-      Ok(DeflateSym::EndOfBlock) => return Ok(CompressedBlock { data: contents }),
+      Ok(DeflateSym::EndOfBlock) => {
+        return Ok(CompressedBlock {
+          lenlit_code: length_codes,
+          dist_code: dist_codes,
+          data: contents,
+        })
+      }
       Ok(x) => contents.push(x),
       Err(e) => return Err(e),
     }
   }
 }
 
-fn compile_read_tree_local(
-  mut dict: CodeDict<u16>,
-) -> Result<Box<[DeflateReadTree]>, DeflateReadError> {
+/// Provides a wrapper around read tree compilation to deal with common issues.
+// We could return a result in this case, but since Huffman doesn't implement
+// error, all we can do is return a DeflateReadError::HuffTreeError. Instead,
+// just return an option--None indicates a failure in tree compilation.
+fn compile_read_tree_local(mut dict: CodeDict<u16>) -> Option<Box<[DeflateReadTree]>> {
+  if dict.is_empty() {
+    return None;
+  }
   /* Thanks to some faffery in the bitstream-io library, we can't compile
   singleton trees. If we encounter this, we know that the only symbol in the
   dict has to be zero (due to how canonical huffman coding works), so we can
@@ -120,64 +140,47 @@ fn compile_read_tree_local(
   }
 
   match compile_read_tree(dict) {
-    Ok(x) => Ok(x),
+    Ok(x) => Some(x),
     Err(e) => {
       println!("WARN: Got {:?} when compiling tree. Probably a bad sign", e);
-      Err(DeflateReadError::HuffTreeError)
+      None
     }
   }
 }
 
+/// Reads a DEFLATE block encoded with the default trees out of the given bitstream
+fn fixed_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+) -> Result<CompressedBlock, DeflateReadError> {
+  debug_log!("Decompressing fixed block\n");
+  compressed_block_from_stream(
+    bit_src,
+    DEFAULT_LENGTH_CODE.clone(),
+    DEFAULT_DIST_CODE.clone(),
+    false,
+  )
+}
+
+/// Reads a DEFLATE block encoded with custom trees out of the given bitstream
+fn dynamic_block_from_stream<R: Read>(
+  bit_src: &mut BitReader<R, LittleEndian>,
+) -> Result<CompressedBlock, DeflateReadError> {
+  debug_log!("Decompressing dynamic block\n");
+  let (length_dict, dist_dict) = read_header(bit_src)?;
+
+  compressed_block_from_stream(bit_src, length_dict, dist_dict, false)
+}
+
+/// Reads a DEFLATE block encoded with custom trees and potentially using OFFSET
+/// encoding out of the given bitstream
 fn offset_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing offset block\n");
   let (length_dict, dist_dict) = read_header(bit_src)?;
 
-  let length_tree = compile_read_tree_local(length_dict)?;
 
-  let dist_tree = if dist_dict.is_empty() {
-    None
-  } else {
-    Some(compile_read_tree_local(dist_dict)?)
-  };
-
-  compressed_block_from_stream(
-    bit_src,
-    &length_tree,
-    dist_tree.as_ref().map(|x| x.as_ref()),
-    true,
-  )
-}
-
-fn fixed_block_from_stream<R: Read>(
-  bit_src: &mut BitReader<R, LittleEndian>,
-) -> Result<CompressedBlock, DeflateReadError> {
-  debug_log!("Decompressing fixed block\n");
-  compressed_block_from_stream(bit_src, &DEFAULT_READ_TREE, None, false)
-}
-
-fn dynamic_block_from_stream<R: Read>(
-  bit_src: &mut BitReader<R, LittleEndian>,
-) -> Result<CompressedBlock, DeflateReadError> {
-  debug_log!("Decompressing dynamic block\n");
-
-  let (length_dict, dist_dict) = read_header(bit_src)?;
-
-  let length_tree = compile_read_tree_local(length_dict)?;
-
-  let dist_tree = if dist_dict.is_empty() {
-    None
-  } else {
-    Some(compile_read_tree_local(dist_dict)?)
-  };
-
-  compressed_block_from_stream(
-    bit_src,
-    &length_tree,
-    dist_tree.as_ref().map(|x| x.as_ref()),
-    false,
-  )
+  compressed_block_from_stream(bit_src, length_dict, dist_dict, true)
 }
 
 impl BlockData {
