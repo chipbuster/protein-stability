@@ -83,7 +83,7 @@ enum CodeLengthCodepoint {
 /// Read a DEFLATE header from stream and return the length/lit and distance trees
 pub fn read_header<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
-) -> Result<(Box<[DeflateReadTree]>, Box<[DeflateReadTree]>), DeflateReadError> {
+) -> Result<(CodeDict<u16>, CodeDict<u16>), DeflateReadError> {
   let hlit: u8 = bit_src.read(5)?;
   let hdist: u8 = bit_src.read(5)?;
   let hclen: u8 = bit_src.read(4)?;
@@ -98,8 +98,12 @@ pub fn read_header<R: Read>(
   let num_literals = 257 + hlit as u16;
   let num_dists = 1 + hdist as u16;
 
+  println!("Reading header");
+
   let (length_tree, dist_tree) =
     decode_huffman_alphabets(bit_src, &size_code_tree, num_literals, num_dists)?;
+
+  println!("Got mah trees");
 
   Ok((length_tree, dist_tree))
 }
@@ -174,10 +178,6 @@ pub fn write_header<W: Write>(
       last_rco_index = i;
     }
   }
-
-  println!("The size codes are {:?}", size_codes);
-  println!("Last index is {}, corresponding to the following codepoints: {:?}", last_rco_index, &RAW_CODE_ORDER[0..=last_rco_index]);
-
   let last_rco_index: u16 = last_rco_index.try_into().unwrap();
 
   /* These values come from the RFC 1951 rules (see module docs). We dont' check
@@ -200,7 +200,7 @@ pub fn write_header<W: Write>(
   let write_tree = compile_write_tree(size_codes).expect("Could not compute write tree");
 
   assert_eq!((hlit + 257 + hdist + 1) as usize, code_sizes.len());
-  encode_huffman_alphabets(bit_sink, &write_tree, &code_sizes[..])?;
+  encode_huffman_alphabets(bit_sink, &write_tree, &codepoints[..])?;
 
   Ok(())
 }
@@ -249,24 +249,25 @@ fn write_size_codes<W: Write>(
   Ok(())
 }
 
-pub fn encode_huffman_alphabets<W: Write>(
+/// Encode the given code sizes using the given size huffman tree.
+fn encode_huffman_alphabets<W: Write>(
   bit_sink: &mut BitWriter<W, LittleEndian>,
   size_huffman: &DeflateWriteTree,
-  code_sizes: &[u8],
+  code_sizes: &[CodeLengthCodepoint],
 ) -> Result<(), DeflateWriteError> {
-  for cs in code_sizes {
-    let c = *cs as u16;
-    bit_sink.write_huffman(size_huffman, c)?;
+  for clc in code_sizes {
+    clc.write_to_bitstream(bit_sink, size_huffman)?;
   }
   Ok(())
 }
 
+/// Given a count of literal/distance codes present in the input and the 
 pub fn decode_huffman_alphabets<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
   size_huffman: &[DeflateReadTree],
   num_literals: u16,
   num_distances: u16,
-) -> Result<(Box<[DeflateReadTree]>, Box<[DeflateReadTree]>), DeflateReadError> {
+) -> Result<(CodeDict<u16>, CodeDict<u16>), DeflateReadError> {
   let num_symbols = (num_literals + num_distances).try_into().unwrap();
   let mut codes = Vec::new();
   let mut lengths = Some(Vec::new());
@@ -303,16 +304,7 @@ pub fn decode_huffman_alphabets<R: Read>(
   let litlen_code = huffcode_from_lengths(&literal_lengths);
   let dist_code = huffcode_from_lengths(&dist_lengths);
 
-  let litlen_tree = match compile_read_tree(litlen_code) {
-    Ok(x) => x,
-    Err(_) => return Err(DeflateReadError::HuffTreeError),
-  };
-  let dist_tree = match compile_read_tree(dist_code) {
-    Ok(x) => x,
-    Err(_) => return Err(DeflateReadError::HuffTreeError),
-  };
-
-  Ok((litlen_tree, dist_tree))
+  Ok((litlen_code, dist_code))
 }
 
 impl CodeLengthCodepoint {
@@ -428,6 +420,9 @@ fn break_range_zero_len(mut rep: u8) -> Vec<u8> {
   out
 }
 
+/// Converts a set of code lengths (assumed to be contiguously described in the input)
+/// into a set of codelength codepoints, including value/zero repeats, so that expanding
+/// the codepointy representation results in the input.
 fn code_lengths_to_codepoints(lengths: &[u8]) -> Vec<CodeLengthCodepoint> {
   let mut output = Vec::new();
   let rle = runlength_encode(&lengths[..]);

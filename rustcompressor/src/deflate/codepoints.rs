@@ -302,9 +302,9 @@ impl CodepointEncoder {
       0..=255 => Ok(DeflateSym::Literal(code as u8)),
       256 => Ok(DeflateSym::EndOfBlock),
       257..=285 => {
-        // TODO: These are the wrong functions you pillock
         let length = self.read_length(bit_src, length_tree, Some(code))?;
         let dist = self.read_dist(bit_src, dist_tree, None)?;
+        println!("Read backreference {}, {}", length, dist);
         Ok(DeflateSym::Backreference(length, dist))
       }
       OFFSET_SIGIL => {
@@ -341,8 +341,8 @@ impl CodepointEncoder {
       let val = bit_src.read_huffman(length_tree)?;
       assert_eq!(val, OFFSET_SIGIL, "Attempted to read offset with non-offset code.");
     };
-    let res = bit_src.read_huffman(length_tree)?;
-    Ok(res)
+    // Need to read offset here 
+    unimplemented!("Cannot read offsets yet due to code regression");
   }
 
   fn read_length<R: Read>(
@@ -356,9 +356,10 @@ impl CodepointEncoder {
       Some(x) => x
     };
     assert!(val > 256, "Attempted to read length with invalid code {}",val);
-    println!("val is {}", val);
-
-    Ok(0)
+    let len_index: usize = (val - MIN_LENGTH_CODE).try_into().unwrap();
+    let codept = self.length_codepoints[len_index];
+    let length_val = codept.read_value_from_bitstream(bit_src)?;
+    Ok(length_val)
   }
 
   fn read_dist<R: Read>(
@@ -367,19 +368,19 @@ impl CodepointEncoder {
     dist_tree: Option<&[DeflateReadTree]>,
     code: Option<u16>,
   ) -> Result<u16, DeflateReadError> {
-    let val = if code.is_some(){
-      code.unwrap()
-    } else {
-      if let Some(tree) = dist_tree {
+    let val = if let Some(c) = code {
+      c
+    } else if let Some(tree) = dist_tree {
         bit_src.read_huffman(tree)?
-      } else {
+    } else {
         let revcode = bit_src.read(5)?;
         bitreverse5(revcode)
-      }
     };
     assert!(val < 30, "Attempted to read dist with invalid code {}",val);
 
-    let codept = self.get_codepoint_for_length(val);
-    codept.read_value_from_bitstream(bit_src)
+    let dist_index: usize = val.try_into().unwrap();
+    let codept = self.dist_codepoints[dist_index];
+    let dist_val = codept.read_value_from_bitstream(bit_src)?;
+    Ok(dist_val)
   }
 }

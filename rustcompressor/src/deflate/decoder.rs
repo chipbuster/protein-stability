@@ -103,12 +103,22 @@ fn compressed_block_from_stream<R: Read>(
   }
 }
 
+fn compile_read_tree_local(dict: CodeDict<u16>) -> Result<Box<[DeflateReadTree]>, DeflateReadError>{
+  match compile_read_tree(dict) {
+    Ok(x) => Ok(x),
+    Err(_) => Err(DeflateReadError::HuffTreeError),
+  }
+}
+
 fn offset_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing offset block\n");
-  let (length_tree, dist_tree) =
+  let (length_dict, dist_dict) =
     read_header(bit_src)?;
+
+  let length_tree = compile_read_tree_local(length_dict)?;
+  let dist_tree = compile_read_tree_local(dist_dict)?;
 
   compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
 }
@@ -125,8 +135,11 @@ fn dynamic_block_from_stream<R: Read>(
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing dynamic block\n");
 
-  let (length_tree, dist_tree) =
+  let (length_dict, dist_dict) =
     read_header(bit_src)?;
+
+  let length_tree = compile_read_tree_local(length_dict)?;
+  let dist_tree = compile_read_tree_local(dist_dict)?;
 
   compressed_block_from_stream(bit_src, &length_tree, Some(&dist_tree), false)
 }
