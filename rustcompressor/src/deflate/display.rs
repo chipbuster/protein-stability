@@ -2,7 +2,6 @@
 display debugging of a compressed GZIP input. */
 
 use super::DeflateSym;
-use super::codepoints::*;
 use std::collections::HashMap;
 use bit_vec::BitVec;
 

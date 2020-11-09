@@ -60,7 +60,6 @@ pub struct UncompressedBlock {
 
 #[derive(Debug)]
 pub struct CompressedBlock {
-  tree: Vec<(u16, Vec<u8>)>,
   data: Vec<DeflateSym>,
 }
 
