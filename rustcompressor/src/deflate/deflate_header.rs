@@ -88,9 +88,9 @@ pub fn read_header<R: Read>(
   let hdist: u8 = bit_src.read(5)?;
   let hclen: u8 = bit_src.read(4)?;
   let size_codes = read_size_codes(bit_src, hclen + 4)?;
-  println!("hlit: {}",hlit);
-  println!("hdist: {}",hdist);
-  println!("hclen: {}",hclen);
+  println!("hlit: {}", hlit);
+  println!("hdist: {}", hdist);
+  println!("hclen: {}", hclen);
   println!("size codes: {:?}", size_codes);
 
   let size_code_tree = compile_read_tree(size_codes).expect("Couldn't compile read tree");
@@ -151,33 +151,41 @@ pub fn write_header<W: Write>(
       CodeLengthCodepoint::LongZeroRep(_) => *codepoint_freqs.entry(18).or_insert(0usize) += 1,
     }
   }
+  /* Since this is *very* easy to get confused, let's talk about what size_codes is.
+  size_codes defines an encoding for the integers [0, 18]. These are used to encode
+  the codepoints for the code length alphabet described at the top of this file.
+
+  The size_codes are written into the file (as all canonical Huffman codes are)
+  by specifying the length of each code. Because we use a fixed-size encoding
+  for these lengths, the maximum length of an encoding allowed here is 7 bits.
+  */
   let size_codes = huffcode_from_freqs(&codepoint_freqs, Some(7));
-  let size_codes_hm = size_codes
-    .iter()
-    .cloned()
-    .collect();
+  let size_codes_hm = size_codes.iter().cloned().collect();
 
   // Find index of last code length that will be used from RAW_CODE_ORDER
-  let mut uniq_codelen_sizes:Vec<usize> = size_codes.iter().map(|(_,code)| code.len()).collect();
-  uniq_codelen_sizes.sort();
-  uniq_codelen_sizes.dedup();
-  let mut last_rco_index = 3u16;
-  let mut index = 3u16;
-  while index < RAW_CODE_ORDER.len().try_into().unwrap() {
-    let len = &RAW_CODE_ORDER[index as usize];
-    if uniq_codelen_sizes.iter().any(|x| *x as u16  == *len) {
-      last_rco_index = index.try_into().expect("RCO Array is somehow larger than u16::MAX");
+  // Some duplicates might be in codelen_sizes, and that's okay.
+  let mut codepoint_vals: Vec<u16> = size_codes.iter().map(|(value,_ )| *value).collect();
+  let mut last_rco_index = 0;
+  // This loop is a little weird. Essentially, we want to find the smallest N 
+  // such that any observed value in codelen_sizes will occur in RAW_CODE_ORDER[0..=N]
+  // N is stored into last_rco_index.
+  for (i, codept) in RAW_CODE_ORDER.iter().enumerate() {
+    if codepoint_vals.contains(codept) && i > last_rco_index {
+      last_rco_index = i;
     }
-    index += 1;
   }
-  
+
+  println!("The size codes are {:?}", size_codes);
+  println!("Last index is {}, corresponding to the following codepoints: {:?}", last_rco_index, &RAW_CODE_ORDER[0..=last_rco_index]);
+
+  let last_rco_index: u16 = last_rco_index.try_into().unwrap();
+
   /* These values come from the RFC 1951 rules (see module docs). We dont' check
   the max range because it differs based on offset-encodings and will be panic-ed
   on if it exceeds the range of bits in the BitWriter */
   let hlit = largest_length_code + 1 - 257;
   let hdist = largest_dist_code + 1 - 1;
   let hclen = last_rco_index + 1 - 4;
-  
 
   bit_sink.write(5, hlit)?;
   bit_sink.write(5, hdist)?;
@@ -210,6 +218,7 @@ pub fn read_size_codes<R: Read>(
   for code in codes.into_iter() {
     let ccl: usize = bit_src.read::<u8>(3)? as usize;
     codecodelen.insert(*code, ccl);
+    println!("Read code {} as {}", code, ccl);
   }
 
   Ok(huffcode_from_lengths(&codecodelen))
@@ -224,6 +233,8 @@ fn write_size_codes<W: Write>(
   num_codes: u16,
 ) -> Result<(), DeflateWriteError> {
   let num_codes = num_codes.try_into().unwrap();
+
+  println!("Num codes is {}", num_codes);
   for code_val in &RAW_CODE_ORDER[0..num_codes] {
     if let Some(codelen) = size_codes.get(code_val).and_then(|x| Some(x.len())) {
       assert!(codelen < 8);
@@ -234,6 +245,7 @@ fn write_size_codes<W: Write>(
       println!("Wrote code length {} encoded as {}", code_val, 0);
     }
   }
+
   Ok(())
 }
 

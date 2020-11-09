@@ -55,6 +55,7 @@ use std::vec::Vec;
 use std::convert::TryInto;
 
 use super::{DeflateReadTree, DeflateSym, DeflateWriteTree};
+use crate::deflate::Block;
 use crate::deflate::decoder::DeflateReadError;
 use crate::deflate::encoder::DeflateWriteError;
 
@@ -296,10 +297,12 @@ impl CodepointEncoder {
       None => bit_src.read_huffman(length_tree)?,
       Some(x) => x,
     };
+    println!("Got code {}", code);
     match code {
       0..=255 => Ok(DeflateSym::Literal(code as u8)),
       256 => Ok(DeflateSym::EndOfBlock),
       257..=285 => {
+        // TODO: These are the wrong functions you pillock
         let length = self.read_length(bit_src, length_tree, Some(code))?;
         let dist = self.read_dist(bit_src, dist_tree, None)?;
         Ok(DeflateSym::Backreference(length, dist))
@@ -353,9 +356,9 @@ impl CodepointEncoder {
       Some(x) => x
     };
     assert!(val > 256, "Attempted to read length with invalid code {}",val);
+    println!("val is {}", val);
 
-    let codept = self.get_codepoint_for_length(val);
-    codept.read_value_from_bitstream(bit_src)
+    Ok(0)
   }
 
   fn read_dist<R: Read>(
