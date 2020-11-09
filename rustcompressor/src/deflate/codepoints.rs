@@ -55,7 +55,6 @@ use std::vec::Vec;
 use std::convert::TryInto;
 
 use super::{DeflateReadTree, DeflateSym, DeflateWriteTree};
-use crate::deflate::Block;
 use crate::deflate::decoder::DeflateReadError;
 use crate::deflate::encoder::DeflateWriteError;
 
@@ -126,7 +125,7 @@ impl Codepoint {
 pub struct CodepointEncoder {
   length_codepoints: Vec<Codepoint>,
   dist_codepoints: Vec<Codepoint>,
-  offset_codepoint: Codepoint,
+  _offset_codepoint: Codepoint,
 }
 
 impl CodepointEncoder {
@@ -204,17 +203,17 @@ impl CodepointEncoder {
     Self {
       length_codepoints: len_pts,
       dist_codepoints: dist_pts,
-      offset_codepoint: offsetcp,
+      _offset_codepoint: offsetcp,
     }
   }
 
   fn get_codepoint_for_code(&self, code: u16) -> Codepoint {
-    if code > MIN_DIST_CODE && code < MAX_DIST_CODE {
+    if code >= MIN_DIST_CODE && code <= MAX_DIST_CODE {
       self.dist_codepoints[code as usize]
-    } else if code > MIN_LENGTH_CODE && code < MAX_LENGTH_CODE {
+    } else if code >= MIN_LENGTH_CODE && code <= MAX_LENGTH_CODE {
       self.length_codepoints[(code - MIN_LENGTH_CODE) as usize]
     } else if code == OFFSET_SIGIL {
-      self.offset_codepoint
+      self._offset_codepoint
     } else {
       panic!("Invalid code passed to get_codepoint: {}", code);
     }
@@ -297,14 +296,12 @@ impl CodepointEncoder {
       None => bit_src.read_huffman(length_tree)?,
       Some(x) => x,
     };
-    println!("Use offset is {}, Got code {}", use_offset, code);
     match code {
       0..=255 => Ok(DeflateSym::Literal(code as u8)),
-      256 => Ok(DeflateSym::EndOfBlock),
-      257..=285 => {
+      EOF_CODE => Ok(DeflateSym::EndOfBlock),
+      MIN_LENGTH_CODE..=MAX_LENGTH_CODE => {
         let length = self.read_length(bit_src, length_tree, Some(code))?;
         let dist = self.read_dist(bit_src, dist_tree, None)?;
-        println!("Read backreference {}, {}", length, dist);
         Ok(DeflateSym::Backreference(length, dist))
       }
       OFFSET_SIGIL => {
@@ -355,9 +352,8 @@ impl CodepointEncoder {
       None => bit_src.read_huffman(length_tree)?,
       Some(x) => x
     };
-    assert!(val > 256, "Attempted to read length with invalid code {}",val);
-    let len_index: usize = (val - MIN_LENGTH_CODE).try_into().unwrap();
-    let codept = self.length_codepoints[len_index];
+    assert!(val >= MIN_LENGTH_CODE && val <= MAX_LENGTH_CODE, "Attempted to read length with invalid code {}",val);
+    let codept = DEFAULT_CODEPOINTS.get_codepoint_for_code(val);
     let length_val = codept.read_value_from_bitstream(bit_src)?;
     Ok(length_val)
   }
@@ -376,10 +372,9 @@ impl CodepointEncoder {
         let revcode = bit_src.read(5)?;
         bitreverse5(revcode)
     };
-    assert!(val < 30, "Attempted to read dist with invalid code {}",val);
+    assert!(val >= MIN_DIST_CODE && val <= MAX_DIST_CODE, "Attempted to read dist with invalid code {}",val);
 
-    let dist_index: usize = val.try_into().unwrap();
-    let codept = self.dist_codepoints[dist_index];
+    let codept = DEFAULT_CODEPOINTS.get_codepoint_for_code(val);
     let dist_val = codept.read_value_from_bitstream(bit_src)?;
     Ok(dist_val)
   }

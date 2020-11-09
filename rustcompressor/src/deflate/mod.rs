@@ -34,9 +34,6 @@ use bitstream_io::LittleEndian;
 type DeflateReadTree = ReadHuffmanTree<LittleEndian, u16>;
 type DeflateWriteTree = WriteHuffmanTree<LittleEndian, u16>;
 
-/// A dictionary of code-length per symbol
-type CodeLengthDict<S> = Vec<(S, u8)>;
-
 /// An encoding dictionary, pre-compilation
 type CodeDict<S> = Vec<(S, Vec<u8>)>;
 
@@ -87,6 +84,7 @@ mod test {
   #[allow(unused_imports)]
   use super::*;
 
+  #[cfg(test)]
   // Take some string of bytes and roundtrip it down to the bit level
   fn roundtrip_bitlevel_deflate(data: &Vec<u8>) -> Vec<u8>{
     let symbols = DeflateStream::new_from_raw_bytes_deflate(data);
@@ -96,6 +94,7 @@ mod test {
     decoded.into_byte_stream().unwrap()
   }
 
+  #[cfg(test)]
   // Take some string of bytes and roundtrip it down to the bit level
   fn roundtrip_bitlevel_offset(data: &Vec<u8>) -> Vec<u8>{
     let symbols = DeflateStream::new_from_raw_bytes_offset(data);

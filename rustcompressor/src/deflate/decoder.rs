@@ -2,11 +2,8 @@ use super::codepoints::DEFAULT_CODEPOINTS;
 use super::default_data::default_hufftree::default_read_hufftree;
 use super::deflate_header::*;
 use super::*;
-use crate::deflate::deflate_header::decode_huffman_alphabets;
-use crate::huff_tree::huffcode_from_lengths;
 
 use std::io::Read;
-use std::{collections::HashMap, convert::TryInto};
 
 use bitstream_io::huffman::compile_read_tree;
 use bitstream_io::{BitReader, LittleEndian};
@@ -14,7 +11,6 @@ use bitstream_io::{BitReader, LittleEndian};
 use lazy_static::lazy_static;
 use thiserror::Error;
 
-const BLOCK_END: u16 = 256;
 const VERBOSE: bool = false;
 
 macro_rules! debug_log {
@@ -106,14 +102,16 @@ fn compressed_block_from_stream<R: Read>(
 fn compile_read_tree_local(
   mut dict: CodeDict<u16>,
 ) -> Result<Box<[DeflateReadTree]>, DeflateReadError> {
-
   /* Thanks to some faffery in the bitstream-io library, we can't compile
-     singleton trees. If we encounter this, we know that the only symbol in the
-     dict has to be zero (due to how canonical huffman coding works), so we can
-     specify another symbol to be encoded as 1, even though it will never be read */
+  singleton trees. If we encounter this, we know that the only symbol in the
+  dict has to be zero (due to how canonical huffman coding works), so we can
+  specify another symbol to be encoded as 1, even though it will never be read */
   if dict.len() == 1 {
     let (x, y) = &dict[0];
-    assert!(y.len() == 1 && y[0] == 0, "Invalid canonical code for singleton");
+    assert!(
+      y.len() == 1 && y[0] == 0,
+      "Invalid canonical code for singleton"
+    );
     if *x == 0 {
       dict.push((1, vec![1]));
     } else {
@@ -124,7 +122,7 @@ fn compile_read_tree_local(
   match compile_read_tree(dict) {
     Ok(x) => Ok(x),
     Err(e) => {
-      println!("WARN: Got {:?} when compiling tree. Probably a bad sign", e); 
+      println!("WARN: Got {:?} when compiling tree. Probably a bad sign", e);
       Err(DeflateReadError::HuffTreeError)
     }
   }
@@ -199,10 +197,12 @@ impl BlockData {
     match btype {
       0b00 => Ok(Self::Raw(uncompressed_block_from_stream(bit_src)?)),
       0b01 => Ok(Self::Fix(fixed_block_from_stream(bit_src)?)),
-      0b10 => if use_offset {
-        Ok(Self::Dyn(offset_block_from_stream(bit_src)?))
-      } else {
-        Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?))
+      0b10 => {
+        if use_offset {
+          Ok(Self::Dyn(offset_block_from_stream(bit_src)?))
+        } else {
+          Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?))
+        }
       }
       0b11 => Err(DeflateReadError::ReservedValueUsed),
       _ => {
@@ -355,5 +355,18 @@ mod tests {
     let decoded = strm.into_byte_stream().unwrap();
     let correct_answer = [72, 101, 108, 108, 111, 10u8];
     assert_eq!(decoded, correct_answer);
+  }
+
+  #[test]
+  fn hello_dyn_compressed() {
+    let data = [
+      0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0xcf, 0x80, 0x13, 0x5c, 0x19, 0xa3, 0x7c, 0xaa, 0xf2, 0x01,
+    ];
+    let strm = DeflateStream::new_from_deflate_encoded_bits(&data[..]).unwrap();
+    let decoded = strm.into_byte_stream().unwrap();
+    let correct_answer_string = "hellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\nhellohellohello\n";
+    let correct_answer = correct_answer_string.as_bytes();
+
+    assert_eq!(decoded, correct_answer)
   }
 }

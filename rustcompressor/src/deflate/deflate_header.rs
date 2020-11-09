@@ -62,7 +62,7 @@ use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::vec::Vec;
 
-use super::{CodeDict, DeflateReadTree, DeflateSym, DeflateWriteTree};
+use super::{CodeDict, DeflateReadTree, DeflateWriteTree};
 use crate::deflate::decoder::DeflateReadError;
 use crate::deflate::encoder::DeflateWriteError;
 use crate::huff_tree::*;
@@ -88,22 +88,15 @@ pub fn read_header<R: Read>(
   let hdist: u8 = bit_src.read(5)?;
   let hclen: u8 = bit_src.read(4)?;
   let size_codes = read_size_codes(bit_src, hclen + 4)?;
-  println!("hlit: {}", hlit);
-  println!("hdist: {}", hdist);
-  println!("hclen: {}", hclen);
-  println!("size codes: {:?}", size_codes);
 
   let size_code_tree = compile_read_tree(size_codes).expect("Couldn't compile read tree");
 
   let num_literals = 257 + hlit as u16;
   let num_dists = 1 + hdist as u16;
 
-  println!("Reading header");
-
   let (length_tree, dist_tree) =
     decode_huffman_alphabets(bit_src, &size_code_tree, num_literals, num_dists)?;
 
-    println!("Got trees");
   Ok((length_tree, dist_tree))
 }
 
@@ -167,7 +160,7 @@ pub fn write_header<W: Write>(
 
   // Find index of last code length that will be used from RAW_CODE_ORDER
   // Some duplicates might be in codelen_sizes, and that's okay.
-  let mut codepoint_vals: Vec<u16> = size_codes.iter().map(|(value,_ )| *value).collect();
+  let codepoint_vals: Vec<u16> = size_codes.iter().map(|(value,_ )| *value).collect();
   let mut last_rco_index = 0;
   // This loop is a little weird. Essentially, we want to find the smallest N 
   // such that any observed value in codelen_sizes will occur in RAW_CODE_ORDER[0..=N]
@@ -191,11 +184,6 @@ pub fn write_header<W: Write>(
   bit_sink.write(4, hclen)?;
   write_size_codes(bit_sink, &size_codes_hm, hclen + 4)?;
 
-  println!("hlit: {}", hlit);
-  println!("hdist: {}", hdist);
-  println!("hclen: {}", hclen);
-  println!("{:?}", size_codes);
-
   let write_tree = compile_write_tree(size_codes).expect("Could not compute write tree");
 
   assert_eq!((hlit + 257 + hdist + 1) as usize, code_sizes.len());
@@ -217,7 +205,6 @@ pub fn read_size_codes<R: Read>(
   for code in codes.into_iter() {
     let ccl: usize = bit_src.read::<u8>(3)? as usize;
     codecodelen.insert(*code, ccl);
-    println!("Read code {} as {}", code, ccl);
   }
 
   Ok(huffcode_from_lengths(&codecodelen))
@@ -233,15 +220,12 @@ fn write_size_codes<W: Write>(
 ) -> Result<(), DeflateWriteError> {
   let num_codes = num_codes.try_into().unwrap();
 
-  println!("Num codes is {}", num_codes);
   for code_val in &RAW_CODE_ORDER[0..num_codes] {
     if let Some(codelen) = size_codes.get(code_val).and_then(|x| Some(x.len())) {
       assert!(codelen < 8);
-      println!("Wrote code length {} encoded as {}", code_val, codelen);
       bit_sink.write(3, codelen as u8)?;
     } else {
       bit_sink.write(3, 0)?;
-      println!("Wrote code length {} encoded as {}", code_val, 0);
     }
   }
 
@@ -316,19 +300,19 @@ impl CodeLengthCodepoint {
       Self::Length(x) => bit_sink.write_huffman(codelength_tree, *x as u16),
       Self::ValueRepeat(rep) => {
         assert!(*rep >= 3 && *rep <= 6, "Rep out of range for value repeat");
-        bit_sink.write_huffman(codelength_tree, 16);
+        bit_sink.write_huffman(codelength_tree, 16)?;
         bit_sink.write(2, (*rep - 3) as u32)
       }
       Self::ShortZeroRep(rep) => {
         let r = *rep;
         assert!(r >= 3 && r <= 10, "Rep out of range for short zero repeat");
-        bit_sink.write_huffman(codelength_tree, 17);
+        bit_sink.write_huffman(codelength_tree, 17)?;
         bit_sink.write(3, r as u32 - 3)
       }
       Self::LongZeroRep(rep) => {
         let r = *rep;
         assert!(r >= 11 && r <= 138, "Rep out of range for long zero rep");
-        bit_sink.write_huffman(codelength_tree, 18);
+        bit_sink.write_huffman(codelength_tree, 18)?;
         bit_sink.write(7, r as u32 - 11)
       }
     }
@@ -564,7 +548,7 @@ mod test {
     let mut w = BitWriter::new(&mut buf[..]);
 
     for pt in v.iter() {
-      pt.write_to_bitstream(&mut w, &writetree);
+      pt.write_to_bitstream(&mut w, &writetree).expect("Cannot write CLP to bitstream");
     }
 
     let mut r = BitReader::new(&buf[..]);

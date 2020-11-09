@@ -32,7 +32,6 @@ impl DeflateSym {
     length_tree: &DeflateWriteTree,
     dist_tree: Option<&DeflateWriteTree>,
   ) -> Result<(), DeflateWriteError> {
-    println!("Writing {:?} to stream", self);
     match self {
       DeflateSym::Literal(x) => bit_sink.write_huffman(length_tree, (*x) as u16)?,
       DeflateSym::EndOfBlock => bit_sink.write_huffman(length_tree, 256)?,
@@ -418,9 +417,11 @@ impl CompressedBlock {
       compile_write_tree(dist_codes.clone()).expect("Could not compile write tree")
     });
 
-    write_header(bit_sink, &length_codes, dist_codes.as_ref().unwrap_or(&Vec::new()))?;
-
-    println!("Header Written!");
+    write_header(
+      bit_sink,
+      &length_codes,
+      dist_codes.as_ref().unwrap_or(&Vec::new()),
+    )?;
 
     for sym in self.data.iter() {
       sym.write_to_stream(bit_sink, &length_tree, dist_tree.as_ref())?;
@@ -547,8 +548,8 @@ mod tests {
     let mut match_table = HashMap::new();
     match_table.insert((1, 2), VecDeque::from_iter(vec![4, 2, 1, 0].into_iter()));
 
-    let x = CompressedBlock::find_offset_backref(&mut match_table, &data, 4);
-    println!("{:?}", x);
+    CompressedBlock::find_offset_backref(&mut match_table, &data, 4)
+      .expect("Did not find offset in an input where there should have been one!");
   }
 
   #[test]
