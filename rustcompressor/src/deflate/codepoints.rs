@@ -84,17 +84,6 @@ impl Codepoint {
   }
 }
 
-// Reverse the 5 LSBs of the given input. Utility for tree-free bitreading.
-fn bitreverse5(data: u16) -> u16 {
-  let mut out = 0u16;
-  out |= (data & 0b00001) << 4;
-  out |= (data & 0b00010) << 2;
-  out |= data & 0b00100;
-  out |= (data & 0b01000) >> 2;
-  out |= (data & 0b10000) >> 4;
-  out
-}
-
 impl Codepoint {
   pub fn new(code: u16, nbits: u8, lo: u16) -> Self {
     let range = if nbits == 0 { 0 } else { (1u16 << nbits) - 1 };

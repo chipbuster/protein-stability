@@ -26,8 +26,9 @@ pub mod default_data;
 mod deflate_header;
 mod codepoints;
 pub mod decoder;
-pub mod display;
 pub mod encoder;
+
+use serde::Serialize;
 
 use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
 use bitstream_io::LittleEndian;
@@ -45,7 +46,7 @@ type CodeDict<S> = Vec<(S, Vec<u8>)>;
 according to 3.2.5 of RFC 1951. Note that 3.2.5 only deals with the abstract
 numbers needed to encode the codepoints: the actual binary representation of the
 numbers is specified either according to 3.2.6 or the dynamic Huffman tree. */
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Serialize, Debug, PartialEq, Eq, Clone)]
 pub enum DeflateSym {
   EndOfBlock,
   Literal(u8),
@@ -53,32 +54,32 @@ pub enum DeflateSym {
   OffsetBackref(u8, u16, u16),
 }
 
-#[derive(Debug)]
+#[derive(Serialize,Debug, Clone)]
 pub struct UncompressedBlock {
   data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct CompressedBlock {
   lenlit_code: CodeDict<u16>,
   dist_code: CodeDict<u16>,
   data: Vec<DeflateSym>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub enum BlockData {
   Raw(UncompressedBlock),
   Fix(CompressedBlock),
   Dyn(CompressedBlock),
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Block {
   bfinal: bool,
   data: BlockData,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct DeflateStream {
   blocks: Vec<Block>,
 }
