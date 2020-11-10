@@ -1,6 +1,11 @@
-use crate::deflate::{DeflateReadTree, DeflateWriteTree};
-use bitstream_io::huffman::{compile_read_tree, compile_write_tree};
+use crate::deflate::CodeDict;
+use lazy_static::lazy_static;
 use std::vec::Vec;
+
+lazy_static! {
+  pub static ref DEFAULT_LENGTH_CODE: CodeDict<u16> = default_length_huffcode();
+  pub static ref DEFAULT_DIST_CODE: CodeDict<u16> = default_dist_huffcode();
+}
 
 /// Takes a slice of 0-1 values and performs an "add" on it. Returns None if
 /// a non 0/1 input is encountered
@@ -24,7 +29,7 @@ pub fn increment_bit_slice(mut arg: Vec<u8>) -> Option<Vec<u8>> {
   Some(arg)
 }
 
-fn default_hufftree() -> Vec<(u16, Vec<u8>)> {
+pub fn default_length_huffcode() -> CodeDict<u16> {
   let mut huff_values = Vec::with_capacity(288);
 
   // Code Block 1: 00110000 through 10111111 for values 0-143
@@ -62,14 +67,22 @@ fn default_hufftree() -> Vec<(u16, Vec<u8>)> {
   huff_values
 }
 
-pub fn default_read_hufftree() -> Box<[DeflateReadTree]> {
-  let codes = default_hufftree();
-  compile_read_tree(codes).unwrap()
-}
-
-pub fn default_write_hufftree() -> DeflateWriteTree {
-  let codes = default_hufftree();
-  compile_write_tree(codes).unwrap()
+pub fn default_dist_huffcode() -> CodeDict<u16> {
+  let mut huff_values = Vec::new();
+  let mut code = Some(vec![0u8, 0, 0, 0, 0]);
+  /* Due to an interesting restriction from the hufftree module in bitstream-io,
+     we have to provide encodings for 30 and 31 even though they will never actually
+     show up in the input. More specifically, the two 5-bit bitstrings that are
+     not already mapped by 0-29 need to have *some* mapping for them, else the
+     library refuses to compile the resulting tree. We map them to 30/31, though
+     any value should theoretically work because we won't see them in the stream.
+  */
+  for val in 0..=31 {
+    let c2 = code.as_ref().unwrap().clone();
+    huff_values.push((val, c2));
+    code = increment_bit_slice(code.unwrap());
+  }
+  huff_values
 }
 
 mod tests {

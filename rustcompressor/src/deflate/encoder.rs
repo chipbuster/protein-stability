@@ -1,5 +1,7 @@
 use super::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
+use super::default_data::default_huffcode::*;
 use super::*;
+use crate::deflate::deflate_header::write_header;
 use crate::huff_tree::huffcode_from_freqs;
 use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
 use std::io::Write;
@@ -29,7 +31,7 @@ impl DeflateSym {
     &self,
     bit_sink: &mut BitWriter<W, LittleEndian>,
     length_tree: &DeflateWriteTree,
-    dist_tree: Option<&DeflateWriteTree>,
+    dist_tree: &DeflateWriteTree,
   ) -> Result<(), DeflateWriteError> {
     match self {
       DeflateSym::Literal(x) => bit_sink.write_huffman(length_tree, (*x) as u16)?,
@@ -68,6 +70,24 @@ impl CompressedBlock {
     Self::do_lz77(data, true)
   }
 
+  /// Compute the lengthlit and dist codes that will be needed for a given input.
+  fn compute_codes(data: &[DeflateSym]) -> (CodeDict<u16>, CodeDict<u16>) {
+    let lit_freq = Self::compute_lengthlit_freq(data);
+    let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
+    /* If we have distances in the LZ77 encoding, use them to describe a dict.
+    Otherwise, it doesn't really matter what we use, so it might as well
+    be the default dictionary */
+    let dist_freq = Self::compute_dist_freq(data);
+    let dist_codes = if dist_freq.is_empty() {
+      DEFAULT_DIST_CODE.clone()
+    } else {
+      huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN)
+    };
+    (length_codes, dist_codes)
+  }
+
+  /// Computes the compressed representation of a stream of bytes as well as the
+  /// huffman trees that will be used to encode it in DEFLATE
   fn do_lz77(data: &Vec<u8>, use_offset: bool) -> Self {
     let mut deflate_match_table = HashMap::<&[u8], VecDeque<Index>>::new();
     let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
@@ -86,14 +106,6 @@ impl CompressedBlock {
       } else {
         None
       };
-
-      /*
-      println!("Data is {:?}", &data[index..index+3]);
-      if let Some(x) = offset_match.as_ref(){
-        println!("Match is {:?}", x.1);
-      }
-      println!("{}: {:?}, ({}, {:?})", index, offset_match, deflate_len, deflate_syms);
-      */
 
       // Select the match to use based on input options and match lengths
       let (match_len, mut match_syms) = if let Some((off_len, off_syms)) = offset_match {
@@ -115,7 +127,16 @@ impl CompressedBlock {
       output.push(DeflateSym::Literal(data[index]));
       index += 1
     }
-    Self { data: output }
+
+    // Add an end-of-stream indicator
+    output.push(DeflateSym::EndOfBlock);
+
+    let (lenlit_code, dist_code) = Self::compute_codes(&output[..]);
+    Self {
+      lenlit_code,
+      dist_code,
+      data: output,
+    }
   }
 
   /// Assuming a match of size length-1 succeeded at this index, does a match of length succeed?
@@ -130,7 +151,7 @@ impl CompressedBlock {
     assert!(data_start > match_start); // Assert that we're looking back, not forwards
     let no_data_overrun = data_start + length < data.len();
     let match_no_overlap = match_start + length <= data_start;
-    if !no_data_overrun || !match_no_overlap{
+    if !no_data_overrun || !match_no_overlap {
       return false;
     }
     let data_match =
@@ -345,9 +366,9 @@ impl CompressedBlock {
     }
   }
 
-  fn compute_lengthlit_freq(&self) -> HashMap<u16, usize> {
+  fn compute_lengthlit_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
     let mut freqs = HashMap::new();
-    for x in self.data.iter() {
+    for x in data.iter() {
       match x {
         DeflateSym::Literal(sym) => *freqs.entry(*sym as u16).or_default() += 1,
         DeflateSym::EndOfBlock => *freqs.entry(256).or_default() += 1,
@@ -366,9 +387,9 @@ impl CompressedBlock {
     freqs
   }
 
-  fn compute_dist_freq(&self) -> HashMap<u16, usize> {
+  fn compute_dist_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
     let mut freqs = HashMap::new();
-    for x in self.data.iter() {
+    for x in data.iter() {
       match x {
         DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
         DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_, _, dist) => {
@@ -384,9 +405,13 @@ impl CompressedBlock {
     &self,
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
-    let length_tree = super::default_data::default_hufftree::default_write_hufftree();
+    let length_codes = DEFAULT_LENGTH_CODE.clone();
+    let dist_codes = DEFAULT_DIST_CODE.clone();
+    let length_tree =
+      compile_write_tree(length_codes).expect("Could not compile default length tree!");
+    let dist_tree = compile_write_tree(dist_codes).expect("Could not compile default dist tree!");
     for sym in self.data.iter() {
-      sym.write_to_stream(bit_sink, &length_tree, None)?;
+      sym.write_to_stream(bit_sink, &length_tree, &dist_tree)?;
     }
     Ok(())
   }
@@ -395,23 +420,13 @@ impl CompressedBlock {
     &self,
     bit_sink: &mut BitWriter<W, LittleEndian>,
   ) -> Result<(), DeflateWriteError> {
-    let lit_freq = self.compute_lengthlit_freq();
-    let length_codes = huffcode_from_freqs(&lit_freq, MAX_HUFF_LEN);
-    let length_tree = compile_write_tree(length_codes).unwrap();
+    write_header(bit_sink, &self.lenlit_code, &self.dist_code)?;
 
-    let dist_freq = self.compute_dist_freq();
-    let dist_tree = if dist_freq.is_empty() {
-        None
-    } else {
-        let dist_codes = huffcode_from_freqs(&dist_freq, MAX_HUFF_LEN);
-        Some(compile_write_tree(dist_codes).expect("Could not compile write tree"))
-    };
-
-    // TODO: Write out the huffman trees you fucking idiot what the fuck do you
-    // think you're doing holy shit you're so bad at this, I mean fuck me
+    let length_tree = compile_write_tree(self.lenlit_code.clone()).unwrap();
+    let dist_tree = compile_write_tree(self.dist_code.clone()).unwrap();
 
     for sym in self.data.iter() {
-      sym.write_to_stream(bit_sink, &length_tree, dist_tree.as_ref())?;
+      sym.write_to_stream(bit_sink, &length_tree, &dist_tree)?;
     }
     Ok(())
   }
@@ -487,7 +502,6 @@ mod tests {
   use super::*;
   use rand::Rng;
 
-
   #[test]
   fn round_trip_deflate_1() {
     let init_str = "hellohellohelloIamGeronimohello";
@@ -536,8 +550,8 @@ mod tests {
     let mut match_table = HashMap::new();
     match_table.insert((1, 2), VecDeque::from_iter(vec![4, 2, 1, 0].into_iter()));
 
-    let x = CompressedBlock::find_offset_backref(&mut match_table, &data, 4);
-    println!("{:?}", x);
+    CompressedBlock::find_offset_backref(&mut match_table, &data, 4)
+      .expect("Did not find offset in an input where there should have been one!");
   }
 
   #[test]
@@ -559,6 +573,7 @@ mod tests {
       DeflateSym::Literal(8),
       DeflateSym::OffsetBackref(9, 8, 8),
       DeflateSym::Literal(18),
+      DeflateSym::EndOfBlock,
     ];
     assert_eq!(symstream, answer);
   }
@@ -575,15 +590,15 @@ mod tests {
 
   #[test]
   fn round_trip_offset() {
-    let mut testvec = vec![1,2,3,4,3,2,1];
+    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
     for i in 0..10 {
       testvec.push(i);
     }
-    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
     println!("{:?}", comp.data);
     assert!(comp.data.iter().any(|x| match x {
-      DeflateSym::OffsetBackref(_,_,_) => true,
+      DeflateSym::OffsetBackref(_, _, _) => true,
       _ => false,
     }));
     let rt = comp.into_decompressed_bytes().unwrap();
@@ -601,23 +616,19 @@ mod tests {
     for _ in 0..1024 {
       testvec.push(rng.gen::<u8>());
     }
-
   }
-
 
   #[test]
   fn round_trip_randomlike_deflate() {
     let mut rng = rand::thread_rng();
-    let mut testvec = vec![1,2,3,4,3,2,1];
+    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
     for _ in 0..100 {
       testvec.push(rng.gen::<u8>());
     }
-    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77(&testvec);
 
-
     let rt = comp.into_decompressed_bytes().unwrap();
-
 
     if rt != testvec {
       println!(
@@ -632,17 +643,17 @@ mod tests {
   #[test]
   /// Make sure that, even past a huge glob of claptrap, we're still triggering
   /// the offset detector.
-  fn round_trip_randomlike_offset(){
+  fn round_trip_randomlike_offset() {
     let mut rng = rand::thread_rng();
-    let mut testvec = vec![1,2,3,4,3,2,1];
+    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
     for _ in 0..100 {
       testvec.push(rng.gen::<u8>());
     }
-    testvec.append(&mut vec![15,16,17,18,17,16,15]);
+    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
 
     assert!(comp.data.iter().any(|x| match x {
-      DeflateSym::OffsetBackref(_,_,_) => true,
+      DeflateSym::OffsetBackref(_, _, _) => true,
       _ => false,
     }));
     let rt = comp.into_decompressed_bytes().unwrap();

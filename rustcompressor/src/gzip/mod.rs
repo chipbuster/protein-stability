@@ -160,6 +160,10 @@ impl GzipData {
     }
   }
 
+  pub fn get_checksums(&self) ->(u32, u32) {
+    (self.crc32, self.isz)
+  }
+
   /** Take ownership of a BitVector of compressed data, updating the associated
   metadata fields appropriately */
   pub fn set_data(&mut self, data: Vec<u8>) {
