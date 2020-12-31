@@ -72,10 +72,8 @@ function chainee_distrib_is_gaussian(trace)
     is_gaussian_distrib(xs, xs_param) && is_gaussian_distrib(ys, ys_param)
 end
 
+"""Verify that the sum of bond lengths (chain length) is Gaussian. """
 function chainlength_distrib_ok(trace)
-    """Verify that the sum of bond lengths (chain length) is Gaussian.
-
-    """
     target_chainlength = natom(trace) - 1.0
     allowed_variation = 0.10 * target_chainlength + 1.5
 
@@ -91,8 +89,8 @@ function chainlength_distrib_ok(trace)
     return true
 end
 
+"""Verify that the time-reversed entropy estimate is similar to the forward one."""
 function timereversed_entropy_same(trace, nskip=1)
-    """Verify that the time-reversed entropy estimate is similar to the forward one."""
     data = trace[:,:,1:nskip:end]
 
     reversed = data[:,:,end:-1:1]
@@ -117,10 +115,9 @@ function twohalf_entropy_same(trace, nskip=1)
     abs(a1 - a2) < 0.05 && abs(i1 - i2) < 0.05
 end
 
+"""Tests that the potential energy and radius of gyration do not significantly
+   differ between the first and second half of the simulation."""
 function twohalf_physquant_same(trace, nskip=1)
-    """Tests that the potential energy and radius of gyration do not significantly
-    differ between the first and second half of the simulation."""
-
     data = trace[:,:,1:nskip:end]
 
     mid = nstep(data) ÷ 2
@@ -139,9 +136,9 @@ function twohalf_physquant_same(trace, nskip=1)
     pvalue(pe_test) > 0.1 && pvalue(rg_test) > 0.1
 end
 
+"""Verify that the compression ratio does not change if the simulation is
+transformed by a random isometry (translation + rotation + mirroring)"""
 function random_isometry_invariant(trace)
-    """Verify that the compression ratio does not change if the simulation is
-    transformed by a random isometry (translation + rotation + mirroring)"""
     translation = natom(trace) * rand(2)
     θ1 = 2 * pi * (rand() - 0.5)
     θ2 = 2 * pi * (rand() - 0.5)
@@ -179,20 +176,11 @@ function angle_autocor_degradation(trace, nskip=1)
 end
 
 function validate_file(fname, target_nframes)
-    rawtrace = deserialize(fname)
-    nsteps = nstep(rawtrace)
-    nskip = if nsteps < target_nframes
-        1
-    else
-        nsteps ÷ target_nframes
-    end
-
-    # Just do the subsetting before testing...
-    trace = collect(rawtrace[:,:,1:nskip:end])
+    trace = load_file(fname, target_nframes)
 
     test_res = Dict(
         "pairwise_bondlength_distrib_ok" => pairwise_bondlength_distrib_ok(trace),
-        "no_directional_dependence" => no_directional_dependence(rawtrace),
+        "no_directional_dependence" => no_directional_dependence(trace),
         # "chainee_distrib_is_gaussian" => chainee_distrib_is_gaussian(trace),
         "chainlength_distrib_ok" => chainlength_distrib_ok(trace),
         "timereversed_entropy_same" => timereversed_entropy_same(trace),
@@ -218,12 +206,6 @@ function usage()
     println("\tinputs: One or more serialized traces to process")
 end
 
-function filename_to_label(fname)
-    fn = basename(fname)
-    fn = fn[1:end-7]
-    (_, N, R) = split(fn,'_')
-    "N=$(N),R=$(R)"
-end
 
 function main()
     if ARGS[1] == "-h" || ARGS[1] == "--help" || length(ARGS) < 3

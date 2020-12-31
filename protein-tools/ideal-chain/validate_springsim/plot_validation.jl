@@ -5,11 +5,14 @@ using LinearAlgebra
 display of the plotting function applied to all elements of that list"""
 function gen_allplot_for_plotfun(filelist, failed_list, plotfun, labelfun, outfile)
     plist = []
-    for filename in filelist
+    l = SpinLock()
+    @threads for filename in filelist
         failed = filename ∈ failed_list
-        data = deserialize(filename)
+        data = load_file(filename, 16384) #Get some extra data for plots
         label = labelfun(filename)
+        lock(l)
         push!(plist, plotfun(data, label, failed))
+        unlock(l)
     end
     n = length(plist)
     p = plot(plist..., layout=(n,1), size=(1000, 400n))

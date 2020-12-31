@@ -16,6 +16,28 @@ nstep(x::SimTrace) = size(x)[3]
 pct_diff(x,y) = abs(y - x) / min(x,y)
 rot_to_mat(θ) = [ cos(θ)  -sin(θ); sin(θ) cos(θ) ]
 
+####################
+## File Utilities ##
+####################
+
+function filename_to_label(fname)
+    fn = basename(fname)
+    fn = fn[1:end-7]
+    (_, N, R) = split(fn,'_')
+    "N=$(N),R=$(R)"
+end
+
+function load_file(fname, nframes=4096)::SimTrace
+    rawtrace = deserialize(fname)
+    nsteps = nstep(rawtrace)
+    nskip = if nsteps < nframes
+        1
+    else
+        nsteps ÷ nframes
+    end
+    collect(rawtrace[:,:,1:nskip:end])
+end
+
 #########################
 ## Entropy Computation ##
 #########################
