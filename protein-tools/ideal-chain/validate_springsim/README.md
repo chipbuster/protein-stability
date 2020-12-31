@@ -9,6 +9,10 @@ contains serialized traces (2, natom, nsteps), changes in filename can be
 accomodated by changing the filename_to_label function. If a change in file
 format occurs, we will need to modify the loading as well.
 
+Note: because the file format is hardcode-assumed here, I recommend copying
+this file out to various experiment directories and modifying it there to
+adapt it to different formats.
+
 Example executions:
 
 JULIA_NUM_THREADS=8 julia validate_sims.jl always /tmp/plotdir /Experiments/data/07/*.serial
