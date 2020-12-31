@@ -3,8 +3,8 @@ using Discretizers
 using Statistics
 using StatsBase
 
-include("../../core/geom_funcs.jl")
-include("../../core/compressor.jl")
+include("/home/chipbuster/codes/protein-stability/protein-tools/core/geom_funcs.jl")
+include("/home/chipbuster/codes/protein-stability/protein-tools/core/compressor.jl")
 
 # For (almost) all tests, the input will be in a trace, which are
 # (ndim, natom, nsteps) arrays of doubles.

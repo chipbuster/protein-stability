@@ -8,14 +8,14 @@ function gen_allplot_for_plotfun(filelist, failed_list, plotfun, labelfun, outfi
     l = SpinLock()
     @threads for filename in filelist
         failed = filename ∈ failed_list
-        data = load_file(filename, 16384) #Get some extra data for plots
+        data = load_file(filename, 1 << 15) #Get some extra data for plots
         label = labelfun(filename)
         lock(l)
         push!(plist, plotfun(data, label, failed))
         unlock(l)
     end
     n = length(plist)
-    p = plot(plist..., layout=(n,1), size=(1000, 400n))
+    p = plot(plist..., layout=(n,1), size=(1400, 500n))
     png(p, outfile)
 end
 
