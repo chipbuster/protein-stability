@@ -26,7 +26,6 @@ function pairwise_bondlength_distrib_ok(trace::SimTrace)
     blens = vec(pairwise_bond_lengths(trace))
 
     if any(blens .> 2.0)
-        println("Bond length anomaly on frame $(ts)")
         return false
     end
 
@@ -81,7 +80,6 @@ function chainlength_distrib_ok(trace)
 
     for cl in cls
         if abs(cl - target_chainlength) > allowed_variation
-            println("Chainlength anomaly on frame $(ts): length is $(chainlen) on a target of $(target_chainlength)")
             return false
         end
     end
@@ -224,7 +222,7 @@ function main()
         ARGS[3:end]
     end
 
-    failed_tests = DefaultDict([])
+    failed_tests = DefaultDict(String[])
 
     nsamples_per_test = 4096
 

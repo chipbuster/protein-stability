@@ -6,7 +6,8 @@ display of the plotting function applied to all elements of that list"""
 function gen_allplot_for_plotfun(filelist, failed_list, plotfun, labelfun, outfile)
     plist = Vector{Any}(undef, length(filelist))
     l = SpinLock()
-    @threads for i in 1:length(filelist)
+    #Plotting is not threadsafe: we cannot thread this
+    for i in 1:length(filelist)
         filename = filelist[i]
         failed = filename ∈ failed_list
         data = load_file(filename, 1 << 15) #Get some extra data for plots
@@ -19,19 +20,13 @@ function gen_allplot_for_plotfun(filelist, failed_list, plotfun, labelfun, outfi
     png(p, outfile)
 end
 
-function plot_pairwise_bondlen_distrib(trace, label_text="", failed=false)
+function plot_pairwise_bondlen_distrib(trace::SimTrace, label_text::String="", failed::Bool=false)
     blens = vec(pairwise_bond_lengths(trace))
     color = failed ? :red : :blue
     histogram(blens, xlabel="Length (Multiple of restlen)", title="Pairwise Bondlen " * label_text, legend=false, color=color)
 end
 
-function plot_dir_deps(trace, label_text="", failed=false)
-    # This print is needed to avoid a type error where the histogram function
-    # attempts to access element [0] of an Array{Symbol,1} instead of the
-    # correct datatype. Don't ask me wtf is going on there (probably some sort
-    # of race, but I have no idea how that could possibly work)
-    print("Type of trace is $(typeof(trace))")
-
+function plot_dir_deps(trace::SimTrace, label_text::String="", failed::Bool=false)
     angles = directional_vectors(trace)
     @views fb_angles = angles[:,1]
     @views lb_angles = angles[:,2]
@@ -41,19 +36,19 @@ function plot_dir_deps(trace, label_text="", failed=false)
     label = plot(legend=false,grid=false,foreground_color_subplot=:white,xlim=(0,1),ylim=(0,1), annotations=(0.0,0.6,label_text))
     h1 = histogram(fb_angles, xlabel="Bond Angle", title="First Angle", legend=false, color=color)
     h2 = histogram(lb_angles, xlabel="Bond Angle", title="Last Angle",legend=false, color=color)
-    h3 = histogram(lb_angles, xlabel="Bond Angle", title="E2E Angle",legend=false, color=color)
+    h3 = histogram(e2e_angles, xlabel="Bond Angle", title="E2E Angle",legend=false, color=color)
 
     plot(label, h1,h2,h3, layout=(1,4), size=(700,300))
 end
 
-function plot_chainlength_distrib(trace, label_text="", failed=false)
+function plot_chainlength_distrib(trace::SimTrace, label_text::String="", failed::Bool=false)
     color = failed ? :red : :blue
     ls = chainlengths(trace)
 
     histogram(ls, xlabel="Chainlength (Multiple of restlen)", title="Chainlengths " * label_text, legend=false, color=color)
 end
 
-function plot_autocor_decay(trace, label_text="", failed=false)
+function plot_autocor_decay(trace::SimTrace, label_text::String="", failed::Bool=false)
     color = failed ? :red : :blue
     angles = bond_angle_trace(trace)
 
@@ -68,7 +63,7 @@ function plot_autocor_decay(trace, label_text="", failed=false)
     plot(1:100, ys, title="Autocor for "*label_text*mmtext, ylabel="Autocorrelation", xlabel="τ", legend=false, color=color)
 end
 
-function plot_phys_quant_halves(trace, label_text="", failed=false)
+function plot_phys_quant_halves(trace::SimTrace, label_text::String="", failed::Bool=false)
     data = trace
     mid = nstep(data) ÷ 2
     half1 = data[:,:,1:mid]
