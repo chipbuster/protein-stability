@@ -4,15 +4,15 @@ using LinearAlgebra
 """Given a list of filenames and a plotting function, generates a vertical
 display of the plotting function applied to all elements of that list"""
 function gen_allplot_for_plotfun(filelist, failed_list, plotfun, labelfun, outfile)
-    plist = []
+    plist = Vector{Any}(undef, length(filelist))
     l = SpinLock()
-    @threads for filename in filelist
+    @threads for i in 1:length(filelist)
+        filename = filelist[i]
         failed = filename ∈ failed_list
         data = load_file(filename, 1 << 15) #Get some extra data for plots
+        @assert(length(data) > 0)
         label = labelfun(filename)
-        lock(l)
-        push!(plist, plotfun(data, label, failed))
-        unlock(l)
+        plist[i] = plotfun(data, label, failed)
     end
     n = length(plist)
     p = plot(plist..., layout=(n,1), size=(1400, 500n))
@@ -26,6 +26,12 @@ function plot_pairwise_bondlen_distrib(trace, label_text="", failed=false)
 end
 
 function plot_dir_deps(trace, label_text="", failed=false)
+    # This print is needed to avoid a type error where the histogram function
+    # attempts to access element [0] of an Array{Symbol,1} instead of the
+    # correct datatype. Don't ask me wtf is going on there (probably some sort
+    # of race, but I have no idea how that could possibly work)
+    print("Type of trace is $(typeof(trace))")
+
     angles = directional_vectors(trace)
     @views fb_angles = angles[:,1]
     @views lb_angles = angles[:,2]
@@ -56,7 +62,10 @@ function plot_autocor_decay(trace, label_text="", failed=false)
         push!(ys, sim_autocor(angles, n))
     end
 
-    plot(1:100, ys, title="Autocor for "*label_text, ylabel="Autocorrelation", xlabel="τ", legend=false, color=color)
+    (big,small) = extrema(ys)
+    mmtext = " (Min:$(small), Max:$(big)"
+
+    plot(1:100, ys, title="Autocor for "*label_text*mmtext, ylabel="Autocorrelation", xlabel="τ", legend=false, color=color)
 end
 
 function plot_phys_quant_halves(trace, label_text="", failed=false)
