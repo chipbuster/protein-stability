@@ -100,7 +100,7 @@ function parse_block(object)
 
     btype = parse_block_type(btype_str)
 
-    Block(bfinal, btype, llcode, dcode, data)
+    Block(bfinal, btype, BlockCode(llcode, dcode), data)
 end
 
 function parse_gzip_json(filename)
@@ -116,4 +116,3 @@ function parse_gzip_json(filename)
 
     [ parse_block(b) for b in json_blocks ]
 end
-
