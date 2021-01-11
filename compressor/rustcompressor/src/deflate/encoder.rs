@@ -507,7 +507,8 @@ mod tests {
     let init_str = "hellohellohelloIamGeronimohello";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -517,7 +518,8 @@ mod tests {
     let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -527,7 +529,8 @@ mod tests {
     let init_str = "hellohellohelloIamGeronimohello";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -537,7 +540,8 @@ mod tests {
     let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
     assert_eq!(init_str, fini_str);
   }
@@ -584,7 +588,8 @@ mod tests {
       0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
     ];
     let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
     assert_eq!(data, rt);
   }
 
@@ -601,7 +606,8 @@ mod tests {
       DeflateSym::OffsetBackref(_, _, _) => true,
       _ => false,
     }));
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
 
     if rt != testvec {
       println!(
@@ -628,7 +634,8 @@ mod tests {
     testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77(&testvec);
 
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
 
     if rt != testvec {
       println!(
@@ -656,7 +663,8 @@ mod tests {
       DeflateSym::OffsetBackref(_, _, _) => true,
       _ => false,
     }));
-    let rt = comp.into_decompressed_bytes().unwrap();
+    let mut rt = Vec::new();
+    comp.into_decompressed_bytes(&mut rt).unwrap();
 
     if rt != testvec {
       println!(

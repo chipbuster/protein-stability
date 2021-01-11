@@ -90,7 +90,8 @@ fn compressed_block_from_stream<R: Read>(
     compile_read_tree_local(DEFAULT_DIST_CODE.clone())
   } else {
     compile_read_tree_local(dist_codes.clone())
-  }.expect("Could not compile a dist tree");
+  }
+  .expect("Could not compile a dist tree");
 
   loop {
     let sym = DEFAULT_CODEPOINTS.read_sym(
@@ -178,7 +179,6 @@ fn offset_block_from_stream<R: Read>(
 ) -> Result<CompressedBlock, DeflateReadError> {
   debug_log!("Decompressing offset block\n");
   let (length_dict, dist_dict) = read_header(bit_src)?;
-
 
   compressed_block_from_stream(bit_src, length_dict, dist_dict, true)
 }
@@ -269,22 +269,24 @@ impl CompressedBlock {
     }
   }
 
-  // Decode this compressed block into a stream of bytes
-  pub fn into_decompressed_bytes(self) -> Result<Vec<u8>, DeflateReadError> {
-    let mut literals = Vec::new();
+  /** Decode this compressed block into a stream of bytes. Because blocks can
+      refer to data in earlier blocks, requires caller to pass in (potentially
+      empty) vector of already-decoded data from prior blocks.
+  */
+  pub fn into_decompressed_bytes(self, decoded: &mut Vec<u8>) -> Result<(), DeflateReadError> {
     for sym in self.data.into_iter() {
       match sym {
-        DeflateSym::Literal(ch) => literals.push(ch),
+        DeflateSym::Literal(ch) => decoded.push(ch),
         DeflateSym::Backreference(length, distance) => {
-          Self::expand_backref(length, distance, &mut literals, 0)?;
+          Self::expand_backref(length, distance, decoded, 0)?;
         }
         DeflateSym::OffsetBackref(offset, length, distance) => {
-          Self::expand_backref(length, distance, &mut literals, offset)?;
+          Self::expand_backref(length, distance, decoded, offset)?;
         }
         DeflateSym::EndOfBlock => break,
       }
     }
-    Ok(literals)
+    Ok(())
   }
 }
 
@@ -321,8 +323,7 @@ impl DeflateStream {
       match block.data {
         BlockData::Raw(mut rawdata) => literals.append(&mut rawdata.data),
         BlockData::Fix(comp) | BlockData::Dyn(comp) => {
-          let mut blockdata = comp.into_decompressed_bytes()?;
-          literals.append(&mut blockdata);
+          comp.into_decompressed_bytes(&mut literals)?;
         }
       }
     }
