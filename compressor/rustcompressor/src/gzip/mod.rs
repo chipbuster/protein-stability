@@ -221,23 +221,23 @@ impl GzipData {
       self.id1, self.id2, self.cm, self.flg, self.mtime, self.xfl, self.os as u8
     )?;
     if self.flg.contains(GZFlags::FEXTRA) {
-      write!(f, "Had an EXTRA field\n")?;
+      writeln!(f, "Had an EXTRA field")?;
     }
 
     if self.flg.contains(GZFlags::FNAME) {
-      write!(f, "Filename: {}\n", self.fname.as_ref().unwrap())?;
+      writeln!(f, "Filename: {}", self.fname.as_ref().unwrap())?;
     }
 
     if self.flg.contains(GZFlags::FCOMMENT) {
-      write!(f, "Comment: {}\n", self.comment.as_ref().unwrap())?;
+      writeln!(f, "Comment: {}", self.comment.as_ref().unwrap())?;
     }
 
     if self.flg.contains(GZFlags::FHCRC) {
-      write!(f, "CRC16: {:x}\n", self.crc16.unwrap())?;
+      writeln!(f, "CRC16: {:x}", self.crc16.unwrap())?;
     }
 
-    write!(f, "CRC32: {:x?}\n", self.crc32)?;
-    write!(f, "Num Bytes: {}\n", self.isz)
+    writeln!(f, "CRC32: {:x?}", self.crc32)?;
+    writeln!(f, "Num Bytes: {}", self.isz)
   }
 
   pub fn fmt_data<W: Write>(&self, f: &mut W) -> fmt::Result {
@@ -251,9 +251,9 @@ impl GzipData {
         write!(f, "{:02x?} ", self.data[i])?;
         i += 1;
       }
-      write!(f, "\n")?;
+      writeln!(f)?;
     }
-    write!(f, "];\n")
+    writeln!(f, "];")
   }
 }
 
@@ -261,6 +261,12 @@ impl fmt::Display for GzipData {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     self.fmt_header(f)?;
     self.fmt_data(f)
+  }
+}
+
+impl Default for GzipData {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

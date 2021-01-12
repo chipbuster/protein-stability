@@ -62,7 +62,7 @@ use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::vec::Vec;
 
-use super::{CodeDict, DeflateReadTree, DeflateWriteTree};
+use super::{CodeDict, CodeDictEntry, DeflateReadTree, DeflateWriteTree};
 use crate::deflate::decoder::DeflateReadError;
 use crate::deflate::encoder::DeflateWriteError;
 use crate::huff_tree::*;
@@ -105,11 +105,11 @@ pub fn read_header<R: Read>(
 // TODO: Modify read_header to return codedicts instead of precompiled trees.
 pub fn write_header<W: Write>(
   bit_sink: &mut BitWriter<W, LittleEndian>,
-  length_code: &CodeDict<u16>,
-  dist_code: &CodeDict<u16>,
+  length_code: &[CodeDictEntry<u16>],
+  dist_code: &[CodeDictEntry<u16>],
 ) -> Result<(), DeflateWriteError> {
-  let length_dict: HashMap<u16, Vec<u8>> = length_code.into_iter().cloned().collect();
-  let dist_dict: HashMap<u16, Vec<u8>> = dist_code.into_iter().cloned().collect();
+  let length_dict: HashMap<u16, Vec<u8>> = length_code.iter().cloned().collect();
+  let dist_dict: HashMap<u16, Vec<u8>> = dist_code.iter().cloned().collect();
 
   let largest_length_code = length_code.iter().map(|(x, _)| *x).max().unwrap_or(0);
   let largest_dist_code = dist_code.iter().map(|(x, _)| *x).max().unwrap_or(0);
@@ -202,7 +202,7 @@ pub fn read_size_codes<R: Read>(
 
   let mut codecodelen = HashMap::new();
   let codes = &RAW_CODE_ORDER[0..nc];
-  for code in codes.into_iter() {
+  for code in codes.iter() {
     let ccl: usize = bit_src.read::<u8>(3)? as usize;
     codecodelen.insert(*code, ccl);
   }
@@ -221,7 +221,7 @@ fn write_size_codes<W: Write>(
   let num_codes = num_codes.try_into().unwrap();
 
   for code_val in &RAW_CODE_ORDER[0..num_codes] {
-    if let Some(codelen) = size_codes.get(code_val).and_then(|x| Some(x.len())) {
+    if let Some(codelen) = size_codes.get(code_val).map(|x| x.len()) {
       assert!(codelen < 8);
       bit_sink.write(3, codelen as u8)?;
     } else {
@@ -305,13 +305,13 @@ impl CodeLengthCodepoint {
       }
       Self::ShortZeroRep(rep) => {
         let r = *rep;
-        assert!(r >= 3 && r <= 10, "Rep out of range for short zero repeat");
+        assert!((3..=10).contains(&r), "Rep out of range for short zero repeat");
         bit_sink.write_huffman(codelength_tree, 17)?;
         bit_sink.write(3, r as u32 - 3)
       }
       Self::LongZeroRep(rep) => {
         let r = *rep;
-        assert!(r >= 11 && r <= 138, "Rep out of range for long zero rep");
+        assert!((11..=138).contains(&r), "Rep out of range for long zero rep");
         bit_sink.write_huffman(codelength_tree, 18)?;
         bit_sink.write(7, r as u32 - 11)
       }
@@ -350,12 +350,12 @@ fn runlength_encode<S: Copy + PartialEq + Eq>(data: &[S]) -> Vec<(S, u8)> {
   }
 
   let mut cur = (data[0], 1);
-  for i in 1..data.len() {
-    if data[i] == cur.0 {
+  for item in data.iter() {
+    if *item == cur.0 {
       cur = (cur.0, cur.1 + 1);
     } else {
       output.push(cur);
-      cur = (data[i], 1);
+      cur = (*item, 1);
     }
   }
   output.push(cur);
@@ -370,7 +370,7 @@ fn break_range_nonzero_len(mut rep: u8) -> Vec<u8> {
     rep -= 6;
     out.push(6);
   }
-  assert!(rep >= 3 && rep < 9, "Invalid range for rep after subloop");
+  assert!((3..9).contains(&rep), "Invalid range for rep after subloop");
   if rep == 8 {
     out.extend(&[4, 4]);
   } else if rep == 7 {
@@ -392,7 +392,7 @@ fn break_range_zero_len(mut rep: u8) -> Vec<u8> {
     out.push(10);
     rep -= 10;
   }
-  assert!(rep >= 3 && rep < 13, "Invalid ragne for rep after subloop");
+  assert!((3..13).contains(&rep), "Invalid ragne for rep after subloop");
   if rep == 12 {
     out.extend(&[6, 6]);
   } else if rep == 11 {
@@ -461,9 +461,7 @@ fn codepoints_to_code_lengths(pts: &[CodeLengthCodepoint]) -> Option<Vec<u8>> {
         }
       }
       CodeLengthCodepoint::LongZeroRep(n) | CodeLengthCodepoint::ShortZeroRep(n) => {
-        for _ in 0..*n {
-          output.push(0);
-        }
+        output.append(&mut vec![0u8;*n as usize]);
       }
     }
   }

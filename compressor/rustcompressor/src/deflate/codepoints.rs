@@ -197,9 +197,9 @@ impl CodepointEncoder {
   }
 
   fn get_codepoint_for_code(&self, code: u16) -> Codepoint {
-    if code >= MIN_DIST_CODE && code <= MAX_DIST_CODE {
+    if (MIN_DIST_CODE..=MAX_DIST_CODE).contains(&code) {
       self.dist_codepoints[code as usize]
-    } else if code >= MIN_LENGTH_CODE && code <= MAX_LENGTH_CODE {
+    } else if (MIN_LENGTH_CODE..=MAX_LENGTH_CODE).contains(&code) {
       self.length_codepoints[(code - MIN_LENGTH_CODE) as usize]
     } else if code == OFFSET_SIGIL {
       self._offset_codepoint
@@ -343,7 +343,7 @@ impl CodepointEncoder {
       Some(x) => x,
     };
     assert!(
-      val >= MIN_LENGTH_CODE && val <= MAX_LENGTH_CODE,
+      (MIN_LENGTH_CODE..=MAX_LENGTH_CODE).contains(&val),
       "Attempted to read length with invalid code {}",
       val
     );
@@ -364,7 +364,7 @@ impl CodepointEncoder {
       bit_src.read_huffman(dist_tree)?
     };
     assert!(
-      val >= MIN_DIST_CODE && val <= MAX_DIST_CODE,
+      (MIN_DIST_CODE..=MAX_DIST_CODE).contains(&val),
       "Attempted to read dist with invalid code {}",
       val
     );

@@ -60,13 +60,13 @@ impl CompressedBlock {
 
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
-  pub fn bytes_to_lz77(data: &Vec<u8>) -> Self {
+  pub fn bytes_to_lz77(data: &[u8]) -> Self {
     Self::do_lz77(data, false)
   }
 
   /// Generate a new CompressedBlock by performing LZ77 factorization with the
   /// custom offset protocol described above.
-  pub fn bytes_to_lz77_offset(data: &Vec<u8>) -> Self {
+  pub fn bytes_to_lz77_offset(data: &[u8]) -> Self {
     Self::do_lz77(data, true)
   }
 
@@ -88,7 +88,7 @@ impl CompressedBlock {
 
   /// Computes the compressed representation of a stream of bytes as well as the
   /// huffman trees that will be used to encode it in DEFLATE
-  fn do_lz77(data: &Vec<u8>, use_offset: bool) -> Self {
+  fn do_lz77(data: &[u8], use_offset: bool) -> Self {
     let mut deflate_match_table = HashMap::<&[u8], VecDeque<Index>>::new();
     let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
     let mut output: Vec<DeflateSym> = Vec::new();
@@ -154,9 +154,7 @@ impl CompressedBlock {
     if !no_data_overrun || !match_no_overlap {
       return false;
     }
-    let data_match =
-      data[data_start + length - 1] == data[match_start + length - 1].wrapping_add(offset);
-    data_match
+    data[data_start + length - 1] == data[match_start + length - 1].wrapping_add(offset)
   }
 
   fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index, offset: u8) -> Len {
@@ -187,7 +185,7 @@ impl CompressedBlock {
   fn find_longest_match(
     data: &[u8],
     start: Index,
-    match_indices: &Vec<&Index>,
+    match_indices: &[&Index],
     use_offset: bool,
   ) -> (Dist, Len) {
     let mut max_len = 0usize;
@@ -216,9 +214,9 @@ impl CompressedBlock {
   /// <offset, length, distance> pairs. Returns a tuple containing the symbol(s) to add
   /// to the output along with a usize indicating how far to advance the input stream.
   // This function is similar to find_deflate_backref, but the differences are fairly crucial
-  fn find_offset_backref<'a>(
+  fn find_offset_backref(
     match_table: &mut BackrefMap<(u8, u8)>,
-    data: &'a [u8],
+    data: &[u8],
     index: usize,
   ) -> Option<(usize, Vec<DeflateSym>)> {
     // Note: if CHUNK_SZ ever changes from 3, we need to change the type of match_table
@@ -330,7 +328,7 @@ impl CompressedBlock {
       (dist1, len1, term, index)
     };
 
-    assert!(&data[index - mdist..index - mdist + mlen] == &data[index..index + mlen]);
+    assert!(data[index - mdist..index - mdist + mlen] == data[index..index + mlen]);
     assert!(mdist <= Self::MAX_MATCH_DIST);
     match_table.entry(term).or_default().push_front(index);
 
@@ -475,7 +473,7 @@ impl DeflateStream {
     Ok(bit_sink.into_writer())
   }
 
-  pub fn new_from_raw_bytes_deflate(data: &Vec<u8>) -> Self {
+  pub fn new_from_raw_bytes_deflate(data: &[u8]) -> Self {
     Self {
       blocks: vec![Block {
         bfinal: true,
@@ -484,7 +482,7 @@ impl DeflateStream {
     }
   }
 
-  pub fn new_from_raw_bytes_offset(data: &Vec<u8>) -> Self {
+  pub fn new_from_raw_bytes_offset(data: &[u8]) -> Self {
     Self {
       blocks: vec![Block {
         bfinal: true,

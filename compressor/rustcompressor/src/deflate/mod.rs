@@ -36,7 +36,8 @@ type DeflateReadTree = ReadHuffmanTree<LittleEndian, u16>;
 type DeflateWriteTree = WriteHuffmanTree<LittleEndian, u16>;
 
 /// An encoding dictionary, pre-compilation
-type CodeDict<S> = Vec<(S, Vec<u8>)>;
+type CodeDictEntry<S> = (S, Vec<u8>);
+type CodeDict<S> = Vec<CodeDictEntry<S>>;
 
 /** Represents a compressed symbol in the DEFLATE stream: either a literal in
 0-255 or <length, distance> pair.

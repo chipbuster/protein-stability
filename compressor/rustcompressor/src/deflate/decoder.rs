@@ -265,7 +265,7 @@ impl CompressedBlock {
         let target = data[j];
         data.push(target + offset);
       }
-      return Ok(());
+      Ok(())
     }
   }
 
@@ -309,7 +309,7 @@ impl DeflateStream {
     }
     //Check: Have we actually consumed all the input?
     bit_src.byte_align();
-    if let Ok(_) = bit_src.read_bit() {
+    if bit_src.read_bit().is_ok() {
       return Err(DeflateReadError::StreamNotConsumed);
     }
     Ok(Self { blocks })

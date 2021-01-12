@@ -16,7 +16,6 @@ use std::cmp::Eq;
 use std::cmp::Ord;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::iter::FromIterator;
 
 use bit_vec::BitVec;
 
@@ -80,7 +79,7 @@ where
   }
 
   let mut result = Vec::new();
-  let mut syms_to_encode = Vec::from_iter(codelens.keys().cloned());
+  let mut syms_to_encode = codelens.keys().cloned().collect::<Vec<S>>();
   syms_to_encode.sort();
   for sym in syms_to_encode.into_iter() {
     let sym_codelength = *codelens.get(&sym).unwrap();
@@ -114,12 +113,12 @@ where
     return Vec::new();
   }
 
-  let maxlen = maxlen_inp.unwrap_or_else(|| usize::MAX);
+  let maxlen = maxlen_inp.unwrap_or(usize::MAX);
   let codelens = if codefreqs.len() == 1 {
     // A stupid workaround for the package-merge algorithm creating blanks
     // if fed a singleton. Fix this later.
     let k1: Vec<&S> = codefreqs.keys().collect();
-    let k = k1[0].clone();
+    let k = *k1[0];
     let v = 1;
     let mut x = HashMap::new();
     x.insert(k, v);
@@ -135,7 +134,7 @@ pub fn huffcode_from_input<S>(input: &[S], maxlen_inp: Option<usize>) -> Vec<(S,
 where
   S: Eq + Hash + Clone + Copy + Ord + Debug,
 {
-  let maxlen = maxlen_inp.unwrap_or_else(|| usize::MAX);
+  let maxlen = maxlen_inp.unwrap_or(usize::MAX);
   let freqs = get_frequencies(input);
   let codelens = get_codeslens_restricted(&freqs, maxlen);
   huffcode_from_lengths(&codelens)
@@ -216,7 +215,7 @@ where
   let n = freqs.len();
   let mut syms = Vec::with_capacity(n);
   for (sym, freq) in freqs.iter() {
-    syms.push((sym.clone(), *freq))
+    syms.push((*sym, *freq))
   }
   syms.sort_by(|(_, y1), (_, y2)| y1.cmp(y2));
 
@@ -234,9 +233,9 @@ where
   // Execute the package-merge algorithm to obtain the min-value set of denom n-1
   let mut out = package_merge(coins);
   let mut rescoins: Vec<Coin<S>> = Vec::new();
-  for j in 0..n - 1 {
-    assert_eq!(out[j].invdenom, 0);
-    rescoins.append(&mut out[j].coins);
+  for coincollection in out.iter_mut().take(n-1) {
+    assert_eq!(coincollection.invdenom, 0);
+    rescoins.append(&mut coincollection.coins);
   }
 
   let mut code_lens = HashMap::new();

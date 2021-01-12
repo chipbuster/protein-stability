@@ -20,18 +20,18 @@ fn main() -> Result<(), std::io::Error> {
   }
 
   let mut infile =
-    std::fs::File::open(&args[1]).expect(&format!("Could not open input file {}", args[1]));
+    std::fs::File::open(&args[1]).unwrap_or_else(|_| panic!("Could not open input file {}", args[1]));
   let mut outfile = std::fs::OpenOptions::new()
     .read(false)
     .write(true)
     .create(true)
     .append(false)
     .open(&args[2])
-    .expect(&format!("Could not open output file {}", args[2]));
+    .unwrap_or_else(|_| panic!("Could not open output file {}", args[2]));
 
   // Check the file to see how we should treat it: is it GZIP or raw DEFLATE?
   let mut magic_buf = [0u8; 2];
-  infile.read(&mut magic_buf[..]).unwrap();
+  infile.read_exact(&mut magic_buf[..]).unwrap();
   infile.seek(SeekFrom::Start(0)).unwrap();
 
   let json_string = if magic_buf != [0x1fu8, 0x8b] {
@@ -56,7 +56,7 @@ fn main() -> Result<(), std::io::Error> {
     serde_json::to_string(&dfs).unwrap()
   };
 
-  outfile.write(json_string.as_bytes())?;
+  outfile.write_all(json_string.as_bytes())?;
   println!("Output written to {}", args[2]);
 
   Ok(())
