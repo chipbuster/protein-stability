@@ -1,4 +1,10 @@
-use std::{env, io::Read, io::Seek, io::{SeekFrom, Write}, process};
+use std::{
+  env,
+  io::Read,
+  io::Seek,
+  io::{SeekFrom, Write},
+  process,
+};
 
 use compressor::deflate::*;
 use compressor::gzip::*;
@@ -13,8 +19,15 @@ fn main() -> Result<(), std::io::Error> {
     process::exit(1);
   }
 
-  let mut infile = std::fs::File::open(&args[1])?;
-  let mut outfile = std::fs::OpenOptions::new().read(false).write(true).create(true).append(false).open(&args[2])?;
+  let mut infile =
+    std::fs::File::open(&args[1]).expect(&format!("Could not open input file {}", args[1]));
+  let mut outfile = std::fs::OpenOptions::new()
+    .read(false)
+    .write(true)
+    .create(true)
+    .append(false)
+    .open(&args[2])
+    .expect(&format!("Could not open output file {}", args[2]));
 
   // Check the file to see how we should treat it: is it GZIP or raw DEFLATE?
   let mut magic_buf = [0u8; 2];
@@ -48,4 +61,3 @@ fn main() -> Result<(), std::io::Error> {
 
   Ok(())
 }
-

@@ -160,9 +160,9 @@ pub fn write_header<W: Write>(
 
   // Find index of last code length that will be used from RAW_CODE_ORDER
   // Some duplicates might be in codelen_sizes, and that's okay.
-  let codepoint_vals: Vec<u16> = size_codes.iter().map(|(value,_ )| *value).collect();
+  let codepoint_vals: Vec<u16> = size_codes.iter().map(|(value, _)| *value).collect();
   let mut last_rco_index = 0;
-  // This loop is a little weird. Essentially, we want to find the smallest N 
+  // This loop is a little weird. Essentially, we want to find the smallest N
   // such that any observed value in codelen_sizes will occur in RAW_CODE_ORDER[0..=N]
   // N is stored into last_rco_index.
   for (i, codept) in RAW_CODE_ORDER.iter().enumerate() {
@@ -244,7 +244,7 @@ fn encode_huffman_alphabets<W: Write>(
   Ok(())
 }
 
-/// Given a count of literal/distance codes present in the input and the 
+/// Given a count of literal/distance codes present in the input and the
 pub fn decode_huffman_alphabets<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
   size_huffman: &[DeflateReadTree],
@@ -549,7 +549,8 @@ mod test {
     let mut w = BitWriter::new(&mut buf[..]);
 
     for pt in v.iter() {
-      pt.write_to_bitstream(&mut w, &writetree).expect("Cannot write CLP to bitstream");
+      pt.write_to_bitstream(&mut w, &writetree)
+        .expect("Cannot write CLP to bitstream");
     }
 
     let mut r = BitReader::new(&buf[..]);

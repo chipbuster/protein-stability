@@ -2,8 +2,7 @@
 1951 (https://tools.ietf.org/html/rfc1951). Includes the reference
 implementation of the compressor suggested at the end of the RFC. */
 
-
-/* Note: this implements a custom DEFLATE extension: an offset backref. This is 
+/* Note: this implements a custom DEFLATE extension: an offset backref. This is
 similar to a DEFLATE backref, but the entire sequence is offset by a fixed
 amount, modulo 255.
 
@@ -22,10 +21,10 @@ encodings specified in RFC 1951.
 For simplicity, offset encoding is always used with a dynamic huffman code.
 */
 
-pub mod default_data;
-mod deflate_header;
 mod codepoints;
 pub mod decoder;
+pub mod default_data;
+mod deflate_header;
 pub mod encoder;
 
 use serde::Serialize;
@@ -54,7 +53,7 @@ pub enum DeflateSym {
   OffsetBackref(u8, u16, u16),
 }
 
-#[derive(Serialize,Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct UncompressedBlock {
   data: Vec<u8>,
 }
@@ -90,7 +89,7 @@ mod test {
 
   #[cfg(test)]
   // Take some string of bytes and roundtrip it down to the bit level
-  fn roundtrip_bitlevel_deflate(data: &Vec<u8>) -> Vec<u8>{
+  fn roundtrip_bitlevel_deflate(data: &Vec<u8>) -> Vec<u8> {
     let symbols = DeflateStream::new_from_raw_bytes_deflate(data);
     let sink = Vec::new();
     let encoded = symbols.write_to_bitstream(sink).unwrap();
@@ -100,7 +99,7 @@ mod test {
 
   #[cfg(test)]
   // Take some string of bytes and roundtrip it down to the bit level
-  fn roundtrip_bitlevel_offset(data: &Vec<u8>) -> Vec<u8>{
+  fn roundtrip_bitlevel_offset(data: &Vec<u8>) -> Vec<u8> {
     let symbols = DeflateStream::new_from_raw_bytes_offset(data);
     let sink = Vec::new();
     let encoded = symbols.write_to_bitstream(sink).unwrap();
@@ -109,7 +108,7 @@ mod test {
   }
 
   #[test]
-  pub fn toplevel_roundtrip_1(){
+  pub fn toplevel_roundtrip_1() {
     let data = "hellohellohelloIamGeronimohello".into();
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
     assert_eq!(rt_deflate, data);
@@ -119,7 +118,7 @@ mod test {
   }
 
   #[test]
-  pub fn toplevel_roundtrip_2(){
+  pub fn toplevel_roundtrip_2() {
     let data = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.".into();
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
     let rt_offset = roundtrip_bitlevel_offset(&data);
@@ -129,7 +128,7 @@ mod test {
   }
 
   #[test]
-  pub fn toplevel_roundtrip_3(){
+  pub fn toplevel_roundtrip_3() {
     let data = vec![
       0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
     ];
@@ -141,12 +140,12 @@ mod test {
   }
 
   #[test]
-  pub fn toplevel_roundtrip_4(){
-    let mut data = vec![1,2,3,4,3,2,1];
+  pub fn toplevel_roundtrip_4() {
+    let mut data = vec![1, 2, 3, 4, 3, 2, 1];
     for i in 0..10 {
       data.push(i);
     }
-    data.append(&mut vec![15,16,17,18,17,16,15]);
+    data.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
     let rt_offset = roundtrip_bitlevel_offset(&data);
 

@@ -160,7 +160,7 @@ impl GzipData {
     }
   }
 
-  pub fn get_checksums(&self) ->(u32, u32) {
+  pub fn get_checksums(&self) -> (u32, u32) {
     (self.crc32, self.isz)
   }
 
@@ -209,7 +209,7 @@ impl GzipData {
 
   // Intentionally ignore EXTRA for the moment.
 
-  pub fn fmt_header<W:Write>(&self, f: &mut W) -> fmt::Result {
+  pub fn fmt_header<W: Write>(&self, f: &mut W) -> fmt::Result {
     write!(
       f,
       r#"GZip Data:

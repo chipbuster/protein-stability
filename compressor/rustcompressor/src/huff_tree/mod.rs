@@ -122,7 +122,7 @@ where
     let k = k1[0].clone();
     let v = 1;
     let mut x = HashMap::new();
-    x.insert(k,v);
+    x.insert(k, v);
     x
   } else {
     get_codeslens_restricted(&codefreqs, maxlen)

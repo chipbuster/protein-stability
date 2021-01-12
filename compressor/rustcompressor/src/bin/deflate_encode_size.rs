@@ -9,7 +9,9 @@ fn main() {
 
   if args.len() != 3 {
     println!("Usage: {} <infilename> <outfilename>", &args[0]);
-    println!("\tAttempts to encode file contents, printing the sizes of the input and compressed result");
+    println!(
+      "\tAttempts to encode file contents, printing the sizes of the input and compressed result"
+    );
     process::exit(1);
   }
 

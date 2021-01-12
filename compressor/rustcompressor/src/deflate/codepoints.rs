@@ -50,9 +50,9 @@ previously handled separately (leading to a fair amount of code duplication). */
 
 use bitstream_io::{BitReader, BitWriter, LittleEndian};
 use lazy_static::lazy_static;
+use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::vec::Vec;
-use std::convert::TryInto;
 
 use super::{DeflateReadTree, DeflateSym, DeflateWriteTree};
 use crate::deflate::decoder::DeflateReadError;
@@ -317,12 +317,18 @@ impl CodepointEncoder {
     code: Option<u16>,
   ) -> Result<u16, DeflateReadError> {
     if let Some(val) = code {
-      assert_eq!(val, OFFSET_SIGIL, "Attempted to read offset with non-offset code.");
+      assert_eq!(
+        val, OFFSET_SIGIL,
+        "Attempted to read offset with non-offset code."
+      );
     } else {
       let val = bit_src.read_huffman(length_tree)?;
-      assert_eq!(val, OFFSET_SIGIL, "Attempted to read offset with non-offset code.");
+      assert_eq!(
+        val, OFFSET_SIGIL,
+        "Attempted to read offset with non-offset code."
+      );
     };
-    // Need to read offset here 
+    // Need to read offset here
     Ok(bit_src.read_huffman(length_tree)?)
   }
 
@@ -334,9 +340,13 @@ impl CodepointEncoder {
   ) -> Result<u16, DeflateReadError> {
     let val = match code {
       None => bit_src.read_huffman(length_tree)?,
-      Some(x) => x
+      Some(x) => x,
     };
-    assert!(val >= MIN_LENGTH_CODE && val <= MAX_LENGTH_CODE, "Attempted to read length with invalid code {}",val);
+    assert!(
+      val >= MIN_LENGTH_CODE && val <= MAX_LENGTH_CODE,
+      "Attempted to read length with invalid code {}",
+      val
+    );
     let codept = DEFAULT_CODEPOINTS.get_codepoint_for_code(val);
     let length_val = codept.read_value_from_bitstream(bit_src)?;
     Ok(length_val)
@@ -351,9 +361,13 @@ impl CodepointEncoder {
     let val = if let Some(c) = code {
       c
     } else {
-        bit_src.read_huffman(dist_tree)?
+      bit_src.read_huffman(dist_tree)?
     };
-    assert!(val >= MIN_DIST_CODE && val <= MAX_DIST_CODE, "Attempted to read dist with invalid code {}",val);
+    assert!(
+      val >= MIN_DIST_CODE && val <= MAX_DIST_CODE,
+      "Attempted to read dist with invalid code {}",
+      val
+    );
 
     let codept = DEFAULT_CODEPOINTS.get_codepoint_for_code(val);
     let dist_val = codept.read_value_from_bitstream(bit_src)?;

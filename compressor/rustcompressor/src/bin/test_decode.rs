@@ -36,5 +36,4 @@ fn main() {
   println!("Decoded data is {} bytes", &decoded.len());
   println!("Decoded bytes: {:02x?}", &decoded);
   println!("Decoded String: {:?}", std::str::from_utf8(&decoded));
-
 }
