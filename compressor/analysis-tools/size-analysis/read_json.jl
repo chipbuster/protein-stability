@@ -1,6 +1,5 @@
 # Contains the code needed to read in the data dumped by dump_gzip_to_json
 
-include("lztypes.jl")
 using JSON;
 
 function get_key_from_object(obj, key)
@@ -25,16 +24,16 @@ function parse_lz_json_symbol(sym)
     symtype = collect(keys(sym))[1]
     symdat = sym[symtype]
     if symtype == "Literal"
-        value = symdat
+        value = convert(UInt8, symdat)
         Literal(value)
     elseif symtype == "Backreference"
-        len = symdat[1]
-        dist = symdat[2]
+        len = convert(UInt16, symdat[1])
+        dist = convert(UInt16, symdat[2])
         Backreference(len, dist)
     elseif symtype == "OffsetBackref"
-        off = symdat[1]
-        len = symdat[2]
-        dist = symdat[3]
+        off = convert(UInt8, symdat[1])
+        len = convert(UInt16, symdat[2])
+        dist = convert(UInt16, symdat[3])
         OffsetBackref(off, len, dist)
     else
         throw(DecodeLZ77JSONException("Invalid LZ77 symbol type"))

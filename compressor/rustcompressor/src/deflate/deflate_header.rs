@@ -51,7 +51,6 @@ code is used, it is encoded using one bit, not zero bits; in
 this case there is a single code length of one, with one unused
 code.  One distance code of zero bits means that there are no
 distance codes used at all (the data is all literals).
-
 */
 
 use bitstream_io::huffman::{compile_read_tree, compile_write_tree};

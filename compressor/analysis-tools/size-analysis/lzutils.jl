@@ -1,4 +1,3 @@
-include("lztypes.jl")
 
 function codepoint_for_len(x)
     for cp in LENLIT_CODEPOINT_INFO
@@ -38,6 +37,5 @@ function size_lzelem(sym::Literal, codes::BlockCode)
 end
 
 function size_lzelem(sym::Backreference, codes::BlockCode)
-    display(sym)
     size_len(sym, codes.lenlit_code) + size_dist(sym, codes.dist_code)
 end
