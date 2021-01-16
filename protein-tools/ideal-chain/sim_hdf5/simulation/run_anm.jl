@@ -1,28 +1,22 @@
-using Printf;
-
-const DEFAULT_TEMP = 10
-const DEFAULT_TIMESTEP = 0.05
-const DEFAULT_DAMP = 0.95
-const DEFAULT_NUM_TS = 10_000_000
+const DEFAULT_C1 = 0.45
+const DEFAULT_C2 = 0.05
+const DEFAULT_NUM_TS = 1_000_000
 const DEFAULT_RESTLEN = 1.0
-const DEFAULT_SKIPN = 1
+const DEFAULT_SKIPN = 1000
 
-if length(ARGS) < 4
-    @printf("Usage: %s <hdf5_file> <datapath> <type> <natoms> [opts]\n", PROGRAM_FILE)
+if length(ARGS) < 2
+    @printf("Usage: %s <hdf5_file> <datapath> [opts]\n", PROGRAM_FILE)
     println("")
     println("hdf5_file: path to the HDF5 file where results are stored")
     println("datapath:  path within HDF5 file to dataset")
-    println("type:      either CHAIN or RING")
-    println("natoms:      number of atoms in system")
     println("")
     println("[opts] are in key-value form, separated by a ':'")
     println("Valid [opts]:")
-    println("	temp:<val>")
-    println("	timestep:<val>")
-    println("	damp:<val>")
-    println("	num_ts:<val>")
+    println("	c1:<val>")
+    println("	c2:<val>")
+    println("	nframes:<val>")
     println("	restlen:<val>")
-    println("	store_every:<val>")
+    println("	nskip:<val>")
     exit(1)
 end
 
@@ -32,39 +26,29 @@ include(joinpath(dirname(qq), "core/simdata.jl"))
 
 import .SimData
 
-"""Create a chain at rest, folded in half. Note: may create funky results for chainlength < 6"""
-function generate_simstate(chainlength::Int, restlen::Float64, gamma::Float64, ring::Bool = false)
-    positions = zeros(3, chainlength)
-    positions[:,1] = [0;0;0]
+# The default c-alpha ProDy potential follows a very simple rule: if two calpha
+# atoms are within a cutoff distance of each other, they're connected by a spring
+# with strength gamma. Otherwise, there is no connection. Units are Angstroms.
+"""Create the restlength and spring constants for the ENM"""
+function generate_anm_simstate(positions, cutoff=15.0, gamma=1.0, params::SimParameters)
+    @assert(cutoff > 4.0, "cutoff is too low for ANM!")
+    (_, natoms) = size(positions)
 
-    offset = [0;0;restlen]
-
-    # Generate chain by walking out and back
-    for i in 2:chainlength
-        if i > chainlength ÷ 2
-            positions[:,i] = positions[:,i - 1] + offset
-        else
-            positions[:,i] = positions[:,i - 1] - offset
+    # Determine the restlengths and connectivity of each pair of atoms
+    restlen = UpperTriangular(zeros(natoms, natoms))
+    for j in 1:natoms
+        for i in 1:j
+            restlen[i,j] = @views norm(pos[:,i] - pos[:,j], 2)
         end
     end
 
-    # Determine the restlengths and connectivity of each pair of atoms
-    restlens = UpperTriangular(zeros(chainlength, chainlength))
-    for j in 1:chainlength - 1
-            restlens[j,j + 1] = restlen
-    end
-    if ring
-        restlens[1,chainlength] = restlen
-    end
-
-    connectivity = restlens .!= 0.0
+    connectivity = restlen .< cutoff
     coeffs = UpperTriangular(connectivity * gamma)
-    simstate = SimState(chainlength, positions, restlens, coeffs)
+    simstate = SimState(positions, restlen, coeffs)
 end
 
-t = DEFAULT_TEMP
-ts = DEFAULT_TIMESTEP
-d = DEFAULT_DAMP
+c1 = DEFAULT_C1
+c2 = DEFAULT_C2
 n = DEFAULT_NUM_TS
 rlen = DEFAULT_RESTLEN
 skipn = DEFAULT_SKIPN
@@ -76,17 +60,15 @@ simtype = lowercase(ARGS[3])
 natoms = parse(Int, ARGS[4])
 for kvpair in ARGS[5:end]
     (key,val) = split(kvpair,":")
-    if key == "temp"
-        global t = parse(Float64, val)
-    elseif key == "timestep"
-        global ts = parse(Float64, val)
-    elseif key == "damp"
-        global d = parse(Float64, val)
-    elseif key == "num_ts"
+    if key == "c1"
+        global c1 = parse(Float64, val)
+    elseif key == "c2"
+        global c2 = parse(Float64, val)
+    elseif key == "nframes"
         global n = parse(Int, val)
     elseif key == "restlen"
         global rlen = parse(Float64, val)
-    elseif key == "store_every"
+    elseif key == "nskip"
         global skipn = parse(Int, val)
     else
         @printf("Unknown key-value pair \t %s", kvpair)
