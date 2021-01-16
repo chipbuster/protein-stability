@@ -1,28 +1,7 @@
-if length(ARGS) < 2
-    println("Usage: $(PROGRAM_FILE) <hdf5_file> <datapath> <pdbfile> [opts]\n")
-    println("")
-    println("hdf5_file: path to the HDF5 file where results are stored")
-    println("datapath:  path within HDF5 file to dataset")
-    println("pdbfile:   location of PDB to base ANM off of")
-    println("")
-    println("[opts] are in key-value form, separated by a ':'")
-    println("Valid [opts]:")
-    println("	k:<val>")
-    println("	dt:<val>")
-    println("	xi:<val>")
-    println("	damp:<val>")
-    println("	cutoff:<val>")
-    println("	bond_mod:<val>")
-    println("	nframes:<val>")
-    println("	nskip:<val>")
-    exit(1)
-end
-
-qq = dirname(abspath(PROGRAM_FILE))
-include(joinpath(qq, "simulate_anm.jl"))
+include("langevin_sim.jl")
 
 using BioStructures;
-import .SimData
+using Logging;
 
 struct SimArgs
     hdf5_filepath::AbstractString
@@ -32,6 +11,7 @@ struct SimArgs
     bond_modifier::Float64
     nframes::Integer
     nskip::Integer
+    nuke_data::Bool
     params::SimParameters
 end
 
@@ -42,12 +22,11 @@ end
 function generate_anm_simstate(positions, cutoff=15.0, gamma=1.0)
     @assert(cutoff > 4.0, "cutoff is too low for ANM!")
     (_, natoms) = size(positions)
-
     # Determine the restlengths and connectivity of each pair of atoms
     restlen = UpperTriangular(zeros(natoms, natoms))
     for j in 1:natoms
         for i in 1:j
-            restlen[i,j] = @views norm(pos[:,i] - pos[:,j], 2)
+            restlen[i,j] = @views norm(positions[:,i] - positions[:,j], 2)
         end
     end
 
@@ -56,17 +35,20 @@ function generate_anm_simstate(positions, cutoff=15.0, gamma=1.0)
     simstate = SimState(positions, restlen, coeffs)
 end
 
-function parse_args(args::AbstractVector{T})::SimArgs where T <: AbstractString
+function parse_args(args::AbstractVector{S})::SimArgs where S <: AbstractString
     # Some default values in case keys are not provided. Since this is a protein
-    # simulation, L in eqn of motion is implicitly set at 1 angstrom
-    k = 10
+    # simulation, L in eqn of motion is implicitly set at 1 angstrom. These
+    # coeffs have been chosen to get c1 ≈ 0.4, c2 ≈ 0.1, which we have shown
+    # is a good set of parameters for 2D ideal chain simulations
+    T = 0.5
     δt = 0.01
     γ = 0.95
-    T = 1.0
+    k = 38.0
     bond_mod = 1.0
     cutoff = 15.0
     nframes = 10_000_000
     nskip = 1000
+    nuke_data = false
     for arg in args[4:end]
         (key, val) = split(arg, ':')
         if key == "bond_modifier"
@@ -85,13 +67,15 @@ function parse_args(args::AbstractVector{T})::SimArgs where T <: AbstractString
             δt = parse(Float64, val)
         elseif key == "damping"
             γ = parse(Float64, val)
+        elseif key == "nuke"
+            nuke_data = parse(Bool, val)
         else
             error("Unknown key $(key)")
         end
     end
 
     params = SimParameters(T, δt, γ, k)
-    SimArgs(args[1], args[2], args[3], cutoff, bond_mod, nframes, nskip, params)
+    SimArgs(args[1], args[2], args[3], cutoff, bond_mod, nframes, nskip, nuke_data, params)
 end
 
 function get_pdb_Cα(filename)
@@ -99,7 +83,17 @@ function get_pdb_Cα(filename)
     residues = collectresidues(pdbstruct)
     Cαs = Matrix{Float64}(undef, 3, length(residues))
     for (i, res) in enumerate(residues)
-        Cαs[:,i] = coords(res)
+        try
+            Cα = res["CA"]
+            Cαs[:,i] = coords(Cα)
+        catch e
+            if isa(e, KeyError)
+                @warn "Atom $(i) has no Cα atom. Skipping."
+                continue
+            else
+                rethrow()
+            end
+        end
     end
     Cαs
 end
@@ -109,35 +103,81 @@ function default_anm_from_pdbfile(filename)
     generate_anm_simstate(Cαs)
 end
 
+function scrub_existing_dsets!(hfile, dpaths...)
+    for p in dpaths
+        if exists(hfile, p)
+            delete_object(hfile, p)
+        end
+    end
+end
+
 function main()
     simargs = parse_args(ARGS)
 
     Cαs = get_pdb_Cα(simargs.pdb_filepath)
     natoms = size(Cαs, 2)
 
-    # Create datasets needed for simulation
-    h5open(simargs.hdf5_filepath, "cw") do file
-        d_create(file, simargs.hdf5_datapath * "/pdb_ca", datatype(Float64), dataspace(3, natoms))
-        d_create(file, simargs.hdf5_datapath * "/anm_trace", datatype(Float64), dataspace(3, natoms, simargs.nframes))
-    end
-
-    hdataset = h5open(simargs.hdf5_datapath, "w")
-
-    hpdb_data = hdataset["/pdb_ca"]
-    htrace_data = hdataset["/anm_trace"]
-
-    # Tag the datasets with attributes that are needed to recreate the simulation
-    attrs(hpdb_data)["pdbid"] = split(basename(simargs.pdb_filepath), '.')[1]
-    attrs(htrace_data)["k"] = simargs.params.k
-    attrs(htrace_data)["dt"] = simargs.params.δt
-    attrs(htrace_data)["temp"] = simargs.params.T
-    attrs(htrace_data)["damp"] = simargs.params.γ
-    attrs(htrace_data)["cutoff"] = simargs.bond_cutoff
-    attrs(htrace_data)["bondmod"] = simargs.bond_modifier
-    attrs(htrace_data)["skip"] = simargs.nskip
-
     simstate = generate_anm_simstate(Cαs, simargs.bond_cutoff, simargs.bond_modifier)
-    hpdb_data = Cαs
 
-    # run_sim(simstate, hdf_fname, datapath; params = params, skipn = skipn)
+    # Record other simulation data
+    h5open(simargs.hdf5_filepath, "cw") do hfile
+        pdb_dpath = simargs.hdf5_datapath * "/pdb_ca"
+        trace_dpath = simargs.hdf5_datapath * "/anm_trace"
+
+        if exists(hfile, pdb_dpath) || exists(hfile, trace_dpath)
+            if simargs.nuke_data
+                scrub_existing_dsets!(hfile, pdb_dpath, trace_dpath)
+            else
+                println("Existing datapaths were found but nuke was not set.")
+                println("Cowardly refusing to overwrite existing data.")
+                println("To overwrite existing data, pass `nuke:true` as an arg.")
+                println("This will delete $(pdb_dpath) and $(trace_dpath)")
+                println("\tin file $(simargs.hdf5_filepath)")
+                exit(1)
+            end
+        end
+
+        d_create(hfile, pdb_dpath, datatype(Float64), dataspace(3, natoms))
+        d_create(hfile, trace_dpath, datatype(Float64), dataspace(3, natoms, simargs.nframes))
+
+        hpdb_data = hfile[pdb_dpath]
+        htrace_data = hfile[trace_dpath]
+
+        # Tag the datasets with attributes that are needed to recreate the simulation
+        attrs(hpdb_data)["pdbid"] = split(basename(simargs.pdb_filepath), '.')[1]
+        attrs(htrace_data)["k"] = simargs.params.k
+        attrs(htrace_data)["dt"] = simargs.params.δt
+        attrs(htrace_data)["temp"] = simargs.params.T
+        attrs(htrace_data)["damp"] = simargs.params.γ
+        attrs(htrace_data)["cutoff"] = simargs.bond_cutoff
+        attrs(htrace_data)["bondmod"] = simargs.bond_modifier
+        attrs(htrace_data)["skip"] = simargs.nskip
+
+        hpdb_data = Cαs
+        run_sim(simstate, htrace_data, simargs.params, simargs.nframes, simargs.nskip)
+    end
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    if length(ARGS) < 2
+        println("Usage: $(PROGRAM_FILE) <hdf5_file> <datapath> <pdbfile> [opts]\n")
+        println("")
+        println("hdf5_file: path to the HDF5 file where results are stored")
+        println("datapath:  path within HDF5 file to dataset")
+        println("pdbfile:   location of PDB to base ANM off of")
+        println("")
+        println("[opts] are in key-value form, separated by a ':'")
+        println("Valid [opts]:")
+        println("	k:<val>")
+        println("	dt:<val>")
+        println("	xi:<val>")
+        println("	damp:<val>")
+        println("	cutoff:<val>")
+        println("	bond_mod:<val>")
+        println("	nframes:<val>")
+        println("	nskip:<val>")
+        println("	nuke:<val>")
+        exit(1)
+    end
+    main()
 end
