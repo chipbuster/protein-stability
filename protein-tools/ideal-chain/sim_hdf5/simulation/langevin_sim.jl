@@ -10,20 +10,21 @@ using HDF5
 
 #= 
 This simulation uses the unitless parameterization descrbied in the experiment
-notes. In short, we describe distances in units of bond restlength L, and define
-two unitless constants:
+notes. In short, we define the following two unitless constants:
 
         c1 = k dt / γ
         c2 = ξ dt / γ L
 
 where k is the spring stiffness, ξ is the strength of the stochastic force,
-and γ is the damping coefficient. We then obtain the following unitless 
-equations of motion:
+γ is the damping coefficient, and L is some characteristic length (for ideal
+chains, the rest bondlength, for proteins, usually implicitly chosen to be 
+1 Angstrom). We then obtain the following unitless equations of motion:
 
 y_{n+1} = y_n - c_1 [ \sum_{bonds} \| y^{(a)} - y^{(b)} \| - 1 ] u_{bond} + c_2 σ_n
 
 where a,b are the endpoints of each bond, u_bond is the normalized directional
-vector of the bond, and σ_n is a Gaussian R.V. =#
+vector of the bond, σ_n is a Gaussian R.V, and y_n are the coordinates rescaled
+to the lengthscale L. =#
 
 """Encapsulates parameters of the simulation"""
 struct SimParameters
