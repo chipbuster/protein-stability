@@ -62,10 +62,10 @@ function parse_args(args::AbstractVector{T})::SimArgs where T <: AbstractString
     k = 10
     δt = 0.01
     γ = 0.95
-    ξ = 1.0
+    T = 1.0
     bond_mod = 1.0
     cutoff = 15.0
-    nframes = 1_000_000
+    nframes = 10_000_000
     nskip = 1000
     for arg in args[4:end]
         (key, val) = split(arg, ':')
@@ -79,8 +79,8 @@ function parse_args(args::AbstractVector{T})::SimArgs where T <: AbstractString
             nframes = parse(Int, val)
         elseif key == "bond_strength"
             k = parse(Float64, val)
-        elseif key == "xi"
-            ξ = parse(Float64, val)
+        elseif key == "temp"
+            T = parse(Float64, val)
         elseif key == "timestep"
             δt = parse(Float64, val)
         elseif key == "damping"
@@ -90,7 +90,7 @@ function parse_args(args::AbstractVector{T})::SimArgs where T <: AbstractString
         end
     end
 
-    params = SimParameters(ξ, δt, γ, k)
+    params = SimParameters(T, δt, γ, k)
     SimArgs(args[1], args[2], args[3], cutoff, bond_mod, nframes, nskip, params)
 end
 
@@ -111,7 +111,6 @@ end
 
 function main()
     simargs = parse_args(ARGS)
-    println("With provided params, c1 = $(calc_c1(simargs.params)), c2 = $(calc_c2(simargs.params))")
 
     Cαs = get_pdb_Cα(simargs.pdb_filepath)
     natoms = size(Cαs, 2)
@@ -131,10 +130,11 @@ function main()
     attrs(hpdb_data)["pdbid"] = split(basename(simargs.pdb_filepath), '.')[1]
     attrs(htrace_data)["k"] = simargs.params.k
     attrs(htrace_data)["dt"] = simargs.params.δt
-    attrs(htrace_data)["xi"] = simargs.params.ξ
+    attrs(htrace_data)["temp"] = simargs.params.T
     attrs(htrace_data)["damp"] = simargs.params.γ
     attrs(htrace_data)["cutoff"] = simargs.bond_cutoff
     attrs(htrace_data)["bondmod"] = simargs.bond_modifier
+    attrs(htrace_data)["skip"] = simargs.nskip
 
     simstate = generate_anm_simstate(Cαs, simargs.bond_cutoff, simargs.bond_modifier)
     hpdb_data = Cαs

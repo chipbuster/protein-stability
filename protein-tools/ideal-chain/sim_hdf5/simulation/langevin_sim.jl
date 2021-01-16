@@ -8,6 +8,8 @@ using HDF5
 
 #############
 
+const k_B = 1.0
+
 #= 
 This simulation uses the unitless parameterization descrbied in the experiment
 notes. In short, we define the following two unitless constants:
@@ -28,10 +30,18 @@ to the lengthscale L. =#
 
 """Encapsulates parameters of the simulation"""
 struct SimParameters
-    c1::Float64     # The temperature of the system
-    c2::Float64     # The level of damping in the system
-    num_ts::Int     # The total number of timesteps to take
+    T::Float64      # The temperature of the system
+    δt::Float64     # The timestep of the system
+    γ::Float64      # The level of damping in the system
+    k::Float64      # Spring strength
 end
+
+calc_c1(s::SimParameters) = s.k * s.δt / s.γ
+calc_c2(s::SimParameters) = begin
+    D = k_B * T / s.γ
+    c2 = sqrt(2 * D * s.δt)
+end
+calc_c1c2(s::SimParameters) = (calc_c1(s), calc_c2(s))
 
 """Encapsulates state of the simulation"""
 struct SimState
@@ -40,13 +50,20 @@ struct SimState
     coeffs::UpperTriangular{Float64,Matrix{Float64}}    # Spring coefficients
 end
 
+natoms(s::SimState) = size(s, 2)
+
 """Convenience struct to avoid allocating scratch space"""
 struct ScratchBufs
     forces:::Matrix{Float64}
     pairforce::Vector{Float64}
+    coeffs::Vector{Float64}
 end
 
-natoms(s::SimState) = size(s, 2)
+ScratchBufs(N) = ScratchBufs(
+                        Matrix{Float64}(undef, 3, N), 
+                        Vector{Float64}(undef, 3),
+                        Vector{Float64}(undef, 2)
+                 )
 
 """Computes the pairwise force on atoms i, j given the current simulation state.
 
@@ -54,9 +71,9 @@ Places the force on atom `i` into the `scratch` parameter, with the implicit
 assumption that the force on atom `j` is just the negative of this.
 """
 function compute_force_pair!(scratch::AbstractVector{Float64}
-                            state::SimState, ids::Tuple{Integer,Integer})::Nothing
+                            state::SimState, ids::Tuple{N,N})::Nothing where N <: Integer
     (i, j) = ids
-    scratch .= @views state.positions[:,j] - state.positions[:,i]
+    @views scratch = state.positions[:,j] - state.positions[:,i]
     dist_ij = norm(scratch)
 
     # If this vector is zero, we can't normalize it. Fortunately, we can
@@ -67,7 +84,7 @@ function compute_force_pair!(scratch::AbstractVector{Float64}
     else
         # The unit i->j vector is already in here from earlier, just multiply it
         # by the correct scalar coefficients
-        scratch .*= @views coeffs[i,j] * (dist_ij - restdist[i,j])
+        scratch .*= coeffs[i,j] * (dist_ij - restdist[i,j])
     end
     nothing
 end
@@ -91,15 +108,17 @@ function compute_forces!(scratch::ScratchBufs, state::SimState)::Nothing
 end
 
 """Take a timestep with overdamped explicit Euler."""
-function take_timestep(state::SimState, params::SimParameters,
-                       forcesbuf::Matrix{Float64})
+function take_timestep!(state::SimState, scratch::ScratchBufs)
+    c1 = scratch.coeffs[1]
+    c2 = scratch.coeffs[2]
+
     # Get deterministic update
-    compute_forces!(forcesbuf, state)
-    forcesbuf .*= params.c1
+    compute_forces!(scratch, state)
+    scratch.forces .*= c1
     
     # Add stochastic update into force. To avoid allocating, do this in a loop
-    for i in eachindex(forcesbuf)
-        forcesbuf[i] += params.c2 * randn()
+    for i in eachindex(scratch.forces)
+        scratch.forces[i] += params.c2 * randn()
     end
 
     state.positions += update
@@ -110,29 +129,22 @@ end
     Stores output to an HDF dataset provided by `hdf_fname` and `datapath`
     Only stores every `skipn` data steps.
 """
-function run_sim(simstate::SimState, hdf_fname::String, datapath::String; params::SimParameters, skipn::Int=1)
+function run_sim(simstate::SimState, outdata::HDF5Dataset, params::SimParameters, nframes, nskip=1)
     @assert(skipn >= 1,  "Trying to skip non-positive number of frames")
-    simfile = SimData.InputData(hdf_fname, datapath)
-    data = simfile.data
 
-    @printf("Running with %d atoms, T = %f, %d timesteps of size %f \n",
-            simstate.N, params.temp, params.num_ts, params.ts)
+    scratch = simstate |> natoms |> ScratchBufs
 
-    attrs(data)["source"] = "langevin"
-    attrs(data)["timestep"] = params.ts
-    attrs(data)["temp"] = params.temp
-    attrs(data)["damp"] = params.damp
+    (c1,c2) = calc_c1c2(params)
+    println("[INFO]: Running sim with c1=$(c1), c2=$(c2)")
+    scratch.coeffs[1] = c1
+    scratch.coeffs[2] = c2
 
-    if skipn > 1
-       attrs(data)["skip"] = skipn
-    end
-
-    for t in 1:params.num_ts
+    for t in 1:nframes
         # Only record every skipn counts
-        if t % skipn == 0
-            data[:,:,t] = simstate.positions
+        if t % nskip == 0
+            outdata[:,:,t] = simstate.positions
         end
-        take_timestep(simstate, params)
+        take_timestep!(simstate, params)
     end
 end
 
