@@ -36,6 +36,8 @@ struct SimParameters
     k::Float64      # Spring strength
 end
 
+default_sim_parameters() = SimParameters(0.5, 0.01, 0.95, 38.0)
+
 calc_c1(s::SimParameters) = s.k * s.δt / s.γ
 calc_c2(s::SimParameters) = begin
     D = k_B * s.T / s.γ
@@ -65,6 +67,12 @@ ScratchBufs(N) = ScratchBufs(
                         Vector{Float64}(undef, 2)
                  )
 
+ScratchBufs(N, params) = ScratchBufs(
+    Matrix{Float64}(undef, 3, N),
+    Vector{Float64}(undef, 3),
+    [calc_c1(params), calc_c2(params)]
+)
+
 """Computes the pairwise force on atoms i, j given the current simulation state.
 
 Places the force on atom `i` into the `scratch` parameter, with the implicit
@@ -74,16 +82,18 @@ function compute_force_pair!(scratch::AbstractVector{Float64},
                             state::SimState, i::Int, j::Int)
     @views @. scratch = state.positions[:,j] - state.positions[:,i]
     dist_ij = norm(scratch)
+    display(dist_ij)
 
     # If this vector is zero, we can't normalize it. Fortunately, we can
     # just say the force is zero, since stochastic updates will push it
     # out of the zero condition on the next timestep
-    if abs(dist_ij) < 1e-8
+    if abs(dist_ij) < 1e-7
         scratch .= 0.0
     else
-        # The unit i->j vector is already in here from earlier, just multiply it
-        # by the correct scalar coefficients
-        scratch .*= state.coeffs[i,j] * (dist_ij - state.restlens[i,j])
+        # The i->j vector is already in here from earlier. Normalize it first
+        # and then multiply by the correct values
+        kcoef = 1.0 - (state.restlens[i,j] / dist_ij)
+        scratch .*= state.coeffs[i,j] * kcoef
     end
     nothing
 end
@@ -109,12 +119,16 @@ end
 
 """Take a timestep with overdamped explicit Euler."""
 function take_timestep!(state::SimState, scratch::ScratchBufs)
+    fill!(scratch.forces, zero(Float64))
+    fill!(scratch.pairforce, zero(Float64))
     c1 = scratch.coeffs[1]
     c2 = scratch.coeffs[2]
 
     # Get deterministic update
     compute_forces!(scratch, state)
     scratch.forces .*= c1
+
+    display(scratch.forces)
     
     # Add stochastic update into force. To avoid allocating, do this in a loop
     for i in eachindex(scratch.forces)
@@ -132,14 +146,12 @@ end
 function run_sim(simstate::SimState, outdata::HDF5Dataset, params::SimParameters, nframes, nskip=1)
     @assert(nskip >= 1, "Trying to skip non-positive number of frames")
 
-    scratch = simstate |> natoms |> ScratchBufs
+    scratch = ScratchBufs(natoms(simstate), params)
     @assert(size(scratch.forces) == size(simstate.positions), "Force-Position size mismatch")
 
     (c1,c2) = calc_c1c2(params)
     @info @sprintf("Run sim c1=%.3f, c2=%.3f, with %d atoms", c1,c2,natoms(simstate))
     @info @sprintf("Recording %d frames total at every %d frame", nframes, nskip)
-    scratch.coeffs[1] = c1
-    scratch.coeffs[2] = c2
 
     for t in 1:nframes
         # Only record every skipn counts
@@ -165,19 +177,24 @@ towards each other slowly, until the force becomes almost zero and they stop
 moving."""
 function simple_test()
     # Points across the Z axis
-    positions = [0 0; 0 0; 0 0]
-    state = generate_simstate(positions)
-    natoms = state.N
+    positions = [0 0; 0 0; 1.5 -1.5]
+    restlens = UpperTriangular([0.0 1.0; 0.0 0.0])
+    coeffs = restlens
+    natoms = 2
 
-    # Initial perturbation
-    state.positions += [0 0; 0 0; 0.5 -0.5]
+    state = SimState(positions, restlens, coeffs)
 
-    params = SimParameters(100.0, 0.001, 0.8, 10_000_000)
+    params = default_sim_parameters()
 
-    solution = zeros(3, state.N, params.num_ts)
-    for t in 1:params.num_ts
+    nsteps = 10
+
+    solution = zeros(3, 2, nsteps)
+    scratch = ScratchBufs(2)
+    scratch.coeffs[1] = 0.4
+    scratch.coeffs[2] = 0.0   # Artificially disable stochastic force
+    for t in 1:nsteps
         solution[:,:,t] = state.positions
-        take_timestep(state, params)
+        take_timestep!(state, scratch)
     end
     return (solution, state)
 end
