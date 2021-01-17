@@ -82,7 +82,6 @@ function compute_force_pair!(scratch::AbstractVector{Float64},
                             state::SimState, i::Int, j::Int)
     @views @. scratch = state.positions[:,j] - state.positions[:,i]
     dist_ij = norm(scratch)
-    display(dist_ij)
 
     # If this vector is zero, we can't normalize it. Fortunately, we can
     # just say the force is zero, since stochastic updates will push it
@@ -128,8 +127,6 @@ function take_timestep!(state::SimState, scratch::ScratchBufs)
     compute_forces!(scratch, state)
     scratch.forces .*= c1
 
-    display(scratch.forces)
-    
     # Add stochastic update into force. To avoid allocating, do this in a loop
     for i in eachindex(scratch.forces)
         scratch.forces[i] += c2 * randn()
@@ -140,18 +137,19 @@ end
 
 """Run a simulation on the specified initial simulation state.
 
-    Stores output to an HDF dataset provided by `hdf_fname` and `datapath`
-    Only stores every `skipn` data steps.
+    Stores output to an HDF dataset provided by `hdf_fname` and `datapath`.
+
+    Outdata must support indexing/slicing/assignment.
 """
-function run_sim(simstate::SimState, outdata::HDF5Dataset, params::SimParameters, nframes, nskip=1)
+function run_sim(simstate::SimState, outdata, params::SimParameters, nframes, nskip=1)
     @assert(nskip >= 1, "Trying to skip non-positive number of frames")
 
     scratch = ScratchBufs(natoms(simstate), params)
     @assert(size(scratch.forces) == size(simstate.positions), "Force-Position size mismatch")
 
     (c1,c2) = calc_c1c2(params)
-    @info @sprintf("Run sim c1=%.3f, c2=%.3f, with %d atoms", c1,c2,natoms(simstate))
-    @info @sprintf("Recording %d frames total at every %d frame", nframes, nskip)
+    @info @sprintf("Run sim: c1=%.3f, c2=%.3f, %d atoms, %d frames, every %d (%d total)", 
+                    c1,c2,natoms(simstate), nframes, nskip, nframes*nskip)
 
     for t in 1:nframes
         # Only record every skipn counts
