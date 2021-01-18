@@ -1,18 +1,23 @@
 include("langevin_sim.jl")
 
+using Logging;
 using Test;
+using Plots;
+using HypothesisTests;
+using Distributions;
+using Statistics;
+using StatsBase;
 
 """Simulates a network where all points are connected to all other points by
 bonds of length 1."""
 function sim_dense_network(natoms::Integer, nsteps::Integer, nskip=10)
-    @assert(natoms <= 20, "Too many atoms for a dense network!")
     positions = randn((3, natoms));
     restlengths = UpperTriangular(ones(natoms, natoms))
     coeffs = restlengths
     state = SimState(positions, restlengths, coeffs)
 
     trace = Array{Float64, 3}(undef, 3, natoms, nsteps)  # 10s of MB
-    params = SimParameters(0.01, 0.01,  0.95, 10.0)  # Small stochastic force (T=0)
+    params = SimParameters(0.01, 0.01,  0.95, 10.0)  # Small stochastic force
     state2 = deepcopy(state)
     run_sim(state, trace, params, nsteps, nskip)
     (trace, state)
@@ -68,7 +73,7 @@ function sim_tet_network(natoms::Integer, nsteps, nskip=1)
 
     state = SimState(positions, restlengths, connectivity)
     trace = Array{Float64, 3}(undef, 3, natoms, nsteps)  # 10s of MB
-    params = SimParameters(0.01, 0.01,  0.95, 20.0)  # Small stochastic force (T=0)
+    params = SimParameters(0.5, 0.01,  0.95, 30.0)
     state2 = deepcopy(state)
     run_sim(state, trace, params, nsteps, nskip)
     (trace, state2)
@@ -117,6 +122,7 @@ function no_pairwise_explosions(trace, state)
 end
 
 function test_dense_stable()
+    println("Testing dense network")
     for n = [10, 15, 20]
         (trace, init_state) = sim_dense_network(n, 10_000)
         badframe = dense_no_explosion(trace, init_state.positions)
@@ -142,9 +148,21 @@ function test_dense_stable()
     return true
 end
 
+function test_dense_explodes()
+    println("Running intentional failure test.")
+    (trace, init_state) = sim_dense_network(100, 10_000, 10)
+    if dense_no_explosion(trace, init_state.positions) == 0
+        # Should explode, so test failed
+        return false
+    else
+        return true
+    end
+end
+
 function test_tets_stable()
+    println("Testing tetrahedra network")
     for n = [10,20,30]
-        (trace, init_state) = sim_tet_network(n, 10_000, 10)
+        (trace, init_state) = sim_tet_network(n, 10_000, 100)
         (badframe, badi, badj, dij) = no_pairwise_explosions(trace, init_state)
         if badframe != 0
             println("Explosion on tet trace n=$(n) at frame $(badframe)")
@@ -172,5 +190,45 @@ function test_tets_stable()
     return true
 end
 
+function torture_test_tets()
+    println("Running long-term torture test.")
+    (trace, init_state) = sim_tet_network(100, 10_000, 10_000)
+    (badframe, badi, badj, dij) = no_pairwise_explosions(trace, init_state)
+    badframe == 0
+end
+
+function test_twopoint_energy_distribution(fname)
+    println("Testing energetics")
+    xs = [0 0; 0 0; 1 1]
+    restlens = UpperTriangular([0 1; 0 1])
+    coeffs = copy(restlens)
+
+    nsteps = 1_000_000
+    nskip = 100
+    state = SimState(xs, restlens, coeffs)
+    trace = Array{Float64, 3}(undef, 3, 2, nsteps)
+    params = SimParameters(0.5, 0.01,  0.95, 30.0)
+    state2 = deepcopy(state)
+    run_sim(state, trace, params, nsteps, nskip)
+    (trace, state2)
+
+    energy = [ 0.5 * 30 * norm(x[:,2] - x[:,1])^2 for x in eachslice(trace; dims=3) ]
+    p = histogram(energy)
+    png(p, fname) # Save plot for further examination
+
+    @info "Please examine file $(fname) to evaluate the energy distribution."
+    true
+
+    #res = ApproximateOneSampleKSTest(energy, Gaussian)
+end
+
+## Explosion tests: Does distance between connected points diverge or become NaN
 @test test_tets_stable()
 @test test_dense_stable()
+@test test_dense_explodes()
+
+## Energetics Tests: Do energetics hold up?
+@test test_twopoint_energy_distribution("2atom-energy.png")
+
+## Long-running tests
+@test torture_test_tets()
