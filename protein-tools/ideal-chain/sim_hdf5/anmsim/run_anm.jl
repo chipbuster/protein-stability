@@ -43,7 +43,7 @@ function parse_args(args::AbstractVector{S})::SimArgs where S <: AbstractString
     T = 0.5
     δt = 0.01
     γ = 0.95
-    k = 38.0
+    k = 28.5
     bond_mod = 1.0
     cutoff = 15.0
     nframes = 10_000_000
