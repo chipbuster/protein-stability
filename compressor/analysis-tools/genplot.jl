@@ -1,5 +1,5 @@
-using Gadfly;
-using Cairo;
+using Plots;
+using StatPlots;
 using DataFrames;
 
 include("size-analysis/lztypes.jl")
@@ -7,6 +7,7 @@ include("size-analysis/lzutils.jl")
 include("size-analysis/lzanalysisbase.jl")
 include("size-analysis/read_json.jl")
 include("size-analysis/plotting.jl")
+include("../../protein-tools/core/compressor.jl")
 
 """Plotting function which hardcodes directory structure"""
 function plot_diffs(datadir, N, f, outfile)
@@ -17,8 +18,30 @@ function plot_diffs(datadir, N, f, outfile)
     data_2AA = parse_gzip_json(joinpath(datadir, fname_2AA))
 
     p = compare_datasets(data_2AA, data_3AA, "2AA", "3AA", (N, N*f))
-    draw(SVG(outfile, 21cm, 9cm), p)
+    draw(SVG(outfile, 10cm, 30cm), p)
     p
+end
+
+function getNR(fn)
+    fn = basename(fn)
+    dotparts = split(fn, '.')
+    if dotparts[end] != "gz"
+        error("Not a GZIP")
+    end
+    nosuf = join(dotparts,'.')
+    parts = split(dotparts, '_')
+    N = parse(Int, parts[2])
+    f = parse(Float64, parts[3])
+    (N, N*f)
+end
+
+function plot_size_dependence(datadir)
+    df = DataFrame(N=Int[], R=Float64[], fsize=Float64[], )
+    for file in readdir(datadir)
+        (N, R) = getNR(file)
+        S 
+    end
+    p = plot(data, color=: )
 end
 
 function plot_diffs_preset(indir, outdir)
@@ -36,3 +59,5 @@ function hardcode_plot_dir()
     outdir = "$(homedir())/tmp/gzip-data/plots"
     plot_diffs_preset(indir, outdir)
 end
+
+plot_diffs(ARGS[1], parse(Int, ARGS[2]), parse(Float64, ARGS[3]), ARGS[4])

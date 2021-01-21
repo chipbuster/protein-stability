@@ -35,6 +35,9 @@ struct Block
     data::Vector{LZElem}
 end
 
+struct GZJSON
+    blocks::Vector{Block}
+end
 
 ## Custom error type for the parse
 struct DecodeLZ77JSONException <: Exception

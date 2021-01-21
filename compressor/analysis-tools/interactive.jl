@@ -1,7 +1,10 @@
 using Revise;
-using Gadfly;
+using Plots;
+using StatsPlots;
 using DataFrames;
+using Query;
 
+includet("jitterparam.jl")
 includet("size-analysis/lztypes.jl")
 includet("size-analysis/lzutils.jl")
 includet("size-analysis/lzanalysisbase.jl")

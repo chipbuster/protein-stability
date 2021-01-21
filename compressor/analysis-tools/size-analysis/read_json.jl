@@ -113,5 +113,5 @@ function parse_gzip_json(filename)
         throw(DecodeLZ77JSONException("'blocks' was not an array"))
     end
 
-    [ parse_block(b) for b in json_blocks ]
+    GZJSON([ parse_block(b) for b in json_blocks ])
 end
