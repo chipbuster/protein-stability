@@ -57,21 +57,22 @@ use bitstream_io::huffman::{compile_read_tree, compile_write_tree};
 use bitstream_io::{
   BitRead, BitReader, BitWrite, BitWriter, HuffmanRead, HuffmanWrite, LittleEndian,
 };
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::vec::Vec;
 
-use super::{CodeDict, CodeDictEntry, DeflateReadTree, DeflateWriteTree};
+use super::{CodeDict, DeflateReadTree, DeflateWriteTree};
 use crate::deflate::decoder::DeflateReadError;
 use crate::deflate::encoder::DeflateWriteError;
 use crate::huff_tree::*;
 
-lazy_static! {
-  static ref RAW_CODE_ORDER: Vec<u16> =
-    vec![16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,];
-}
+static RAW_CODE_ORDER: Lazy<Vec<u16>> = Lazy::new(|| {
+  vec![
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
+  ]
+});
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum CodeLengthCodepoint {

@@ -1,11 +1,9 @@
 use crate::deflate::CodeDict;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::vec::Vec;
 
-lazy_static! {
-  pub static ref DEFAULT_LENGTH_CODE: CodeDict<u16> = default_length_huffcode();
-  pub static ref DEFAULT_DIST_CODE: CodeDict<u16> = default_dist_huffcode();
-}
+pub static DEFAULT_LENGTH_CODE: Lazy<CodeDict<u16>> = Lazy::new(default_length_huffcode);
+pub static DEFAULT_DIST_CODE: Lazy<CodeDict<u16>> = Lazy::new(default_dist_huffcode);
 
 /// Takes a slice of 0-1 values and performs an "add" on it. Returns None if
 /// a non 0/1 input is encountered
