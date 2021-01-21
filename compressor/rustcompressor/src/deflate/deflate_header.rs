@@ -55,7 +55,9 @@ distance codes used at all (the data is all literals).
 */
 
 use bitstream_io::huffman::{compile_read_tree, compile_write_tree};
-use bitstream_io::{BitReader, BitWriter, LittleEndian};
+use bitstream_io::{
+  BitRead, BitReader, BitWrite, BitWriter, HuffmanRead, HuffmanWrite, LittleEndian,
+};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -105,8 +107,8 @@ pub fn read_header<R: Read>(
 // TODO: Modify read_header to return codedicts instead of precompiled trees.
 pub fn write_header<W: Write>(
   bit_sink: &mut BitWriter<W, LittleEndian>,
-  length_code: &[CodeDictEntry<u16>],
-  dist_code: &[CodeDictEntry<u16>],
+  length_code: &[(u16, Vec<u8>)],
+  dist_code: &[(u16, Vec<u8>)],
 ) -> Result<(), DeflateWriteError> {
   let length_dict: HashMap<u16, Vec<u8>> = length_code.iter().cloned().collect();
   let dist_dict: HashMap<u16, Vec<u8>> = dist_code.iter().cloned().collect();
@@ -221,7 +223,7 @@ fn write_size_codes<W: Write>(
   let num_codes = num_codes.try_into().unwrap();
 
   for code_val in &RAW_CODE_ORDER[0..num_codes] {
-    if let Some(codelen) = size_codes.get(code_val).map(|x| x.len()) {
+    if let Some(codelen) = size_codes.get(code_val).map(Vec::len) {
       assert!(codelen < 8);
       bit_sink.write(3, codelen as u8)?;
     } else {
@@ -305,13 +307,19 @@ impl CodeLengthCodepoint {
       }
       Self::ShortZeroRep(rep) => {
         let r = *rep;
-        assert!((3..=10).contains(&r), "Rep out of range for short zero repeat");
+        assert!(
+          (3..=10).contains(&r),
+          "Rep out of range for short zero repeat"
+        );
         bit_sink.write_huffman(codelength_tree, 17)?;
         bit_sink.write(3, r as u32 - 3)
       }
       Self::LongZeroRep(rep) => {
         let r = *rep;
-        assert!((11..=138).contains(&r), "Rep out of range for long zero rep");
+        assert!(
+          (11..=138).contains(&r),
+          "Rep out of range for long zero rep"
+        );
         bit_sink.write_huffman(codelength_tree, 18)?;
         bit_sink.write(7, r as u32 - 11)
       }
@@ -350,12 +358,12 @@ fn runlength_encode<S: Copy + PartialEq + Eq>(data: &[S]) -> Vec<(S, u8)> {
   }
 
   let mut cur = (data[0], 1);
-  for item in data.iter() {
-    if *item == cur.0 {
+  for elem in data.iter().skip(1) {
+    if *elem == cur.0 {
       cur = (cur.0, cur.1 + 1);
     } else {
       output.push(cur);
-      cur = (*item, 1);
+      cur = (*elem, 1);
     }
   }
   output.push(cur);
@@ -370,7 +378,10 @@ fn break_range_nonzero_len(mut rep: u8) -> Vec<u8> {
     rep -= 6;
     out.push(6);
   }
-  assert!((3..9).contains(&rep), "Invalid range for rep after subloop");
+  assert!(
+    (3..=9).contains(&rep),
+    "Invalid range for rep after subloop"
+  );
   if rep == 8 {
     out.extend(&[4, 4]);
   } else if rep == 7 {
@@ -392,7 +403,10 @@ fn break_range_zero_len(mut rep: u8) -> Vec<u8> {
     out.push(10);
     rep -= 10;
   }
-  assert!((3..13).contains(&rep), "Invalid ragne for rep after subloop");
+  assert!(
+    (3..=13).contains(&rep),
+    "Invalid ragne for rep after subloop"
+  );
   if rep == 12 {
     out.extend(&[6, 6]);
   } else if rep == 11 {
@@ -461,7 +475,7 @@ fn codepoints_to_code_lengths(pts: &[CodeLengthCodepoint]) -> Option<Vec<u8>> {
         }
       }
       CodeLengthCodepoint::LongZeroRep(n) | CodeLengthCodepoint::ShortZeroRep(n) => {
-        output.append(&mut vec![0u8;*n as usize]);
+        output.append(&mut vec![0u8; usize::from(*n)])
       }
     }
   }

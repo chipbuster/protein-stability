@@ -6,7 +6,7 @@ use super::*;
 use std::io::Read;
 
 use bitstream_io::huffman::compile_read_tree;
-use bitstream_io::{BitReader, LittleEndian};
+use bitstream_io::{BitRead, BitReader, ByteRead, LittleEndian};
 
 use thiserror::Error;
 

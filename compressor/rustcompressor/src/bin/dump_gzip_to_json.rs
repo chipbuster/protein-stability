@@ -19,8 +19,8 @@ fn main() -> Result<(), std::io::Error> {
     process::exit(1);
   }
 
-  let mut infile =
-    std::fs::File::open(&args[1]).unwrap_or_else(|_| panic!("Could not open input file {}", args[1]));
+  let mut infile = std::fs::File::open(&args[1])
+    .unwrap_or_else(|_| panic!("Could not open input file {}", args[1]));
   let mut outfile = std::fs::OpenOptions::new()
     .read(false)
     .write(true)

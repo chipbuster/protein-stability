@@ -48,7 +48,9 @@ previously handled separately (leading to a fair amount of code duplication). */
     Distance (as encoded by a codepoint)
 */
 
-use bitstream_io::{BitReader, BitWriter, LittleEndian};
+use bitstream_io::{
+  BitRead, BitReader, BitWrite, BitWriter, HuffmanRead, HuffmanWrite, LittleEndian,
+};
 use lazy_static::lazy_static;
 use std::convert::TryInto;
 use std::io::{Read, Write};

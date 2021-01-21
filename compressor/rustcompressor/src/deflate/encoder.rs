@@ -3,7 +3,7 @@ use super::default_data::default_huffcode::*;
 use super::*;
 use crate::deflate::deflate_header::write_header;
 use crate::huff_tree::huffcode_from_freqs;
-use bitstream_io::{huffman::compile_write_tree, BitWriter, LittleEndian};
+use bitstream_io::{huffman::compile_write_tree, BitWrite, BitWriter, HuffmanWrite, LittleEndian};
 use std::io::Write;
 use std::{
   collections::{HashMap, VecDeque},

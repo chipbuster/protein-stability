@@ -231,11 +231,11 @@ where
   }
 
   // Execute the package-merge algorithm to obtain the min-value set of denom n-1
-  let mut out = package_merge(coins);
+  let out = package_merge(coins);
   let mut rescoins: Vec<Coin<S>> = Vec::new();
-  for coincollection in out.iter_mut().take(n-1) {
-    assert_eq!(coincollection.invdenom, 0);
-    rescoins.append(&mut coincollection.coins);
+  for mut coinpack in out {
+    assert_eq!(coinpack.invdenom, 0);
+    rescoins.append(&mut coinpack.coins);
   }
 
   let mut code_lens = HashMap::new();
