@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package DEFLATEProto;
+
 message Literal {
     uint32 value = 1;
 }
@@ -44,7 +46,7 @@ message UnderlyingBlock {
 }
 
 message DEFLATEBlock {
-    bool final = 1;
+    bool bfinal = 1;
     UnderlyingBlock data = 2;
 }
 

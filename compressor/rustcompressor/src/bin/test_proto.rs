@@ -8,6 +8,7 @@ use std::{
 
 use compressor::deflate::*;
 use compressor::gzip::*;
+use prost::Message;
 
 fn main() -> Result<(), std::io::Error> {
   let args: Vec<String> = env::args().collect();
@@ -34,12 +35,13 @@ fn main() -> Result<(), std::io::Error> {
   infile.read_exact(&mut magic_buf[..]).unwrap();
   infile.seek(SeekFrom::Start(0)).unwrap();
 
-  let json_string = if magic_buf != [0x1fu8, 0x8b] {
+  let dfs_proto = if magic_buf != [0x1fu8, 0x8b] {
     println!("File is not gzip data--assuming it's raw DEFLATE-encoded");
     let mut data = Vec::new();
     infile.read_to_end(&mut data).unwrap();
-    let dfs = DeflateStream::new_from_deflate_encoded_bits(&data[..]).unwrap();
-    serde_json::to_string(&dfs).unwrap()
+    DeflateStream::new_from_deflate_encoded_bits(&data[..])
+      .unwrap()
+      .into_proto()
   } else {
     println!("File is a GZIP file.");
     let gzip_data = GzipData::new_from_gzip_data(&mut infile).unwrap();
@@ -53,11 +55,13 @@ fn main() -> Result<(), std::io::Error> {
 
     // Check that the data here actually matches the checksums provided
     dfs.clone().into_byte_stream_checked(crc32, isz).unwrap();
-    serde_json::to_string(&dfs).unwrap()
+
+    dfs.into_proto()
   };
 
-  outfile.write_all(json_string.as_bytes())?;
-  println!("Output written to {}", args[2]);
+  let mut outvec = vec![0u8; dfs_proto.encoded_len()];
+  dfs_proto.encode(&mut outvec)?;
+  outfile.write(&outvec[..])?;
 
   Ok(())
 }
