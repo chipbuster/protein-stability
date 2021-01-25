@@ -17,7 +17,7 @@ fn main() -> Result<(), std::io::Error> {
   let mut buf = Vec::new();
   infile.read_to_end(&mut buf)?;
 
-  let d = proto::proto::DeflateStream::decode_length_delimited(&buf[..]).unwrap();
+  let d = proto::proto::DeflateStream::decode(&buf[..]).unwrap();
 
   println!("{:?}", d);
 

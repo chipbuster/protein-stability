@@ -27,6 +27,7 @@ fn main() -> Result<(), std::io::Error> {
     .write(true)
     .create(true)
     .append(false)
+    .truncate(true)
     .open(&args[2])
     .unwrap_or_else(|_| panic!("Could not open output file {}", args[2]));
 
@@ -59,12 +60,16 @@ fn main() -> Result<(), std::io::Error> {
     dfs.into_proto()
   };
 
+  println!("Encoding a message length of {}", dfs_proto.encoded_len());
+
   let mut outvec = Vec::with_capacity(dfs_proto.encoded_len() + 10);
-  dfs_proto.encode_length_delimited(&mut outvec).unwrap();
+  dfs_proto.encode(&mut outvec).unwrap();
+
+  println!("Outvec length: {}", outvec.len());
 
   let testvec = outvec.clone();
 
-  let test = proto::proto::DeflateStream::decode_length_delimited(&testvec[..]).unwrap();
+  let test = proto::proto::DeflateStream::decode(&testvec[..]).unwrap();
   assert_eq!(test, dfs_proto);
 
   outfile.write(&outvec[..])?;
