@@ -8,7 +8,7 @@ use std::{
 
 use compressor::deflate::*;
 use compressor::gzip::*;
-use prost::{encode_length_delimiter, Message};
+use prost::Message;
 
 fn main() -> Result<(), std::io::Error> {
   let args: Vec<String> = env::args().collect();
@@ -59,8 +59,14 @@ fn main() -> Result<(), std::io::Error> {
     dfs.into_proto()
   };
 
-  let mut outvec = vec![0u8; dfs_proto.encoded_len() + 10];
-  dfs_proto.encode_length_delimited(&mut outvec)?;
+  let mut outvec = Vec::with_capacity(dfs_proto.encoded_len() + 10);
+  dfs_proto.encode_length_delimited(&mut outvec).unwrap();
+
+  let testvec = outvec.clone();
+
+  let test = proto::proto::DeflateStream::decode_length_delimited(&testvec[..]).unwrap();
+  assert_eq!(test, dfs_proto);
+
   outfile.write(&outvec[..])?;
 
   Ok(())

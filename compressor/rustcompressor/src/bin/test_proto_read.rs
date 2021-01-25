@@ -1,12 +1,7 @@
-use std::{
-  env,
-  io::Read,
-  io::Seek,
-  io::{SeekFrom, Write},
-  process,
-};
+use compressor::deflate::*;
+use prost::Message;
 
-use protobuf::Message;
+use std::{env, io::Read, process};
 
 fn main() -> Result<(), std::io::Error> {
   let args: Vec<String> = env::args().collect();
@@ -19,8 +14,10 @@ fn main() -> Result<(), std::io::Error> {
   let mut infile = std::fs::File::open(&args[1])
     .unwrap_or_else(|_| panic!("Could not open input file {}", args[1]));
 
-  let mut cis = protobuf::CodedInputStream::new(&mut infile);
-  let d = DEFLATEStream::parse_from(&mut cis).unwrap();
+  let mut buf = Vec::new();
+  infile.read_to_end(&mut buf)?;
+
+  let d = proto::proto::DeflateStream::decode_length_delimited(&buf[..]).unwrap();
 
   println!("{:?}", d);
 
