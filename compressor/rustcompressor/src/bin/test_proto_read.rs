@@ -6,7 +6,6 @@ use std::{
   process,
 };
 
-use compressor::deflate::proto::dproto::DEFLATEStream;
 use protobuf::Message;
 
 fn main() -> Result<(), std::io::Error> {
