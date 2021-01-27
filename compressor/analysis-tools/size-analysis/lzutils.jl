@@ -1,7 +1,7 @@
 using Base.Iterators;
 
 function codepoint_for_len(x)
-    for cp in LENLIT_CODEPOINT_INFO
+    for cp in lenlit_codepoint_info()
         (lo, hi) = cp.val_range
         if lo <= x <= hi
             return cp
@@ -11,7 +11,7 @@ function codepoint_for_len(x)
 end
 
 function codepoint_for_dist(x)
-    for cp in DIST_CODEPOINT_INFO
+    for cp in dist_codepoint_info()
         (lo, hi) = cp.val_range
         if lo <= x <= hi
             return cp

@@ -1,5 +1,4 @@
-include("size-analysis/read_input/lzinput.jl")
-include("size-analysis/lzutils.jl")
+include("size-analysis/mod.jl")
 
 
 test1_dat = [Literal(1), Literal(2), Literal(3), Literal(4), Backreference(2, 3)]

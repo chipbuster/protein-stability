@@ -4,5 +4,5 @@ using StatsPlots;
 using DataFrames;
 using Query;
 
-includet("jitterparam.jl")
+includet("jitfnames.jl")
 includet("size-analysis/mod.jl")

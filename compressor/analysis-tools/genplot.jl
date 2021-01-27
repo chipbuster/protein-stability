@@ -1,58 +1,52 @@
-using Plots;
-using StatPlots;
+using StatsPlots;
 using DataFrames;
+using PrettyTables;
+using Query;
+using Base.Threads;
 
+include("jitfnames.jl")
 include("size-analysis/mod.jl")
 include("../../protein-tools/core/compressor.jl")
 
-"""Plotting function which hardcodes directory structure"""
-function plot_diffs(datadir, N, f, outfile)
-    fname_3AA = "output_$(N)_$(f).rel.bin.json"
-    fname_2AA = "output_$(N)_$(f).abs.bin.json"
-
-    data_3AA = parse_gzip_json(joinpath(datadir, fname_3AA))
-    data_2AA = parse_gzip_json(joinpath(datadir, fname_2AA))
-
-    p = compare_datasets(data_2AA, data_3AA, "2AA", "3AA", (N, N * f))
-    p
-end
-
-function getNRS(fn)
-    fn = basename(fn)
-    dotparts = split(fn, '.')
-    if dotparts[end] != "gz"
-        error("Not a GZIP")
+function load_proto_dfs(directory)
+    df = DataFrame(natoms=Int[], R=Float64[], njitter=Int[], sorted=String[], aatype=Int[], dataindex=Int[])
+    outstreams = Vector{DEFLATEStream}()
+    l = SpinLock()
+    @time @threads for fn in readdir(directory)
+        path = joinpath(directory, fn)
+        prms = get_params_from_fn(path)
+        stream = read_lz_proto(path)
+        lock(l)
+        push!(outstreams, stream)
+        push!(df, 
+            (prms.natoms, prms.ext_frac * (prms.natoms - 1), prms.njitter,
+             prms.sorted, prms.aatype, length(outstreams))
+        )
+        unlock(l)
     end
-    nosuf = join(dotparts, '.')
-    parts = split(dotparts, '_')
-    N = parse(Int, parts[2])
-    f = parse(Float64, parts[3])
-    (N, N * f)
+    (outstreams, df)
 end
 
-function plot_size_dependence(datadir)
-    df = DataFrame(N=Int[], R=Float64[], fsize=Float64[], )
-    for file in readdir(datadir)
-        (N, R) = getNR(file)
-        S 
+function load_gz_sizes(directory)
+    df = DataFrame(natoms=Int[], R=Float64[], njitter=Int[], sorted=String[], aatype=Int[], fsize=Int[])
+    for fn in readdir(directory)
+        prms = get_params_from_fn(fn)
+        filepath = joinpath(directory, fn)
+        fsz = filesize(filepath)
+        push!(df, 
+            (prms.natoms, prms.ext_frac * (prms.natoms - 1), prms.njitter,
+             prms.sorted, prms.aatype, fsz)
+        )
     end
-    p = plot(data, color=:)
+    df
 end
 
-function plot_diffs_preset(indir, outdir)
-    Ns = [10,20,30]
-    fs = 0.1:0.1:0.9
-    for N in Ns, f in fs
-        println("Plotting $(N), $(f)")
-        outname = joinpath(outdir, "lzbreakdown_$(N)_$(f).svg")
-        plot_diffs(indir, N, f, outname)
+macro quickload()
+    esc(
+        quote
+        size_df = load_gz_sizes("/home/chipbuster/tmp/outdata/gzips/")
+        (streams, stream_df) = load_proto_dfs("/home/chipbuster/tmp/outdata/protos/")
+        println("Loaded")
     end
+    )
 end
-
-function hardcode_plot_dir()
-    indir = "$(homedir())/tmp/gzip-data/jsons/pinreflect"
-    outdir = "$(homedir())/tmp/gzip-data/plots"
-    plot_diffs_preset(indir, outdir)
-end
-
-plot_diffs(ARGS[1], parse(Int, ARGS[2]), parse(Float64, ARGS[3]), ARGS[4])
