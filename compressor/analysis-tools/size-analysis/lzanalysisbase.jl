@@ -1,7 +1,5 @@
 ## The main suite of LZ analysis tools 
 
-using JSON;
-
 function get_codelengths(code::HuffCode)
     Dict(k => length(c) for (k, c) in code)
 end
@@ -40,7 +38,7 @@ end
 
 """Strip unused symbols out of the codes. Useful for interpreting Fix blocks"""
 function process_block_unused(block::Block)
-    lenlits,dists = list_used_codepoints(block)
+    lenlits, dists = list_used_codepoints(block)
     for k in keys(block.lenlit_code)
         if k ∉ lenlits
             delete!(block.lenlit_code, k)
@@ -101,7 +99,7 @@ function num_bytes_uncompressed(block::Block)
         end
     end
     bytes
-end
+    end
 
 function num_bytes_uncompressed(blocks::Vector{Block})
     sum(num_bytes_uncompressed(b) for b in blocks)

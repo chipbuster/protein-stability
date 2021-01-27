@@ -2,11 +2,7 @@ using Plots;
 using StatPlots;
 using DataFrames;
 
-include("size-analysis/lztypes.jl")
-include("size-analysis/lzutils.jl")
-include("size-analysis/lzanalysisbase.jl")
-include("size-analysis/read_json.jl")
-include("size-analysis/plotting.jl")
+include("size-analysis/mod.jl")
 include("../../protein-tools/core/compressor.jl")
 
 """Plotting function which hardcodes directory structure"""
@@ -17,22 +13,22 @@ function plot_diffs(datadir, N, f, outfile)
     data_3AA = parse_gzip_json(joinpath(datadir, fname_3AA))
     data_2AA = parse_gzip_json(joinpath(datadir, fname_2AA))
 
-    p = compare_datasets(data_2AA, data_3AA, "2AA", "3AA", (N, N*f))
+    p = compare_datasets(data_2AA, data_3AA, "2AA", "3AA", (N, N * f))
     draw(SVG(outfile, 10cm, 30cm), p)
     p
 end
 
-function getNR(fn)
+function getNRS(fn)
     fn = basename(fn)
     dotparts = split(fn, '.')
     if dotparts[end] != "gz"
         error("Not a GZIP")
     end
-    nosuf = join(dotparts,'.')
+    nosuf = join(dotparts, '.')
     parts = split(dotparts, '_')
     N = parse(Int, parts[2])
     f = parse(Float64, parts[3])
-    (N, N*f)
+    (N, N * f)
 end
 
 function plot_size_dependence(datadir)
@@ -41,7 +37,7 @@ function plot_size_dependence(datadir)
         (N, R) = getNR(file)
         S 
     end
-    p = plot(data, color=: )
+    p = plot(data, color=:)
 end
 
 function plot_diffs_preset(indir, outdir)

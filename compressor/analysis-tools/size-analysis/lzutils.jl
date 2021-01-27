@@ -1,3 +1,4 @@
+using Base.Iterators;
 
 function codepoint_for_len(x)
     for cp in LENLIT_CODEPOINT_INFO
@@ -38,4 +39,53 @@ end
 
 function size_lzelem(sym::Backreference, codes::BlockCode)
     size_len(sym, codes.lenlit_code) + size_dist(sym, codes.dist_code)
+end
+
+function get_lzstream(blocks)
+    out = Vector{LZElem}()
+    for block in blocks
+        append!(out, block.data)
+    end
+    out
+end
+
+function expand_backref(output_so_far, elem)
+    l = elem.len
+    d = elem.dist
+    last_index = length(output_so_far)
+
+    if d > last_index
+        display(output_so_far)
+        display(elem)
+        error("Reference past start: dist $(d) on length-$(last_index)")
+    end
+
+    begin_index = last_index - d + 1
+    end_index = min(last_index, begin_index + l - 1)
+    repeated = output_so_far[begin_index:end_index]
+
+    if d > l
+        repeated
+    else
+        take(cycle(repeated), l)
+    end
+end
+
+function expand_lzelem(dat::Vector{LZElem})
+    output = Vector{UInt8}()
+    for input_elem in dat
+        if isa(input_elem, Literal)
+            push!(output, input_elem.value)
+        elseif isa(input_elem, Backreference)
+            new = expand_backref(output, input_elem)
+            @assert(length(new) == input_elem.len, "Got $(length(new)) elements on a backref of length $(input_elem.len), dist $(input_elem.dist)")
+            append!(output, new)
+        elseif isa(input_elem, OffsetBackref)
+            new = expand_backref(output, input_elem)
+            append!(output, new .+ input_elem.offset)
+        else
+            error("Unknown LZElem type")
+        end
+    end
+    output
 end
