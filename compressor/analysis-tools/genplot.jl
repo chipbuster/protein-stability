@@ -14,7 +14,6 @@ function plot_diffs(datadir, N, f, outfile)
     data_2AA = parse_gzip_json(joinpath(datadir, fname_2AA))
 
     p = compare_datasets(data_2AA, data_3AA, "2AA", "3AA", (N, N * f))
-    draw(SVG(outfile, 10cm, 30cm), p)
     p
 end
 
