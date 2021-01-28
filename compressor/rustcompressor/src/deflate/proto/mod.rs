@@ -1,4 +1,6 @@
+use crate::deflate::codepoints::{MAX_DIST_CODE, MIN_DIST_CODE, OFFSET_SIGIL};
 use crate::deflate::*;
+use std::{convert::TryFrom, unimplemented};
 
 pub mod proto {
   pub type TEST = i32;
@@ -86,5 +88,156 @@ impl DeflateStream {
     proto::DeflateStream {
       blocks: self.blocks.into_iter().map(Block::into_proto).collect(),
     }
+  }
+}
+
+impl proto::Literal {
+  pub fn validate(&self) -> String {
+    if !(0..=256).contains(&self.value) {
+      format!("Invalid Literal value {}", self.value)
+    } else {
+      String::new()
+    }
+  }
+}
+
+impl proto::Backref {
+  pub fn validate(&self) -> String {
+    let mut err = String::new();
+    if !(0..=32768).contains(&self.distance) {
+      err.push_str("Backref distance outside of valid range");
+    }
+    if !(0..=258).contains(&self.length) {
+      err.push_str("Backref length outside of valid range");
+    }
+    err
+  }
+}
+
+impl proto::OffsetBackref {
+  pub fn validate(&self) -> String {
+    unimplemented!()
+  }
+}
+
+impl proto::DeflateSym {
+  pub fn validate(&self) -> String {
+    if let Some(x) = &self.sym {
+      match x {
+        proto::deflate_sym::Sym::Lit(x) => x.validate(),
+        proto::deflate_sym::Sym::Backref(x) => x.validate(),
+        proto::deflate_sym::Sym::Offset(x) => x.validate(),
+      }
+    } else {
+      "DeflateSym enum not valid".to_owned()
+    }
+  }
+}
+
+impl proto::CompressedBlock {
+  fn validate_lenlit_code(code: &std::collections::HashMap<u32, u32>) -> String {
+    let mut log = String::new();
+    for key in code.keys() {
+      if !(0..=OFFSET_SIGIL).contains(&u16::try_from(*key).unwrap()) {
+        log.push_str(&format!("Invalid lenlit code {}", &key));
+      }
+    }
+    for val in code.values() {
+      if *val > 16 {
+        log.push_str(&format!("Invalid lenlit codelength {}", val));
+      }
+    }
+    log
+  }
+
+  fn validate_dist_code(code: &std::collections::HashMap<u32, u32>) -> String {
+    let mut log = String::new();
+    for key in code.keys() {
+      if !(MIN_DIST_CODE..=MAX_DIST_CODE).contains(&u16::try_from(*key).unwrap()) {
+        log.push_str(&format!("Invalid lenlit code {}", &key));
+      }
+    }
+    for val in code.values() {
+      if *val > 16 {
+        log.push_str(&format!("Invalid lenlit codelength {}", val));
+      }
+    }
+    log
+  }
+
+  pub fn validate(&self) -> String {
+    let a1 = Self::validate_lenlit_code(&self.lenlit_codelen);
+    let a2 = Self::validate_dist_code(&self.dist_codelen);
+    let a3 = self
+      .data
+      .iter()
+      .map(proto::DeflateSym::validate)
+      .filter(|x| !x.is_empty())
+      .collect::<Vec<String>>()
+      .join(";");
+
+    let mut ret = String::new();
+    if !a1.is_empty() {
+      ret.push_str(&a1);
+      ret.push_str(";");
+    }
+    if !a2.is_empty() {
+      ret.push_str(&a2);
+      ret.push_str(";");
+    }
+    if !a3.is_empty() {
+      ret.push_str(&a3);
+    }
+    ret
+  }
+}
+
+impl proto::UncompressedBlock {
+  pub fn validate(&self) -> String {
+    String::new()
+  }
+}
+
+impl proto::UnderlyingBlock {
+  pub fn validate(&self) -> String {
+    if let Some(x) = &self.data {
+      match x {
+        proto::underlying_block::Data::Raw(x) => x.validate(),
+        proto::underlying_block::Data::Block(x) => x.validate(),
+      }
+    } else {
+      "UnderlyingBlock enum not valid".to_owned()
+    }
+  }
+}
+
+impl proto::DeflateBlock {
+  pub fn validate(&self) -> String {
+    if let Some(x) = &self.data {
+      x.validate()
+    } else {
+      "DeflateBlock enum not valid".to_owned()
+    }
+  }
+}
+
+impl proto::DeflateStream {
+  pub fn validate(&self) -> String {
+    let nfinals = self.blocks.iter().map(|x| x.bfinal).filter(|x| *x).count();
+    let mut errmsg = if nfinals != 1 {
+      format!("Should only have one final block, but found {}", nfinals).to_owned()
+    } else {
+      String::new()
+    };
+    let blockmsgs = self
+      .blocks
+      .iter()
+      .map(proto::DeflateBlock::validate)
+      .filter(|x| !x.is_empty())
+      .collect::<Vec<String>>()
+      .join("\n");
+
+    errmsg.push_str(&blockmsgs);
+    errmsg
   }
 }

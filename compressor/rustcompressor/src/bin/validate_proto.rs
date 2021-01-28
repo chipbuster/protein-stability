@@ -19,7 +19,13 @@ fn main() -> Result<(), std::io::Error> {
 
   let d = proto::proto::DeflateStream::decode(&buf[..]).unwrap();
 
-  println!("{:?}", d);
+  let errs = d.validate();
+
+  if errs.is_empty() {
+    println!("No errors found.")
+  } else {
+    println!("{}", errs);
+  }
 
   Ok(())
 }
