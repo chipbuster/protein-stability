@@ -73,3 +73,17 @@ LenLitCodePoints = [
     CodePointInfo(284, 5, (227, 257)),
     CodePointInfo(285, 0, (258, 258)),
 ]
+
+
+def find_lenlit_codepoint(val):
+    for x in LenLitCodePoints:
+        if x.minval <= val <= x.maxval:
+            return x
+    raise ValueError("Unable to find lenlit codepoint")
+
+
+def find_dist_codepoint(val):
+    for x in DistCodePoints:
+        if x.minval <= val <= x.maxval:
+            return x
+    raise ValueError("Unable to find lenlit codepoint")
