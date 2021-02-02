@@ -49,8 +49,17 @@ class DeflateSym(object):
         self.length = length
         self.dist = dist
 
+    def is_literal(self):
+        return self.tag == SymTag.Literal
+
+    def is_backref(self):
+        return self.tag == SymTag.Backref
+
+    def is_offset(self):
+        return self.tag == SymTag.Offset
+
     def issymkind(self, tag):
-        self.tag == tag
+        return self.tag == tag
 
     def validate(self):
         if self.tag == SymTag.Literal:

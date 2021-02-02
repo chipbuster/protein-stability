@@ -48,6 +48,7 @@ def translate_deflatesym(sym):
     if sym.WhichOneof("sym") == "lit":
         outsym.set_value(sym.lit.value)
     elif sym.WhichOneof("sym") == "backref":
+        #        print("Found backref")
         outsym.set_backref(sym.backref.length, sym.backref.distance)
     elif sym.WhichOneof("sym") == "offset":
         outsym.set_offset(sym.offset.offset, sym.offset.length, sym.offset.distance)

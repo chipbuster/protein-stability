@@ -13,20 +13,34 @@ def literal_values(block):
         raise ValueError("Invalid Block type")
 
 
-def backref_dists(block):
+def backref_dists_stream(stream):
+    output = []
+    for block in stream.blocks:
+        output.extend(backref_dists_block(block))
+    return output
+
+
+def backref_lengths_stream(stream):
+    output = []
+    for block in stream.blocks:
+        output.extend(backref_lengths_block(block))
+    return output
+
+
+def backref_dists_block(block):
     """Given a DeflateBlock, returns a list of backreference distances found in that block"""
     if block.tag == LZTypes.BlockTag.Dyn:
         syms = block.block.deflate_symbols
-        return [s.length for s in syms if s.issymkind(LZTypes.SymTag.Literal)]
+        return [s.length for s in syms if s.issymkind(LZTypes.SymTag.Backref)]
     else:
         raise ValueError("Invalid Block type")
 
 
-def backref_lengths(block):
+def backref_lengths_block(block):
     """Given a DeflateBlock, returns a list of backreference lengths found in that block"""
     if block.tag == LZTypes.BlockTag.Dyn:
         syms = block.block.deflate_symbols
-        return [s.dist for s in syms if s.issymkind(LZTypes.SymTag.Literal)]
+        return [s.dist for s in syms if s.issymkind(LZTypes.SymTag.Backref)]
     else:
         raise ValueError("Invalid Block type")
 
