@@ -2,10 +2,16 @@ pub mod reader;
 pub mod writer;
 
 use bitflags::bitflags;
+use bitstream_io::{ByteWrite, ByteWriter, LittleEndian};
 use crc32fast::Hasher;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::fmt::{self, Write};
+use std::convert::TryFrom;
+use std::io::Write as IOWrite;
 use std::num::NonZeroU32;
+use std::{
+  convert::TryInto,
+  fmt::{self, Write},
+};
 
 /* Structure from RFC 1952
 
@@ -160,20 +166,43 @@ impl GzipData {
     }
   }
 
+  pub fn write_to<W: IOWrite>(&self, out: W) -> std::io::Result<W> {
+    let mut bytesout: ByteWriter<W, LittleEndian> = ByteWriter::new(out);
+    bytesout.write(self.id1)?;
+    bytesout.write(self.id2)?;
+    bytesout.write(self.cm)?;
+    bytesout.write(0u8)?; // Since we can't convert flg into a u8 (thanks!)
+                          // just don't set any of the extra flags.
+    bytesout.write(self.mtime.map(u32::from).unwrap_or(0u32))?;
+    bytesout.write(0u8)?; // Same for XFL
+    bytesout.write(u8::from(self.os))?;
+    bytesout.write_bytes(&self.data[..])?;
+    bytesout.write(self.crc32)?;
+    bytesout.write(self.isz)?;
+    Ok(bytesout.into_writer())
+  }
+
   pub fn get_checksums(&self) -> (u32, u32) {
     (self.crc32, self.isz)
   }
 
   /** Take ownership of a BitVector of compressed data, updating the associated
   metadata fields appropriately */
-  pub fn set_data(&mut self, data: Vec<u8>) {
+  pub fn set_uncompressed_data(&mut self, data: Vec<u8>) {
+    let isz = data.len().try_into().unwrap();
+    let crc32 = calc_crc32(&data[..]);
+    self.data = data;
+    self.isz = isz;
+    self.crc32 = crc32;
+  }
+
+  pub fn set_compressed_data(&mut self, data: Vec<u8>) {
     self.data = data;
   }
 
   pub fn set_checksums(&mut self, crc32: u32, isz: u32) {
     self.crc32 = crc32;
     self.isz = isz;
-    self.crc16.map(|_| crc32 as u16);
   }
 
   pub fn set_flags(&mut self, flg: GZFlags) {
