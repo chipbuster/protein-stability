@@ -41,7 +41,7 @@ impl UncompressedBlock {
 }
 
 impl CompressedBlock {
-  fn to_codelens(d: CodeDict<u16>) -> std::collections::HashMap<u32, u32> {
+  fn dict_to_bitsused(d: CodeDict<u16>) -> std::collections::HashMap<u32, u32> {
     use std::convert::TryInto;
     d.iter()
       .map(|(x, y)| ((*x).into(), y.len().try_into().unwrap()))
@@ -50,8 +50,8 @@ impl CompressedBlock {
 
   pub fn into_proto(self) -> proto::CompressedBlock {
     proto::CompressedBlock {
-      lenlit_codelen: Self::to_codelens(self.lenlit_code),
-      dist_codelen: Self::to_codelens(self.dist_code),
+      lenlit_codelen: Self::dict_to_bitsused(self.lenlit_code),
+      dist_codelen: Self::dict_to_bitsused(self.dist_code),
       data: self.data.into_iter().map(DeflateSym::into_proto).collect(),
     }
   }
@@ -179,11 +179,11 @@ impl proto::CompressedBlock {
     let mut ret = String::new();
     if !a1.is_empty() {
       ret.push_str(&a1);
-      ret.push_str(";");
+      ret.push(';');
     }
     if !a2.is_empty() {
       ret.push_str(&a2);
-      ret.push_str(";");
+      ret.push(';');
     }
     if !a3.is_empty() {
       ret.push_str(&a3);
@@ -225,7 +225,7 @@ impl proto::DeflateStream {
   pub fn validate(&self) -> String {
     let nfinals = self.blocks.iter().map(|x| x.bfinal).filter(|x| *x).count();
     let mut errmsg = if nfinals != 1 {
-      format!("Should only have one final block, but found {}", nfinals).to_owned()
+      format!("Should only have one final block, but found {}", nfinals)
     } else {
       String::new()
     };

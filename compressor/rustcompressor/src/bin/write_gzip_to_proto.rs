@@ -72,7 +72,7 @@ fn main() -> Result<(), std::io::Error> {
   let test = proto::proto::DeflateStream::decode(&testvec[..]).unwrap();
   assert_eq!(test, dfs_proto);
 
-  outfile.write(&outvec[..])?;
+  outfile.write_all(&outvec[..])?;
 
   Ok(())
 }
