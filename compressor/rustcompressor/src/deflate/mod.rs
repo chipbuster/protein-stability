@@ -24,6 +24,7 @@ For simplicity, offset encoding is always used with a dynamic huffman code.
 pub mod decoder;
 pub mod default_data;
 pub mod encoder;
+pub mod lz77;
 pub mod proto;
 
 mod codepoints;

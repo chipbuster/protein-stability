@@ -5,7 +5,6 @@ use bitflags::bitflags;
 use bitstream_io::{ByteWrite, ByteWriter, LittleEndian};
 use crc32fast::Hasher;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::TryFrom;
 use std::io::Write as IOWrite;
 use std::num::NonZeroU32;
 use std::{
