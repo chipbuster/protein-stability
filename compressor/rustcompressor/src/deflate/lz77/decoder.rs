@@ -40,7 +40,7 @@ fn expand_backref(
 
 /// Decode a partially-decoded LZ77 stream. Appends symbols to decoded vector
 pub fn decode_lz77(data: &[DeflateSym], decoded: &mut Vec<u8>) -> Result<(), DeflateReadError> {
-  for sym in data.into_iter() {
+  for sym in data.iter() {
     match sym {
       DeflateSym::Literal(ch) => decoded.push(*ch),
       DeflateSym::Backreference(length, distance) => {

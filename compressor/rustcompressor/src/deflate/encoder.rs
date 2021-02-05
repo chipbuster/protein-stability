@@ -7,7 +7,6 @@ use crate::deflate::lz77::encoder::do_lz77;
 use bitstream_io::{huffman::compile_write_tree, BitWrite, BitWriter, HuffmanWrite, LittleEndian};
 use thiserror::Error;
 
-use std::collections::HashMap;
 use std::io::Write;
 
 #[derive(Error, Debug)]

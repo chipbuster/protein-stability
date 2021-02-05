@@ -2,7 +2,7 @@
 /// actually generating lz77 streams (ve)
 use crate::deflate::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
 use crate::deflate::default_data::default_huffcode::DEFAULT_DIST_CODE;
-use crate::deflate::{CodeDict, CompressedBlock, DeflateSym};
+use crate::deflate::{CodeDict, DeflateSym};
 use crate::huff_tree::huffcode_from_freqs;
 
 use std::collections::{HashMap, VecDeque};
@@ -15,7 +15,7 @@ type Index = usize;
 const MAX_HUFF_LEN: Option<usize> = Some(15);
 const MAX_LZ_LEN: usize = 258;
 const CHUNK_SZ: Len = 3;
-const MAX_MATCH_DIST: Dist = 16384;
+const MAX_MATCH_DIST: Dist = 32768;
 
 type BackrefMap<S> = HashMap<S, VecDeque<Index>>;
 
@@ -346,7 +346,6 @@ mod tests {
 
   #[allow(unused_imports)]
   use super::*;
-  use rand::Rng;
   #[test]
   fn simple_offset_backref() {
     let data = vec![
