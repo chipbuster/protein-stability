@@ -1,5 +1,5 @@
-import LZTypes
-import DEFLATEImpl
+import analysis.LZTypes as LZTypes
+import analysis.utils.DEFLATEImpl as DEFLATEImpl
 
 
 def literal_values(block):

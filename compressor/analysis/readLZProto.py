@@ -1,5 +1,5 @@
-import LZTypes
-import deflateinfo_pb2
+import analysis.LZTypes as LZTypes
+import analysis.protospecs.deflateinfo_pb2 as deflateinfo_pb2
 
 import sys, os
 

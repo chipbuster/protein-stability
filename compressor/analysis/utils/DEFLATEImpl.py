@@ -1,6 +1,4 @@
 ## Contains details of implementation in DEFLATE, including codepoint info
-
-
 class CodePointInfo(object):
     def __init__(self, code, exbits, vals):
         self.code = code

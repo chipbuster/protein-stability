@@ -1,6 +1,6 @@
 import sys, os
 
-from readLZProto import *
+from analysis.readLZProto import *
 
 proto = read_protofile(sys.argv[1])
 stream = translate_deflatestream(proto)
