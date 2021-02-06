@@ -1,6 +1,8 @@
 import sys, os
 
-from analysis.gzip.readLZProto import read_protofile, translate_deflatestream
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+from analysislib.gzip.readProto import read_protofile, translate_deflatestream
 
 proto = read_protofile(sys.argv[1])
 stream = translate_deflatestream(proto)
