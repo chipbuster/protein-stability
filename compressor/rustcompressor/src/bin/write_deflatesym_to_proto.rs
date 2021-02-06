@@ -8,6 +8,7 @@ use std::{
 
 use compressor::deflate::*;
 use compressor::gzip::*;
+use lz77::encode_deflate_to_cmsg;
 use prost::Message;
 
 fn main() -> Result<(), std::io::Error> {
@@ -36,13 +37,11 @@ fn main() -> Result<(), std::io::Error> {
   infile.read_exact(&mut magic_buf[..]).unwrap();
   infile.seek(SeekFrom::Start(0)).unwrap();
 
-  let dfs_proto = if magic_buf != [0x1fu8, 0x8b] {
+  let input_deflatestream = if magic_buf != [0x1fu8, 0x8b] {
     println!("File is not gzip data--assuming it's raw DEFLATE-encoded");
     let mut data = Vec::new();
     infile.read_to_end(&mut data).unwrap();
-    DeflateStream::new_from_deflate_encoded_bits(&data[..])
-      .unwrap()
-      .into_proto()
+    DeflateStream::new_from_deflate_encoded_bits(&data[..]).unwrap()
   } else {
     println!("File is a GZIP file.");
     let gzip_data = GzipData::new_from_gzip_data(&mut infile).unwrap();
@@ -57,20 +56,18 @@ fn main() -> Result<(), std::io::Error> {
     // Check that the data here actually matches the checksums provided
     dfs.clone().into_byte_stream_checked(crc32, isz).unwrap();
 
-    dfs.into_proto()
+    dfs
   };
 
-  println!("Encoding a message length of {}", dfs_proto.encoded_len());
+  // Transform raw bytes into a protobuf-compatible structure
+  let cmsg = encode_deflate_to_cmsg(&input_deflatestream);
 
-  let mut outvec = Vec::with_capacity(dfs_proto.encoded_len() + 10);
-  dfs_proto.encode(&mut outvec).unwrap();
+  println!("Encoding a message length of {}", cmsg.encoded_len());
+
+  let mut outvec = Vec::with_capacity(cmsg.encoded_len() + 10);
+  cmsg.encode(&mut outvec).unwrap();
 
   println!("Outvec length: {}", outvec.len());
-
-  let testvec = outvec.clone();
-
-  let test = proto::proto::DeflateStream::decode(&testvec[..]).unwrap();
-  assert_eq!(test, dfs_proto);
 
   outfile.write_all(&outvec[..])?;
 
