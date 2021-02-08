@@ -77,6 +77,16 @@ class DeflateSym(object):
         else:
             return "Invalid DeflateSym variant"
 
+    def __repr__(self):
+        if self.tag == SymTag.Literal:
+            return f"Literal({self.value})"
+        elif self.tag == SymTag.Backref:
+            return f"Backref({self.length}, {self.dist})"
+        elif self.tag == SymTag.Offset:
+            return f"OffsetBref({self.offset}, {self.length}, {self.dist})"
+        else:
+            raise ValueError("Invalid DeflateSym variant")
+
 
 class UncompressedBlock(object):
     def __init__(self, data):
@@ -84,6 +94,9 @@ class UncompressedBlock(object):
 
     def validate(self):
         return None
+
+    def __repr__(self):
+        return f"UncompressedBlock({self.bytes})"
 
 
 class CompressedBlock(object):
@@ -114,6 +127,16 @@ class CompressedBlock(object):
         else:
             return code_errs + ";".join(symerrs)
 
+    def __repr__(self):
+        reprstring = (
+            f"CompessedBlock(lenlit_lens: {self.lenlit_clen}, "
+            + f"dist_lens: {self.dist_clen} "
+            + f"Symbols: "
+        )
+        reprstring += ",".join((repr(sym) for sym in self.deflate_symbols))
+        reprstring += ")"
+        return reprstring
+
 
 class DeflateBlock(object):
     def __init__(self, final):
@@ -142,6 +165,19 @@ class DeflateBlock(object):
     def validate(self):
         return self.block.validate()
 
+    def repr(self):
+        blockstr = repr(self.block)
+        if self.tag == BlockTag.Raw:
+            retstr = "Block_Raw(" + blockstr + ")"
+        elif self.tag == BlockTag.Dyn:
+            retstr = "Block_Dyn(" + blockstr + ")"
+        else:
+            raise ValueError("Invalid Block Tag")
+
+        if self.bfinal:
+            retstr = "FINAL " + retstr
+        return retstr
+
 
 class DeflateStream(object):
     def __init__(self, blocks):
@@ -160,3 +196,6 @@ class DeflateStream(object):
         if es:
             e += "\n".join(es)
         return e if e else None
+
+    def __repr__(self):
+        "\n".join((repr(block) for block in self.blocks))
