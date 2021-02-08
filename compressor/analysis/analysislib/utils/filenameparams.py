@@ -13,4 +13,5 @@ class FnameParams(object):
         self.njit = int(parts[3])
         self.sorted = parts[4] == "sorted"
         self.aatype = int(parts[5][0])
+        self.nbins = int(parts[6])
         self.eedist = (self.natoms - 1) * self.ext_frac

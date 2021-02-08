@@ -1,5 +1,22 @@
-from analysislib import LZTypes
-from analysislib.utils import DEFLATEImpl
+import LZTypes as LZTypes
+import utils.DEFLATEImpl as DEFLATEImpl
+
+
+def num_symbols_saved_by_backref_stream(stream):
+    return sum(num_symbols_saved_by_backref_block(b) for b in stream.blocks)
+
+
+def num_symbols_saved_by_backref_block(block):
+    """Given a DeflateBlock, returns how many Literals were compressed (sum of backref lengths)"""
+    return sum(backref_lengths_block(block))
+
+
+def num_backrefs_stream(stream):
+    return sum(num_backrefs_block(b) for b in stream.blocks)
+
+
+def num_backrefs_block(block):
+    return sum(1 for _ in backref_dists_block(block))
 
 
 def literal_values(block):
@@ -31,7 +48,7 @@ def backref_dists_block(block):
     """Given a DeflateBlock, returns a list of backreference distances found in that block"""
     if block.tag == LZTypes.BlockTag.Dyn:
         syms = block.block.deflate_symbols
-        return [s.length for s in syms if s.issymkind(LZTypes.SymTag.Backref)]
+        return [s.dist for s in syms if s.issymkind(LZTypes.SymTag.Backref)]
     else:
         raise ValueError("Invalid Block type")
 
@@ -40,7 +57,7 @@ def backref_lengths_block(block):
     """Given a DeflateBlock, returns a list of backreference lengths found in that block"""
     if block.tag == LZTypes.BlockTag.Dyn:
         syms = block.block.deflate_symbols
-        return [s.dist for s in syms if s.issymkind(LZTypes.SymTag.Backref)]
+        return [s.length for s in syms if s.issymkind(LZTypes.SymTag.Backref)]
     else:
         raise ValueError("Invalid Block type")
 
@@ -69,3 +86,7 @@ def bits_used_sym(sym, lenlit_clens, dist_clens):
             nbits += 8  # Actual offset
     else:
         raise ValueError("Invalid Symbol Type")
+
+
+def expand_backrefs_in_stream():
+    """Turn a stream of backrefs/literals into a stream of just literals."""
