@@ -26,6 +26,6 @@ message DeflateSym {
 }
 
 message Compressed {
-    bytes rawbytes = 1;
+    uint32 nbytes_decoded = 1;
     repeated DeflateSym syms = 2;
 }

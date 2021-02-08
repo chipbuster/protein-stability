@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='LZ77',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x0elz77info.proto\x12\x04LZ77\"\x18\n\x07Literal\x12\r\n\x05value\x18\x01 \x01(\r\"+\n\x07\x42\x61\x63kref\x12\x0e\n\x06length\x18\x01 \x01(\r\x12\x10\n\x08\x64istance\x18\x02 \x01(\r\"A\n\rOffsetBackref\x12\x0e\n\x06offset\x18\x01 \x01(\r\x12\x0e\n\x06length\x18\x02 \x01(\r\x12\x10\n\x08\x64istance\x18\x03 \x01(\r\"z\n\nDeflateSym\x12\x1c\n\x03lit\x18\x01 \x01(\x0b\x32\r.LZ77.LiteralH\x00\x12 \n\x07\x62\x61\x63kref\x18\x02 \x01(\x0b\x32\r.LZ77.BackrefH\x00\x12%\n\x06offset\x18\x03 \x01(\x0b\x32\x13.LZ77.OffsetBackrefH\x00\x42\x05\n\x03sym\">\n\nCompressed\x12\x10\n\x08rawbytes\x18\x02 \x01(\x0c\x12\x1e\n\x04syms\x18\x01 \x03(\x0b\x32\x10.LZ77.DeflateSymb\x06proto3')
+  serialized_pb=_b('\n\x0elz77info.proto\x12\x04LZ77\"\x18\n\x07Literal\x12\r\n\x05value\x18\x01 \x01(\r\"+\n\x07\x42\x61\x63kref\x12\x0e\n\x06length\x18\x01 \x01(\r\x12\x10\n\x08\x64istance\x18\x02 \x01(\r\"A\n\rOffsetBackref\x12\x0e\n\x06offset\x18\x01 \x01(\r\x12\x0e\n\x06length\x18\x02 \x01(\r\x12\x10\n\x08\x64istance\x18\x03 \x01(\r\"z\n\nDeflateSym\x12\x1c\n\x03lit\x18\x01 \x01(\x0b\x32\r.LZ77.LiteralH\x00\x12 \n\x07\x62\x61\x63kref\x18\x02 \x01(\x0b\x32\r.LZ77.BackrefH\x00\x12%\n\x06offset\x18\x03 \x01(\x0b\x32\x13.LZ77.OffsetBackrefH\x00\x42\x05\n\x03sym\"D\n\nCompressed\x12\x16\n\x0enbytes_decoded\x18\x01 \x01(\r\x12\x1e\n\x04syms\x18\x02 \x03(\x0b\x32\x10.LZ77.DeflateSymb\x06proto3')
 )
 
 
@@ -195,15 +195,15 @@ _COMPRESSED = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='rawbytes', full_name='LZ77.Compressed.rawbytes', index=0,
-      number=2, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
+      name='nbytes_decoded', full_name='LZ77.Compressed.nbytes_decoded', index=0,
+      number=1, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='syms', full_name='LZ77.Compressed.syms', index=1,
-      number=1, type=11, cpp_type=10, label=3,
+      number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -221,7 +221,7 @@ _COMPRESSED = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=286,
-  serialized_end=348,
+  serialized_end=354,
 )
 
 _DEFLATESYM.fields_by_name['lit'].message_type = _LITERAL

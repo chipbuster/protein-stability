@@ -6,6 +6,8 @@ use proto::deflatesym_to_proto;
 
 use super::{DeflateStream, DeflateSym};
 
+use std::convert::TryFrom;
+
 pub fn encode_to_deflatesym(data: &[u8], use_offset: bool) -> Vec<DeflateSym> {
   encoder::do_lz77(data, use_offset)
 }
@@ -35,9 +37,10 @@ pub fn encode_deflate_to_cmsg(data: &DeflateStream) -> proto::proto::Compressed 
   // Construct raw data
   let mut decoded = Vec::new();
   decoder::decode_lz77(&symstream[..], &mut decoded).unwrap();
+  let nbytes_decoded = decoded.len();
 
   proto::proto::Compressed {
-    rawbytes: decoded,
+    nbytes_decoded: u32::try_from(nbytes_decoded).expect("Too many bytes!"),
     syms,
   }
 }
