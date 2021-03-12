@@ -2,7 +2,9 @@ using PyCall;
 
 fdir = @__DIR__
 
-pushfirst!(PyVector(pyimport("sys")."path"), joinpath(dirname(@__DIR__), "readProtoPy"))
+p2dir(x) = x |> dirname |> dirname
+
+pushfirst!(PyVector(pyimport("sys")."path"), joinpath(p2dir(@__DIR__), "readProtoPy"))
 
 readlz77 = pyimport("readLZProto")
 readgzip = pyimport("readGZProto")
@@ -35,8 +37,10 @@ end
 function read_gz_proto(filename)
     protof = readgzip.read_protofile(filename)
     pystream = readgzip.translate_deflatestream(protof)
-
     blocks = [ deflateblock_from_pyblock(pyblock) for pyblock in pystream.blocks ]
+    if all(map(isempty, blocks))
+        @error "Protobuf was empty. Maybe a protobuf-type mismatch?"
+    end
     GZIPStream(blocks)
 end
 

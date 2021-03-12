@@ -1,3 +1,5 @@
+import Base.isempty
+
 abstract type DeflateSym end
 abstract type DeflateBlock end
 
@@ -38,3 +40,8 @@ struct LZ77Stream
     decoded_len::UInt
     syms::Vector{DeflateSym}
 end
+
+isempty(x::UncompressedBlock) = isempty(x.bytes)
+isempty(x::CompressedBlock) = isempty(x.syms)
+isempty(x::GZIPStream) = all.(map(isempty, x.blocks))
+isempty(x::LZ77Stream) = all.(map(isempty, x.syms))
