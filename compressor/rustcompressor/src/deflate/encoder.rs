@@ -1,5 +1,5 @@
-use super::codepoints::DEFAULT_CODEPOINTS;
 use super::default_data::default_huffcode::*;
+use super::{codepoints::DEFAULT_CODEPOINTS, lz77::encoder::MaxMatchParameters};
 use super::{Block, BlockData, CompressedBlock, DeflateStream, DeflateSym, DeflateWriteTree};
 use crate::deflate::deflate_header::write_header;
 use crate::deflate::lz77::encoder::do_lz77;
@@ -56,14 +56,16 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &[u8]) -> Self {
-    let data = do_lz77(data, false);
+    let maxmatch = MaxMatchParameters::default();
+    let data = do_lz77(data, &maxmatch, false);
     Self::from_lz77_stream(data)
   }
 
   /// Generate a new CompressedBlock by performing LZ77 factorization with the
   /// custom offset protocol described above.
   pub fn bytes_to_lz77_offset(data: &[u8]) -> Self {
-    let data = do_lz77(data, true);
+    let maxmatch = MaxMatchParameters::default();
+    let data = do_lz77(data, &maxmatch, true);
     Self::from_lz77_stream(data)
   }
 

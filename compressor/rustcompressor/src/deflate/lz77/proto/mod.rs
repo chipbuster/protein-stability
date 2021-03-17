@@ -13,16 +13,16 @@ fn deflatesym_to_underlying(s: &DeflateSym) -> proto::deflate_sym::Sym {
   match s {
     DeflateSym::EndOfBlock => Sym::Lit(Literal { value: 255 }),
     DeflateSym::Literal(v) => Sym::Lit(Literal {
-      value: u32::from(*v),
+      value: u64::from(*v),
     }),
     DeflateSym::Backreference(length, dist) => Sym::Backref(Backref {
-      length: u32::from(*length),
-      distance: u32::from(*dist),
+      length: u64::from(*length),
+      distance: u64::from(*dist),
     }),
     DeflateSym::OffsetBackref(off, length, dist) => Sym::Offset(OffsetBackref {
-      offset: u32::from(*off),
-      length: u32::from(*length),
-      distance: u32::from(*dist),
+      offset: u64::from(*off),
+      length: u64::from(*length),
+      distance: u64::from(*dist),
     }),
   }
 }

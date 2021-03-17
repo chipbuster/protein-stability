@@ -19,7 +19,41 @@ const MAX_MATCH_DIST: Dist = 32768;
 
 type BackrefMap<S> = HashMap<S, VecDeque<Index>>;
 
-/// Assuming a match of size length-1 succeeded at this index, does a match of length succeed?
+/// Specifies the longest match length + distance that should be allowed when doing
+/// LZ77.
+pub struct MaxMatchParameters {
+  max_length: Len,
+  max_dist: Dist,
+}
+
+impl MaxMatchParameters {
+  pub fn new(max_length: Len, max_dist: Dist) -> Self {
+    Self {
+      max_length,
+      max_dist,
+    }
+  }
+
+  /// Get a MaxMatchParameter representing the largest possible length/distance
+  /// used by the backing datatype
+  pub fn max() -> Self {
+    static_assertions::assert_type_eq_all!(Len, Dist, usize);
+    Self {
+      max_length: std::usize::MAX,
+      max_dist: std::usize::MAX,
+    }
+  }
+}
+
+impl Default for MaxMatchParameters {
+  /// Get a MaxMatchParameter representing the largest possible length/distance
+  /// used by DEFLATE as defined in RFC 1951
+  fn default() -> Self {
+    Self::new(MAX_LZ_LEN, MAX_MATCH_DIST)
+  }
+}
+
+/// Assuming a match of size `length-1` succeeded at this index, does a match of `length` succeed?
 #[inline]
 fn check_match_valid(
   data: &[u8],
@@ -37,7 +71,15 @@ fn check_match_valid(
   data[data_start + length - 1] == data[match_start + length - 1].wrapping_add(offset)
 }
 
-fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index, offset: u8) -> Len {
+/// Given a match of length three at the given indices, attempt to expand this to the
+/// longest possible match.
+fn longest_match_at_index(
+  data: &[u8],
+  data_start: Index,
+  match_start: Index,
+  offset: u8,
+  maxmatch: &MaxMatchParameters,
+) -> Len {
   let mut len = 3;
   assert_eq!(len, 3); // If the min match length changes, the offset code will need to change
   if offset == 0 {
@@ -54,17 +96,25 @@ fn longest_match_at_index(data: &[u8], data_start: Index, match_start: Index, of
     );
     assert_eq!(data_init, match_init);
   }
-  while len < MAX_LZ_LEN && check_match_valid(data, data_start, match_start, len + 1, offset) {
+  while len < maxmatch.max_length
+    && check_match_valid(data, data_start, match_start, len + 1, offset)
+  {
     len += 1;
   }
   len
 }
 
+/// Given a set of proposed (length-three) matches, do the following:
+///  - Determine which of the given matches is actually the longest by attempting
+///    to extend the match until that fails.
+///  - Convert the indices of the longest match into a distance-length pair
+///    that can be directly used in LZ77 compression
 fn find_longest_match(
   data: &[u8],
   start: Index,
   match_indices: &[&Index],
   use_offset: bool,
+  maxmatch: &MaxMatchParameters,
 ) -> (Dist, Len) {
   let mut max_len = 0usize;
   let mut max_index = 0usize;
@@ -73,9 +123,9 @@ fn find_longest_match(
     let i = **m;
     let len = if use_offset {
       let offset = data[start].wrapping_sub(data[i]);
-      longest_match_at_index(data, start, i, offset)
+      longest_match_at_index(data, start, i, offset, maxmatch)
     } else {
-      longest_match_at_index(data, start, i, 0)
+      longest_match_at_index(data, start, i, 0, maxmatch)
     };
     if len > max_len {
       max_len = len;
@@ -96,6 +146,7 @@ fn find_offset_backref(
   match_table: &mut BackrefMap<(u8, u8)>,
   data: &[u8],
   index: usize,
+  maxmatch: &MaxMatchParameters,
 ) -> Option<(usize, Vec<DeflateSym>)> {
   // Note: if CHUNK_SZ ever changes from 3, we need to change the type of match_table
   assert_eq!(CHUNK_SZ, 3);
@@ -109,7 +160,7 @@ fn find_offset_backref(
   let mut output = Vec::new();
   let mut n_consumed = 0usize;
 
-  prune_matches(match_table, term, index, MAX_MATCH_DIST);
+  prune_matches(match_table, term, index, maxmatch.max_dist);
   let matches = get_matches(match_table, term, index);
 
   // We don't *have* to find a match for offset backrefs (because they're an optional feature).
@@ -120,7 +171,7 @@ fn find_offset_backref(
     return None;
   };
 
-  let (dist1, len1) = find_longest_match(data, index, &matches, true);
+  let (dist1, len1) = find_longest_match(data, index, &matches, true, maxmatch);
 
   // Search at index = index + 1 for a better match
   let term2 = (
@@ -128,10 +179,10 @@ fn find_offset_backref(
     data[index + 3].wrapping_sub(data[index + 1]),
   );
 
-  prune_matches(match_table, term2, index + 1, MAX_MATCH_DIST);
+  prune_matches(match_table, term2, index + 1, maxmatch.max_dist);
   let matches2 = get_matches(&match_table, term2, index);
   let (dist2, len2) = if !matches2.is_empty() {
-    find_longest_match(data, index + 1, &matches2, true)
+    find_longest_match(data, index + 1, &matches2, true, maxmatch)
   } else {
     (0, 0)
   };
@@ -155,7 +206,7 @@ fn find_offset_backref(
   output.push(DeflateSym::OffsetBackref(offset, mlen as u16, mdist as u16));
 
   assert_eq!(data[index], data[index - mdist].wrapping_add(offset));
-  assert!(mdist <= MAX_MATCH_DIST);
+  assert!(mdist <= maxmatch.max_dist);
 
   Some((n_consumed, output))
 }
@@ -167,12 +218,13 @@ fn find_deflate_backref<'a>(
   match_table: &mut BackrefMap<&'a [u8]>,
   data: &'a [u8],
   index: usize,
+  maxmatch: &MaxMatchParameters,
 ) -> (usize, Vec<DeflateSym>) {
   let mut output = Vec::new();
   let mut n_consumed = 0usize;
   let term = &data[index..index + CHUNK_SZ];
 
-  prune_matches(match_table, term, index, MAX_MATCH_DIST);
+  prune_matches(match_table, term, index, maxmatch.max_dist);
   let matches = get_matches(&match_table, term, index);
 
   // If no match, add this entry to the match table and emit a literal symbol
@@ -183,16 +235,16 @@ fn find_deflate_backref<'a>(
   }
 
   // Find longest match starting at this index
-  let (dist1, len1) = find_longest_match(data, index, &matches, false);
+  let (dist1, len1) = find_longest_match(data, index, &matches, false, maxmatch);
 
   // Follow the deflate suggestion about deferred matching
   // This is technically wrong since we're looking back too far by 1, but
   // since our max match isn't the DEFLATE maximum, it's a non-issue atm.
   let search_term_2 = &data[index + 1..index + 1 + CHUNK_SZ];
-  prune_matches(match_table, search_term_2, index + 1, MAX_MATCH_DIST);
+  prune_matches(match_table, search_term_2, index + 1, maxmatch.max_dist);
   let matches2 = get_matches(&match_table, search_term_2, index);
   let (dist2, len2) = if !matches2.is_empty() {
-    find_longest_match(data, index + 1, &matches2, false)
+    find_longest_match(data, index + 1, &matches2, false, maxmatch)
   } else {
     (0, 0)
   };
@@ -207,7 +259,7 @@ fn find_deflate_backref<'a>(
   };
 
   assert!(data[index - mdist..index - mdist + mlen] == data[index..index + mlen]);
-  assert!(mdist <= MAX_MATCH_DIST);
+  assert!(mdist <= maxmatch.max_dist);
   match_table.entry(term).or_default().push_front(index);
 
   n_consumed += mlen;
@@ -279,7 +331,7 @@ fn compute_dist_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
 
 /// Computes the compressed representation of a stream of bytes as well as the
 /// huffman trees that will be used to encode it in DEFLATE
-pub fn do_lz77(data: &[u8], use_offset: bool) -> Vec<DeflateSym> {
+pub fn do_lz77(data: &[u8], maxmatch: &MaxMatchParameters, use_offset: bool) -> Vec<DeflateSym> {
   let mut deflate_match_table = HashMap::<&[u8], VecDeque<Index>>::new();
   let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
   let mut output: Vec<DeflateSym> = Vec::new();
@@ -290,9 +342,10 @@ pub fn do_lz77(data: &[u8], use_offset: bool) -> Vec<DeflateSym> {
   // expanding matches as needed. This loop does not guarantee that all input has been encoded
   // when it ends, hence the cleanup section afterwards.
   while index + CHUNK_SZ < data.len() {
-    let (deflate_len, deflate_syms) = find_deflate_backref(&mut deflate_match_table, &data, index);
+    let (deflate_len, deflate_syms) =
+      find_deflate_backref(&mut deflate_match_table, &data, index, maxmatch);
     let offset_match = if use_offset {
-      find_offset_backref(&mut offset_match_table, &data, index)
+      find_offset_backref(&mut offset_match_table, &data, index, maxmatch)
     } else {
       None
     };
@@ -354,7 +407,7 @@ mod tests {
     let mut match_table = HashMap::new();
     match_table.insert((1, 2), VecDeque::from_iter(vec![4, 2, 1, 0].into_iter()));
 
-    find_offset_backref(&mut match_table, &data, 4)
+    find_offset_backref(&mut match_table, &data, 4, &MaxMatchParameters::default())
       .expect("Did not find offset in an input where there should have been one!");
   }
 }

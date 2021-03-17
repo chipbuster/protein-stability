@@ -3,18 +3,18 @@ syntax = "proto3";
 package LZ77;
 
 message Literal {
-    uint32 value = 1;
+    uint64 value = 1;
 }
 
 message Backref {
-    uint32 length = 1;
-    uint32 distance = 2;
+    uint64 length = 1;
+    uint64 distance = 2;
 }
 
 message OffsetBackref {
-    uint32 offset = 1;
-    uint32 length = 2;
-    uint32 distance = 3;
+    uint64 offset = 1;
+    uint64 length = 2;
+    uint64 distance = 3;
 }
 
 message DeflateSym {
@@ -26,6 +26,6 @@ message DeflateSym {
 }
 
 message Compressed {
-    uint32 nbytes_decoded = 1;
+    uint64 nbytes_decoded = 1;
     repeated DeflateSym syms = 2;
 }

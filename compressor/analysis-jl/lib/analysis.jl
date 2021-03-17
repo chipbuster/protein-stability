@@ -21,6 +21,9 @@ function backref_dists(block::CompressedBlock)
     [ s.dist for s in z ]
 end
 
+# TODO: Implement backref dists + lens for GZIP and LZ77 Streams
+function backref_dists
+
 function backref_lengths(block::CompressedBlock)
     z = filter(x -> isa(x, Backreference) || isa(x, OffsetBackreference), block.syms)
     [ s.dist for s in z ]

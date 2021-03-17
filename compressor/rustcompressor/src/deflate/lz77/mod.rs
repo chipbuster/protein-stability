@@ -4,12 +4,18 @@ pub mod proto;
 
 use proto::deflatesym_to_proto;
 
+use self::encoder::MaxMatchParameters;
+
 use super::{DeflateStream, DeflateSym};
 
 use std::convert::TryFrom;
 
-pub fn encode_to_deflatesym(data: &[u8], use_offset: bool) -> Vec<DeflateSym> {
-  encoder::do_lz77(data, use_offset)
+pub fn encode_to_deflatesym(
+  data: &[u8],
+  use_offset: bool,
+  maxmatch: &MaxMatchParameters,
+) -> Vec<DeflateSym> {
+  encoder::do_lz77(data, maxmatch, use_offset)
 }
 
 /// Encode a sequence of bytes into a proto::Compressed message
@@ -40,7 +46,7 @@ pub fn encode_deflate_to_cmsg(data: &DeflateStream) -> proto::proto::Compressed 
   let nbytes_decoded = decoded.len();
 
   proto::proto::Compressed {
-    nbytes_decoded: u32::try_from(nbytes_decoded).expect("Too many bytes!"),
+    nbytes_decoded: u64::try_from(nbytes_decoded).expect("Too many bytes!"),
     syms,
   }
 }
