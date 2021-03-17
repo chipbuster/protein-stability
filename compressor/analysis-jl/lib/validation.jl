@@ -32,19 +32,19 @@ function validate(block::CompressedBlock)
     errs = ""
 
     for (k, v) in block.lenlit_clen
-        if ! 0 <= k <= 286
+        if ! (0 <= k <= 286)
             errs += "Invalid lenlit key: $(k);"
         end
-        if ! 1 <= v <= 16
+        if ! (1 <= v <= 16)
             errs += "Invalid lenlit length: $(v);"
         end
     end
 
     for (k, v) in block.dist_clen
-        if ! 0 <= k <= 29
+        if ! (0 <= k <= 29)
             errs += "Invalid dist key: $(k);"
         end
-        if ! 1 <= v <= 16
+        if ! (1 <= v <= 16)
             errs += "Invalid dist length: $(v);"
         end
     end
@@ -94,6 +94,7 @@ function validate(stream::LZ77Stream)
     end
     errs
 end
+
 function validate_gz_proto(filename)
     stream = read_gz_proto(filename)
     validate(stream)
