@@ -8,7 +8,6 @@ use std::{
 
 use compressor::deflate::*;
 use compressor::gzip::*;
-use lz77::encode_deflate_to_cmsg;
 use prost::Message;
 
 fn main() -> Result<(), std::io::Error> {
@@ -60,7 +59,8 @@ fn main() -> Result<(), std::io::Error> {
   };
 
   // Transform raw bytes into a protobuf-compatible structure
-  let cmsg = encode_deflate_to_cmsg(&input_deflatestream);
+  let lz77_syms = LZ77SymStream::from_deflatestream(&input_deflatestream);
+  let cmsg = lz77_syms.to_cmsg();
 
   println!("Encoding a message length of {}", cmsg.encoded_len());
 

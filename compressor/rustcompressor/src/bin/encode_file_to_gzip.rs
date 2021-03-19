@@ -9,7 +9,7 @@ fn main() {
 
   if args.len() < 2 || args.len() > 4 {
     println!(
-      "Usage: {} <infilename> <outfilename> [method] [gzip]",
+      "Usage: {} <infilename> <outfilename> method] [gzip]",
       &args[0]
     );
     println!(

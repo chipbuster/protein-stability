@@ -85,6 +85,11 @@ pub struct DeflateStream {
   blocks: Vec<Block>,
 }
 
+#[derive(Debug, Clone)]
+pub struct LZ77SymStream {
+  symbols: Vec<DeflateSym>,
+}
+
 mod test {
   #[allow(unused_imports)]
   use super::*;
