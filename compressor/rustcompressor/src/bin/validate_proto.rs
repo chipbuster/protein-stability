@@ -22,7 +22,7 @@ fn main() -> Result<(), std::io::Error> {
   let errs = d.validate();
 
   if errs.is_empty() {
-    println!("No errors found.")
+    println!("No errors found for {}", &args[1])
   } else {
     println!("{}", errs);
   }

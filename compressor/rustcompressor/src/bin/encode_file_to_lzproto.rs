@@ -55,6 +55,8 @@ three values:
   let maxmatch = parse_maxopt(&args[3..]);
   let bytes = std::fs::read(infilename).unwrap();
 
+  println!("Using maxmatch of {:?}", maxmatch);
+
   let mut outfile = std::fs::OpenOptions::new()
     .read(false)
     .write(true)

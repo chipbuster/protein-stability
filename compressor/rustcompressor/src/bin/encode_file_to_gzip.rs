@@ -7,9 +7,9 @@ use compressor::{deflate::*, gzip::GzipData};
 fn main() {
   let args: Vec<String> = env::args().collect();
 
-  if args.len() < 2 || args.len() > 4 {
+  if args.len() < 3 || args.len() > 5 {
     println!(
-      "Usage: {} <infilename> <outfilename> method] [gzip]",
+      "Usage: {} <infilename> <outfilename> [method] [gzip]",
       &args[0]
     );
     println!(

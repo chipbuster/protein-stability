@@ -21,6 +21,7 @@ type BackrefMap<S> = HashMap<S, VecDeque<Index>>;
 
 /// Specifies the longest match length + distance that should be allowed when doing
 /// LZ77.
+#[derive(Debug, PartialEq, Eq)]
 pub struct MaxMatchParameters {
   max_length: Len,
   max_dist: Dist,
