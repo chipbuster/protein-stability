@@ -31,7 +31,8 @@ fn main() {
   let data = gzblob.get_data_copy();
   let decoded = {
     let strm = DeflateStream::new_from_deflate_encoded_bits(data.as_slice()).unwrap();
-    strm.into_byte_stream().unwrap()
+    let (crc32, isz) = gzblob.get_checksums();
+    strm.into_byte_stream_checked(crc32, isz).unwrap()
   };
   println!("Decoded data is {} bytes", &decoded.len());
   println!("Decoded bytes: {:02x?}", &decoded);

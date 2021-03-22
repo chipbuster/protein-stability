@@ -6,7 +6,7 @@ for j in $(seq 1 10); do
     echo "Generating random file"
     dd bs=1 count=10M if=/dev/urandom of=$tmpf
     echo "Compressing"
-    time RUST_BACKTRACE=1 cargo run --release --bin test_encode $tmpf
+    time RUST_BACKTRACE=1 cargo run --release --bin encode_file_to_gzip $tmpf /dev/null
     if [ $? -ne 0 ]; then
         echo "Encode failed on $tmpf"
         exit 1

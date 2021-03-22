@@ -132,7 +132,7 @@ impl GzipData {
     }*/
 
     let mut output = GzipData::new();
-    output.set_data(deflate_data);
+    output.set_compressed_data(deflate_data);
     output.set_checksums(crc32, isz);
     output.set_flags(flags);
     output.set_xflags(xflags);

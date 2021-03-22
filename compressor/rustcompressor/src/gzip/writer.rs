@@ -4,7 +4,7 @@ impl GzipData {
   /// Create a new GZipData from a BitVec which specifies the deflate-compressed data
   pub fn new_from_deflate_data(data: Vec<u8>) -> GzipData {
     let mut gzd = GzipData::new();
-    gzd.set_data(data);
+    gzd.set_compressed_data(data);
     gzd
   }
 }

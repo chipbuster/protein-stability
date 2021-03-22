@@ -51,7 +51,7 @@ previously handled separately (leading to a fair amount of code duplication). */
 use bitstream_io::{
   BitRead, BitReader, BitWrite, BitWriter, HuffmanRead, HuffmanWrite, LittleEndian,
 };
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::vec::Vec;
@@ -67,9 +67,7 @@ pub const MAX_LENGTH_CODE: u16 = 285;
 pub const OFFSET_SIGIL: u16 = 286;
 pub const EOF_CODE: u16 = 256;
 
-lazy_static! {
-  pub static ref DEFAULT_CODEPOINTS: CodepointEncoder = CodepointEncoder::new();
-}
+pub static DEFAULT_CODEPOINTS: Lazy<CodepointEncoder> = Lazy::new(CodepointEncoder::new);
 
 ///Asdasd
 #[derive(Debug, Copy, Clone)]
