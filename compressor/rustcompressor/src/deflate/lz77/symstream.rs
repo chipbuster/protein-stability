@@ -1,18 +1,14 @@
 use super::proto::deflatesym_to_proto;
 
-use super::encoder::{do_lz77, MaxMatchParameters};
+use super::encoder::{do_lz77, LZRules};
 
 use super::super::{BlockData, DeflateStream, DeflateSym, LZ77SymStream};
 
 impl LZ77SymStream {
   /// Generate a symbol stream by compressing raw bytes using the lz77 parameters
-  pub fn from_uncompressed_bytes(
-    data: &[u8],
-    maxmatch: &MaxMatchParameters,
-    use_offset: bool,
-  ) -> Self {
+  pub fn from_uncompressed_bytes(data: &[u8], lzrules: &LZRules) -> Self {
     Self {
-      symbols: do_lz77(data, maxmatch, use_offset),
+      symbols: do_lz77(data, lzrules),
     }
   }
 

@@ -48,12 +48,14 @@ according to 3.2.5 of RFC 1951. Note that 3.2.5 only deals with the abstract
 numbers needed to encode the codepoints: the actual binary representation of the
 numbers is specified either according to 3.2.6 or the dynamic Huffman tree. */
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum DeflateSym {
+pub enum LZSym<T> {
   EndOfBlock,
   Literal(u8),
-  Backreference(u16, u16),
-  OffsetBackref(u8, u16, u16),
+  Backreference(T, T),
+  OffsetBackref(u8, T, T),
 }
+
+type DeflateSym = LZSym<u16>;
 
 #[derive(Debug, Clone)]
 pub struct UncompressedBlock {

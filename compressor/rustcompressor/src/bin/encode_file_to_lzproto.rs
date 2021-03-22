@@ -4,16 +4,19 @@ use std::process;
 use std::io::Write;
 
 //use compressor::deflate::DeflateStream;
-use compressor::deflate::{lz77::encoder::MaxMatchParameters, *};
+use compressor::deflate::{
+  lz77::encoder::{LZMaximums, LZRules},
+  *,
+};
 
 use prost::Message;
 
 // Parse the maximum limits on a string
-fn parse_maxopt(params: &[String]) -> MaxMatchParameters {
+fn parse_maxopt(params: &[String]) -> LZMaximums {
   match params.len() {
     1 => match params[0].as_ref() {
-      "default" => MaxMatchParameters::default(),
-      "max" => MaxMatchParameters::max(),
+      "default" => LZMaximums::default(),
+      "max" => LZMaximums::max(),
       _ => panic!(
         "Got value: \"{}\" that wasn't \"max\" or \"default\" ",
         params[0]
@@ -26,7 +29,7 @@ fn parse_maxopt(params: &[String]) -> MaxMatchParameters {
       let dist = params[1]
         .parse::<usize>()
         .expect("Could not parse usize from dist");
-      MaxMatchParameters::new(len, dist)
+      LZMaximums::new(len, dist)
     }
     x => panic!("Expected 1 or two arguments, but got {}", x),
   }
@@ -66,7 +69,9 @@ three values:
     .open(outfilename)
     .unwrap_or_else(|_| panic!("Could not open output file {}", outfilename));
 
-  let stream = LZ77SymStream::from_uncompressed_bytes(&bytes[..], &maxmatch, false);
+  let rules = LZRules::new(false, maxmatch);
+
+  let stream = LZ77SymStream::from_uncompressed_bytes(&bytes[..], &rules);
   let protomsg = stream.to_cmsg();
 
   let mut outvec = Vec::with_capacity(protomsg.encoded_len() + 100);

@@ -1,5 +1,5 @@
-use super::default_data::default_huffcode::*;
-use super::{codepoints::DEFAULT_CODEPOINTS, lz77::encoder::MaxMatchParameters};
+use super::{codepoints::DEFAULT_CODEPOINTS, lz77::encoder::LZRules};
+use super::{default_data::default_huffcode::*, lz77::encoder::LZMaximums};
 use super::{Block, BlockData, CompressedBlock, DeflateStream, DeflateSym, DeflateWriteTree};
 use crate::deflate::deflate_header::write_header;
 use crate::deflate::lz77::encoder::do_lz77;
@@ -56,26 +56,22 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &[u8]) -> Self {
-    let maxmatch = MaxMatchParameters::default();
-    let data = do_lz77(data, &maxmatch, false);
+    let rules = LZRules::new(false, LZMaximums::default());
+    let data = do_lz77(data, &rules);
     Self::from_lz77_stream(data)
   }
 
   /// Generate a new CompressedBlock by performing LZ77 factorization with the
   /// custom offset protocol described above.
   pub fn bytes_to_lz77_offset(data: &[u8]) -> Self {
-    let maxmatch = MaxMatchParameters::default();
-    let data = do_lz77(data, &maxmatch, true);
+    let rules = LZRules::new(true, LZMaximums::default());
+    let data = do_lz77(data, &rules);
     Self::from_lz77_stream(data)
   }
 
   /// A variant that allows exact controls over the parameters passed to do_lz77
-  pub fn bytes_to_lz77_control(
-    data: &[u8],
-    maxmatch: &MaxMatchParameters,
-    use_offset: bool,
-  ) -> Self {
-    let data = do_lz77(data, maxmatch, use_offset);
+  pub fn bytes_to_lz77_control(data: &[u8], lzrules: &LZRules, use_offset: bool) -> Self {
+    let data = do_lz77(data, lzrules);
     Self::from_lz77_stream(data)
   }
 
@@ -177,11 +173,7 @@ impl DeflateStream {
 
   /// Exposes the internal options used by the bytes_to_lz77_control method on
   /// CompressedBlock, allowing for manual control of LZ77 parameters.
-  pub fn new_from_bytes_control(
-    data: &[u8],
-    maxmatch: &MaxMatchParameters,
-    use_offset: bool,
-  ) -> Self {
+  pub fn new_from_bytes_control(data: &[u8], maxmatch: &LZRules, use_offset: bool) -> Self {
     Self {
       blocks: vec![Block {
         bfinal: true,
