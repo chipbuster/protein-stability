@@ -30,6 +30,8 @@ pub mod proto;
 mod codepoints;
 mod deflate_header;
 
+use std::convert::TryFrom;
+
 use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
 use bitstream_io::LittleEndian;
 
@@ -89,7 +91,7 @@ pub struct DeflateStream {
 
 #[derive(Debug, Clone)]
 pub struct LZ77SymStream {
-  symbols: Vec<DeflateSym>,
+  symbols: Vec<LZSym<u64>>,
 }
 
 mod test {

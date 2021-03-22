@@ -9,7 +9,7 @@ use num::Bounded;
 use static_assertions::const_assert_eq;
 
 use std::collections::{HashMap, VecDeque};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::hash::Hash;
 
 type Dist = usize;
@@ -343,11 +343,11 @@ fn prune_matches<S: Hash + Eq>(
 /// Computes the compressed representation of a stream of bytes.
 pub fn do_lz77<T>(data: &[u8], lzrules: &LZRules) -> Vec<LZSym<T>>
 where
-  T: TryFrom<usize> + Into<usize> + PartialOrd + Ord + PartialEq + Eq + Bounded,
+  T: TryFrom<usize> + TryInto<usize> + PartialOrd + Ord + PartialEq + Eq + Bounded,
 {
   // Validate bounds in lzrules against limits on T to avoid panics within internal functions
-  let t_max: usize = T::max_value().into();
-  let t_min: usize = T::min_value().into();
+  let t_max: usize = T::max_value().try_into().ok().unwrap();
+  let t_min: usize = T::min_value().try_into().ok().unwrap();
   let valid_range = t_min..=t_max;
   assert!(valid_range.contains(&lzrules.limits.max_dist));
   assert!(valid_range.contains(&lzrules.limits.max_length));
