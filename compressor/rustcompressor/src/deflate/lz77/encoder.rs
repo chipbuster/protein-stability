@@ -9,9 +9,8 @@ use num::Bounded;
 use static_assertions::const_assert_eq;
 
 use std::collections::{HashMap, VecDeque};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::hash::Hash;
-use std::ops::Not;
 
 type Dist = usize;
 type Len = usize;
@@ -456,6 +455,7 @@ pub fn compute_codes(data: &[DeflateSym]) -> (CodeDict<u16>, CodeDict<u16>) {
 #[cfg(test)]
 mod tests {
   use std::iter::FromIterator;
+  use std::ops::Not;
 
   #[allow(unused_imports)]
   use super::*;
@@ -474,7 +474,7 @@ mod tests {
   }
 
   #[test]
-  fn check_max_dist() {
+  fn check_unbounded_max_dist() {
     // Ensure that when using u64-sized LZSyms, we can backref past the u16 limit.
     // This test may use tens of MB of memory.
     const MATCH_SYM: u8 = 7;

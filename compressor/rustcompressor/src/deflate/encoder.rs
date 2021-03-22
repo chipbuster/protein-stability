@@ -70,7 +70,7 @@ impl CompressedBlock {
   }
 
   /// A variant that allows exact controls over the parameters passed to do_lz77
-  pub fn bytes_to_lz77_control(data: &[u8], lzrules: &LZRules, use_offset: bool) -> Self {
+  pub fn bytes_to_lz77_control(data: &[u8], lzrules: &LZRules) -> Self {
     let data = do_lz77(data, lzrules);
     Self::from_lz77_stream(data)
   }
@@ -173,13 +173,11 @@ impl DeflateStream {
 
   /// Exposes the internal options used by the bytes_to_lz77_control method on
   /// CompressedBlock, allowing for manual control of LZ77 parameters.
-  pub fn new_from_bytes_control(data: &[u8], maxmatch: &LZRules, use_offset: bool) -> Self {
+  pub fn new_from_bytes_control(data: &[u8], lzrules: &LZRules) -> Self {
     Self {
       blocks: vec![Block {
         bfinal: true,
-        data: BlockData::Dyn(CompressedBlock::bytes_to_lz77_control(
-          data, maxmatch, use_offset,
-        )),
+        data: BlockData::Dyn(CompressedBlock::bytes_to_lz77_control(data, lzrules)),
       }],
     }
   }
