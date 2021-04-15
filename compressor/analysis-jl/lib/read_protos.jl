@@ -2,7 +2,7 @@ using PyCall;
 
 fdir = @__DIR__
 
-p2dir(x) = x |> dirname |> dirname
+p2dir(x) = x |> dirname # |> dirname
 
 pushfirst!(PyVector(pyimport("sys")."path"), joinpath(p2dir(@__DIR__), "readProtoPy"))
 
