@@ -1,4 +1,5 @@
 use std::env;
+use std::io::BufReader;
 use std::process;
 
 use std::io::Write;
@@ -53,12 +54,14 @@ three values:
     process::exit(1);
   }
 
+  pretty_env_logger::init();
+
   let infilename = &args[1];
   let outfilename = &args[2];
   let maxmatch = parse_maxopt(&args[3..]);
   let bytes = std::fs::read(infilename).unwrap();
 
-  //  println!("Using maxmatch of {:?}", maxmatch);
+  println!("Using maxmatch of {:?}", maxmatch);
 
   let mut outfile = std::fs::OpenOptions::new()
     .read(false)

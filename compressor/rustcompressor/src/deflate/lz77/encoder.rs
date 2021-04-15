@@ -358,10 +358,40 @@ where
 
   let mut index = 0usize;
 
+  let mut checkpoints = if data.len() < 300_000usize {
+    let mut x = Vec::new();
+    x.push((data.len(), 100));
+    let stepsz = data.len() / 10usize;
+    for z in (0..9usize).rev() {
+      x.push((stepsz * z, 10 * z));
+    }
+    x.push((data.len(), 100));
+    x
+  } else {
+    let mut x = Vec::new();
+    x.push((data.len(), 100));
+    let stepsz = data.len() / 100usize;
+    for z in (0..99usize).rev() {
+      x.push((stepsz * z, z));
+    }
+    x
+  };
+  log::debug!(
+    "Reporting at follow (#bytes, %complete) ranges: {:?}",
+    checkpoints
+  );
+
   // Main compression loop. Follow sections 4's suggestion and start by looking at triplets, then
   // expanding matches as needed. This loop does not guarantee that all input has been encoded
   // when it ends, hence the cleanup section afterwards.
   while index + MIN_DEFLATE_MATCH_LEN < data.len() {
+    // Track progress using logging crate
+    let (nbytes, percent) = checkpoints.last().copied().unwrap();
+    if index > nbytes {
+      log::debug!("Finished {}/{}, {}%", index, data.len(), percent);
+      let _ = checkpoints.pop();
+    }
+
     // The style here is not great: we re-use lzrules internally to tell the core
     // compression algorithm what we want to do, conflating its usage with whether
     // the user wants offset compression or not.

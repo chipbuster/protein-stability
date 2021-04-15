@@ -91,7 +91,7 @@ pub struct DeflateStream {
 
 #[derive(Debug, Clone)]
 pub struct LZ77SymStream {
-  symbols: Vec<LZSym<u64>>,
+  pub symbols: Vec<LZSym<u64>>,
 }
 
 mod test {
