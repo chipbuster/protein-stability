@@ -24,6 +24,25 @@ function compressed_size(data::Vector{UInt8})::Int
     val = convert(Int, csize)
 end
 
+"""Compute the compressed size by calling an external binary. Has some downsides (incl. mem
+usage) but allows for multithreading whereas libLZMA/libXZ are not safe to call multithreaded."""
+function compressed_size_external(data::Vector{UInt8}; squelch_err=false)
+    dataname = tempname()
+    outname = dataname * ".xzraw"
+    open(dataname,"w") do f
+        write(f, data)
+    end
+
+    # Compress the written file to stdout, then read the result to get
+    # the # of bytes. Can run out of memory if many large files are
+    # being run at once, but even 1GB is pretty extreme right now.
+    io = IOBuffer()
+    errdest = squelch_err ? devnull : stderr
+    run(pipeline(`xz -9e --keep --format=raw --stdout $(dataname)`,stderr=errdest,stdout=io))
+    comp_data = take!(io)
+    length(comp_data)
+end
+
 # An overload which allows us to cache the compression of random data if needed.
 function compression_eta(data::Vector{UInt8}, C_0::T, C_1::T) where T <: Integer
     """Computes the compression η of the given data using the given C_d.
