@@ -37,3 +37,35 @@ function p_fjc_2d_rscalar(nbonds; bondlen=1.0)
     normpdf(r) = pdf(r) / norm
     return normpdf
 end
+
+#=
+Many times, we want to reuse the function returned by p_fjc_2d_rscalar repeatedly
+(e.g. when generating plots). Unfortunately, computation of the function is
+very expensive due to the nature of nested numerical integration.
+
+This function precomputes the PDF on a regular grid and then uses interpolation
+to quickly provide an approximate result.
+=#
+"""Uses a fine-grained cache with linear interpolation to return rscalar values quickly"""
+function p_fjc_2d_rscalar_cached(nbonds; bondlen=1.0, npts=1000)
+    pdf = p_fjc_2d_rscalar(nbonds; bondlen=bondlen)
+    xs = range(0.0, nbonds * bondlen, length=npts)
+    ys = pdf.(xs)
+    dx = xs[2] - xs[1]
+    function approxfun(r)
+        ind = r / dx |> ceil |> Int
+        if ind >= npts || ind <= 0  # Exact right endpoint
+            return 0.0
+        end
+        a = xs[ind]
+        b = xs[ind+1]
+        @assert(a <= r <= b)
+        f_a = ys[ind]
+        f_b = ys[ind+1]
+
+        f_a + ((r - a) / dx) * (f_b - f_a)
+    end
+
+    return approxfun
+end
+
