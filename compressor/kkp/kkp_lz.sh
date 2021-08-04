@@ -25,5 +25,7 @@ $bin_dir/gensa "$input_fpath" "$sa_file"
 $bin_dir/count "$input_fpath"
 
 # Cleanup
-rm "$sa_file"
+rm -f "$sa_file"
 mv "${input_fpath}.lzproto" "$2"
+
+echo "FINISHED: $1"

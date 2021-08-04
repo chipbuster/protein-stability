@@ -110,7 +110,7 @@ int kkp3(unsigned char *X, int *SA, int n,
          std::vector<std::pair<int, int>> *F) {
   if (n == 0)
     return 0;
-  int *CPSS = new int[2 * n + 5];
+  int *CPSS = new int[2 * static_cast<long>(n) + 5];
 
   // This can be avoided too.
   for (int i = n; i; --i)
@@ -118,10 +118,10 @@ int kkp3(unsigned char *X, int *SA, int n,
   SA[0] = SA[n + 1] = -1;
 
   // Compute PSV_text and NSV_text for SA.
-  int top = 0;
-  for (int i = 1; i <= n + 1; ++i) {
+  long top = 0;
+  for (long i = 1; i <= n + 1; ++i) {
     while (SA[top] > SA[i]) {
-      int addr = (SA[top] << 1);
+      long addr = (static_cast<long>(SA[top]) << 1);
       CPSS[addr] = SA[top - 1];
       CPSS[addr + 1] = SA[i];
       --top;
@@ -132,11 +132,11 @@ int kkp3(unsigned char *X, int *SA, int n,
   // Compute the phrases.
   if (F)
     F->push_back(std::make_pair(X[0], 0));
-  int i = 1, nfactors = 1;
+  long i = 1, nfactors = 1;
   while (i < n) {
-    int addr = (i << 1);
-    int psv = CPSS[addr];
-    int nsv = CPSS[addr + 1];
+    long addr = (i << 1);
+    long psv = CPSS[addr];
+    long nsv = CPSS[addr + 1];
     i = parse_phrase(X, n, i, psv, nsv, F);
     ++nfactors;
   }
