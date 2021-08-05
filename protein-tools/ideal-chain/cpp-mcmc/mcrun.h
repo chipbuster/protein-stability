@@ -6,6 +6,7 @@
 #include <Eigen/Dense>
 
 #include "H5Cpp.h"
+#include "xoroshiro128plus.h"
 
 using Eigen::MatrixXd;
 using Eigen::MatrixXf;
@@ -73,15 +74,15 @@ public:
 
   // Variables used for random number generation
   std::random_device r;
-  std::seed_seq seed2{r(), r(), r(), r(), r(), r(), r(), r()};
-  std::mt19937 e2;
+  uint64_t seed {r()};
+  xoroshiro128plus e2;
   std::normal_distribution<double> normal_dist;
 
   MCRunState(const MCRunSettings &settings, const std::string& filename);
   MCRunState(const std::string& filename);
 
   bool takeStep(VectorXd &curstate, VectorXd &scratch,
-                std::mt19937 &randEngine,
+                xoroshiro128plus &randEngine,
                 std::normal_distribution<double> &dist);
   bool stateIsValid(const VectorXd& state) const;
 

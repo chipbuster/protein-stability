@@ -40,7 +40,7 @@ void MCRunSettings::tagDataset(H5::DataSet &dset) const {
 MCRunState::MCRunState(const MCRunSettings &settings,
                        const std::string &filename)
     : settings{settings}, accept{0}, reject{0}, hdf5Filename{filename},
-      e2(seed2), normal_dist(0.0, settings.gaussWidth) {
+      e2(seed), normal_dist(0.0, settings.gaussWidth) {
   // Set internal buffer state
   this->curState = VectorXd::Zero(settings.numAngles);
   this->scratchBuf = VectorXd::Zero(settings.numAngles);
@@ -62,14 +62,16 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   // Initialize HDF5 datasets
   this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL, H5::FileCreatPropList::DEFAULT, plist);
 
-  hsize_t maxdims[2] = {settings.numAngles, settings.numSteps};
+  auto nA = static_cast<hsize_t>(this->settings.numAngles);
+  auto nS = static_cast<hsize_t>(this->settings.numSteps);
+  hsize_t maxdims[2] = {nA, nS};
   H5::DataSpace dataspace(2, maxdims);
 
   // Set chunking properties. These are set so that each additional value of
   // numAngles creates about 0.4MB of data. Under this regime, N=5 is about 2MB
   // per chunk, N=20 is about 8MB per chunk.
   H5::DSetCreatPropList cparms;
-  hsize_t chunkDims[2] = {settings.numAngles, OUTBUF_NSAMP};
+  hsize_t chunkDims[2] = {nA, OUTBUF_NSAMP};
   cparms.setChunk(2, chunkDims);
 
   H5::FloatType f32Ty(H5::PredType::NATIVE_FLOAT);
@@ -96,12 +98,11 @@ double computeEEDist(const VectorXd &angles) {
 
   for (int i = 0; i < angles.rows(); ++i) {
     angle += angles(i) + M_PI;
-    angle = wrapAngle(angle);
     endpt(0) += cos(angle);
     endpt(1) += sin(angle);
   }
 
-  return endpt.norm();
+  return endpt.squaredNorm();
 }
 
 // Tests the proposed state to see if it is valid. Returns true if the proposed
@@ -114,11 +115,14 @@ bool MCRunState::stateIsValid(const VectorXd &state) const {
     throw std::runtime_error("Got NAaN while computing E2E");
   }
 
-  return eedist >= this->settings.lo && eedist <= this->settings.hi;
+  double losq = this->settings.lo * this->settings.lo;
+  double hisq = this->settings.lo * this->settings.lo;
+
+  return eedist >= losq && eedist <= hisq;
 }
 
 bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
-                          std::mt19937 &randEngine,
+                          xoroshiro128plus &randEngine,
                           std::normal_distribution<double> &dist) {
   scratch = curState;
   // In principle, we could take no arguments and just use the class state. In
@@ -175,11 +179,13 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
 // Buffers internally within
 void MCRunState::recordState(const VectorXd &state, int step) {
   H5::DataSpace fspace = this->ds.getSpace();
-  hsize_t slice_size[2] = {this->settings.numAngles, 1};
-  hsize_t slice_loc[2] = {0, step};
+  auto nA = static_cast<hsize_t>(this->settings.numAngles);
+  auto s = static_cast<hsize_t>(step);
+  hsize_t slice_size[2] = {nA, 1};
+  hsize_t slice_loc[2] = {0, s};
   fspace.selectHyperslab(H5S_SELECT_SET, slice_size, slice_loc);
 
-  hsize_t mem_size[1] = {this->settings.numAngles};
+  hsize_t mem_size[1] = {nA};
   H5::DataSpace mspace(1, mem_size);
 
   this->ds.write(this->curState.data(), H5::PredType::NATIVE_DOUBLE, mspace,
