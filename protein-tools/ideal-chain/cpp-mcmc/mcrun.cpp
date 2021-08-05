@@ -117,7 +117,7 @@ bool MCRunState::stateIsValid(const VectorXd &state) const {
   }
 
   double losq = this->settings.lo * this->settings.lo;
-  double hisq = this->settings.lo * this->settings.lo;
+  double hisq = this->settings.hi * this->settings.hi;
 
   return eedist >= losq && eedist <= hisq;
 }
@@ -157,7 +157,7 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
   Eigen::VectorXd guessVec = Eigen::VectorXd::Constant(nangles, guess);
   double dist = computeEEDist(guessVec);
   int guesscounter = 0;
-  while (dist > r_hi || dist < r_lo) {
+  while (dist > r_hi*r_hi || dist < r_lo*r_lo) {
     if (dist > target_e2e) {
       hi = guess;
     } else {
