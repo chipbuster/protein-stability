@@ -7,8 +7,8 @@
 
 #include <cassert>
 
-#include "mcrun.h"
 #include "hdf5.h"
+#include "mcrun.h"
 
 // Results in 4MB per nAangle (e.g. nAngles = 5 results in 20MB buffers)
 constexpr int OUTBUF_NSAMP = 1'000'000;
@@ -45,7 +45,7 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   this->curState = VectorXd::Zero(settings.numAngles);
   this->scratchBuf = VectorXd::Zero(settings.numAngles);
 
-  // We have to set the chunk cache or we'll get terrible performance 
+  // We have to set the chunk cache or we'll get terrible performance
   // (like 3x slower). Unfortunately, there is no C++ wrapper to do this--we'll
   // need to fall back to the C API to set the chunk cache. Details of args at
   // https://support.hdfgroup.org/HDF5/doc/RM/RM_H5P.html#Property-SetChunkCache
@@ -60,7 +60,8 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   plist.setCache(100, num_hash_slots, total_buf_nbytes, w0);
 
   // Initialize HDF5 datasets
-  this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL, H5::FileCreatPropList::DEFAULT, plist);
+  this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL,
+                             H5::FileCreatPropList::DEFAULT, plist);
 
   auto nA = static_cast<hsize_t>(this->settings.numAngles);
   auto nS = static_cast<hsize_t>(this->settings.numSteps);
@@ -80,7 +81,7 @@ MCRunState::MCRunState(const MCRunSettings &settings,
 
   // Finally, write the attributes we know about into the file. The final two
   // attributes (accept and reject) are not known until after the simulation
-  // runs, so they can only be stored in finalize() 
+  // runs, so they can only be stored in finalize()
   this->settings.tagDataset(this->ds);
 }
 
@@ -188,8 +189,7 @@ void MCRunState::recordState(const VectorXd &state, int step) {
   hsize_t mem_size[1] = {nA};
   H5::DataSpace mspace(1, mem_size);
 
-  this->ds.write(this->curState.data(), H5::PredType::NATIVE_DOUBLE, mspace,
-                 fspace);
+  this->ds.write(state.data(), H5::PredType::NATIVE_DOUBLE, mspace, fspace);
 }
 
 void MCRunState::runSimulation() {
