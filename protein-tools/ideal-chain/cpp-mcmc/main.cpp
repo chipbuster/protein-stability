@@ -11,7 +11,7 @@ using std::chrono::duration_cast;
 using std::chrono::seconds;
 
 int main(int argc, char** argv){
-        auto st = MCRunSettings(2, 1'000'000, 100, 0.2, 0.8);
-        auto state = MCRunState(st);
+        auto st = MCRunSettings(7, 1'000'000, 100, 0.2, 0.8);
+        MCRunState state(st, "/tmp/lol");
         state.runSimulation();
 }

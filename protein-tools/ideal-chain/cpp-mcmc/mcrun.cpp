@@ -8,36 +8,78 @@
 #include <cassert>
 
 #include "mcrun.h"
+#include "hdf5.h"
 
-#define READSTREAM(stream, var)                                                \
-  stream.read(reinterpret_cast<char *>(&var), sizeof(var))
+// Results in 4MB per nAangle (e.g. nAngles = 5 results in 20MB buffers)
+constexpr int OUTBUF_NSAMP = 1'000'000;
 
-#define WRITESTREAM(stream, var)                                               \
-  stream.write(reinterpret_cast<const char *>(&var), sizeof var)
+void MCRunSettings::tagDataset(H5::DataSet &dset) const {
+  H5::IntType i64Ty(H5::PredType::NATIVE_INT64);
+  H5::FloatType f64Ty(H5::PredType::NATIVE_DOUBLE);
+  H5::DataSpace attSpace(H5S_SCALAR);
 
-void MCRunState::serialize(const std::string &filename) const {
-  std::ofstream ofs(filename, std::ios::binary);
-  WRITESTREAM(ofs, this->settings.lo);
-  WRITESTREAM(ofs, this->settings.hi);
-  WRITESTREAM(ofs, this->settings.gaussWidth);
-  WRITESTREAM(ofs, this->settings.numAngles);
-  WRITESTREAM(ofs, this->settings.numSteps);
-  WRITESTREAM(ofs, this->settings.skipPerStep);
-  WRITESTREAM(ofs, this->curIndex);
-  WRITESTREAM(ofs, this->accept);
-  WRITESTREAM(ofs, this->reject);
+  H5::Attribute attLo = dset.createAttribute("lo", f64Ty, attSpace);
+  attLo.write(f64Ty, &this->lo);
 
-  for (int j = 0; j < this->trace.cols(); ++j) {
-    for (int i = 0; i < this->trace.rows(); ++i) {
-      WRITESTREAM(ofs, this->trace(i, j));
-    }
-  }
+  H5::Attribute attHi = dset.createAttribute("hi", f64Ty, attSpace);
+  attHi.write(f64Ty, &this->hi);
+
+  H5::Attribute attGW = dset.createAttribute("gaussWidth", f64Ty, attSpace);
+  attGW.write(f64Ty, &this->gaussWidth);
+
+  H5::Attribute attNA = dset.createAttribute("numAngles", i64Ty, attSpace);
+  attNA.write(i64Ty, &this->numAngles);
+
+  H5::Attribute attNS = dset.createAttribute("numSteps", i64Ty, attSpace);
+  attNS.write(i64Ty, &this->numSteps);
+
+  H5::Attribute attSkip = dset.createAttribute("skips", i64Ty, attSpace);
+  attSkip.write(i64Ty, &this->skipPerStep);
 }
 
-void check_condition(bool condition, const std::string &msg) {
-  if (!condition) {
-    throw std::runtime_error(msg);
-  }
+MCRunState::MCRunState(const MCRunSettings &settings,
+                       const std::string &filename)
+    : settings{settings}, accept{0}, reject{0}, hdf5Filename{filename},
+      e2(seed2), normal_dist(0.0, settings.gaussWidth) {
+  // Set internal buffer state
+  this->curState = VectorXd::Zero(settings.numAngles);
+  this->scratchBuf = VectorXd::Zero(settings.numAngles);
+
+  // We have to set the chunk cache or we'll get terrible performance 
+  // (like 3x slower). Unfortunately, there is no C++ wrapper to do this--we'll
+  // need to fall back to the C API to set the chunk cache. Details of args at
+  // https://support.hdfgroup.org/HDF5/doc/RM/RM_H5P.html#Property-SetChunkCache
+  // Note: in C++ API, this needs to be passed in at file creation, so we do
+  // the math up here. This needs to be synced with the chunksizes below or
+  // things may get screwy.
+  size_t size_per_chunk = sizeof(float) * settings.numAngles * OUTBUF_NSAMP;
+  size_t total_buf_nbytes = 10 * size_per_chunk; // Fit 10 chunks into buffer
+  size_t num_hash_slots = 997; // A prime number about 100 times larger than 10
+  double w0 = 0.75;
+  H5::FileAccPropList plist = H5::FileAccPropList::DEFAULT;
+  plist.setCache(100, num_hash_slots, total_buf_nbytes, w0);
+
+  // Initialize HDF5 datasets
+  this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL, H5::FileCreatPropList::DEFAULT, plist);
+
+  hsize_t maxdims[2] = {settings.numAngles, settings.numSteps};
+  H5::DataSpace dataspace(2, maxdims);
+
+  // Set chunking properties. These are set so that each additional value of
+  // numAngles creates about 0.4MB of data. Under this regime, N=5 is about 2MB
+  // per chunk, N=20 is about 8MB per chunk.
+  H5::DSetCreatPropList cparms;
+  hsize_t chunkDims[2] = {settings.numAngles, OUTBUF_NSAMP};
+  cparms.setChunk(2, chunkDims);
+
+  H5::FloatType f32Ty(H5::PredType::NATIVE_FLOAT);
+  this->ds =
+      this->outfile.createDataSet(this->datasetName, f32Ty, dataspace, cparms);
+
+  // Finally, write the attributes we know about into the file. The final two
+  // attributes (accept and reject) are not known until after the simulation
+  // runs, so they can only be stored in finalize() 
+  this->settings.tagDataset(this->ds);
 }
 
 inline double wrapAngle(double angle) {
@@ -62,31 +104,41 @@ double computeEEDist(const VectorXd &angles) {
   return endpt.norm();
 }
 
-bool MCRunState::takeStep(VectorXd &curState, VectorXd &nextState,
+// Tests the proposed state to see if it is valid. Returns true if the proposed
+// state is valid and false otherwise.
+bool MCRunState::stateIsValid(const VectorXd &state) const {
+  double eedist = computeEEDist(state);
+  if (std::isnan(eedist)) {
+    std::cerr << "ERROR: NaN value arose in calculation of E2E distance"
+              << std::endl;
+    throw std::runtime_error("Got NAaN while computing E2E");
+  }
+
+  return eedist >= this->settings.lo && eedist <= this->settings.hi;
+}
+
+bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
                           std::mt19937 &randEngine,
                           std::normal_distribution<double> &dist) {
+  scratch = curState;
+  // In principle, we could take no arguments and just use the class state. In
+  // practice, probably wiser to decouple simulation advancement from a class.
+  // Instead, call this function using class members as arguments.
   for (int i = 0; i < curState.rows(); ++i) {
     auto d = dist(randEngine);
     // std::cout << "Propose update on " << i << " of " << d << std::endl;
     curState(i) += d;
   }
 
-  double eedist = computeEEDist(nextState);
-  if (std::isnan(eedist)) {
-    std::cerr << "ERROR: NaN value arose in calculation of E2E distance"
-              << std::endl;
-    throw std::runtime_error("Got NAaN while computing E2E");
-  }
-  if (eedist < this->settings.lo || eedist > this->settings.hi) {
-    // Reject step
-    nextState = curState;
-    return false;
-  } else {
-    // We accept modifications, but we need to make sure to apply wrapping
+  if (stateIsValid(curState)) {
+    // Accept the step, but apply wrapping to prevent overflows
     for (int i = 0; i < curState.rows(); ++i) {
-      nextState(i) = wrapAngle(nextState(i));
+      curState(i) = wrapAngle(curState(i));
     }
     return true;
+  } else {
+    std::swap(curState, scratch); // Reject step by restoring previous state
+    return false;
   }
 }
 
@@ -101,7 +153,6 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
   double dist = computeEEDist(guessVec);
   int guesscounter = 0;
   while (dist > r_hi || dist < r_lo) {
-    // std::cout << "current guess " << guess << " has e2e of "<< dist << std::endl;
     if (dist > target_e2e) {
       hi = guess;
     } else {
@@ -113,7 +164,6 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
     guessVec = Eigen::VectorXd::Constant(nangles, guess);
     dist = computeEEDist(guessVec);
 
-
     if (guesscounter > 150) {
       throw std::runtime_error("Couldn't find valid initial state for chain");
     }
@@ -121,41 +171,59 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
   return guessVec;
 }
 
+// Records the given vector state into the `step`-th column of the HDF5 dataset
+// Buffers internally within
+void MCRunState::recordState(const VectorXd &state, int step) {
+  H5::DataSpace fspace = this->ds.getSpace();
+  hsize_t slice_size[2] = {this->settings.numAngles, 1};
+  hsize_t slice_loc[2] = {0, step};
+  fspace.selectHyperslab(H5S_SELECT_SET, slice_size, slice_loc);
+
+  hsize_t mem_size[1] = {this->settings.numAngles};
+  H5::DataSpace mspace(1, mem_size);
+
+  this->ds.write(this->curState.data(), H5::PredType::NATIVE_DOUBLE, mspace,
+                 fspace);
+}
+
 void MCRunState::runSimulation() {
-  std::random_device r;
-  std::seed_seq seed2{r(), r(), r(), r(), r(), r(), r(), r()};
-  std::mt19937 e2(seed2);
-  std::normal_distribution<double> normal_dist(0.0, this->settings.gaussWidth);
+  this->curState = find_init_state(this->settings.numAngles, this->settings.lo,
+                                   this->settings.hi);
+  Eigen::VectorXf floatState = Eigen::VectorXf::Zero(this->curState.rows());
 
-  auto init = find_init_state(this->settings.numAngles, this->settings.lo,
-                              this->settings.hi);
-
-  int64_t accepted = 0;
-  int64_t rejected = 0;
-
-  VectorXd curState = init;
-  assert(computeEEDist(init) >= this->settings.lo);
-  assert(computeEEDist(init) <= this->settings.hi);
-  VectorXd nextState = VectorXd::Zero(this->settings.numAngles);
+  assert(computeEEDist(this->curState) >= this->settings.lo);
+  assert(computeEEDist(this->curState) <= this->settings.hi);
 
   for (int step = 0; step < this->settings.numSteps; ++step) {
-    for (int _unused = 0; _unused < this->settings.skipPerStep; ++_unused) {
-      if (this->takeStep(curState, nextState, e2, normal_dist)) {
-        auto dist = computeEEDist(nextState);
-        assert(dist > this->settings.lo && dist < this->settings.hi);
-        accepted += 1;
-      } else {
-        assert((curState - nextState).norm() < 1e-8);
-        rejected += 1;
-      }
-      std::swap(curState, nextState);
+    if (step % 10'000 == 0) {
+      std::cout << step << '\n';
     }
-    this->trace.col(step) = curState.cast<float>();
-    this->curIndex = step;
+    for (int _unused = 0; _unused < this->settings.skipPerStep; ++_unused) {
+      if (this->takeStep(this->curState, this->scratchBuf, this->e2,
+                         normal_dist)) {
+        this->accept += 1;
+      } else {
+        this->reject += 1;
+      }
+    }
+
+    // this->recordState(curState, step);
   }
 
-  // TODO: Modify to allow out-of-core writing.
+  std::cout << "Accepted " << accept << " and rejected " << reject << std::endl;
 
-  std::cout << "Accepted " << accepted << " and rejected " << rejected
-            << std::endl;
+  this->finalize();
+}
+
+void MCRunState::finalize() {
+  H5::IntType i64Ty(H5::PredType::NATIVE_INT64);
+  H5::DataSpace attSpace(H5S_SCALAR);
+
+  H5::Attribute attAcc = this->ds.createAttribute("accepted", i64Ty, attSpace);
+  attAcc.write(i64Ty, &this->accept);
+
+  H5::Attribute attRej = this->ds.createAttribute("rejected", i64Ty, attSpace);
+  attRej.write(i64Ty, &this->reject);
+
+  this->outfile.flush(H5F_SCOPE_GLOBAL);
 }
