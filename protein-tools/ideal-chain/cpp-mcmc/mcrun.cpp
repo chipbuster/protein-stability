@@ -215,7 +215,7 @@ void MCRunState::runSimulation() {
       }
     }
 
-    // this->recordState(curState, step);
+    this->recordState(curState, step);
   }
 
   float pct = (100.0 * accept) / (accept + reject);
