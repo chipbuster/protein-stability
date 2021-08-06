@@ -10,6 +10,54 @@
 #include "hdf5.h"
 #include "mcrun.h"
 
+////////////////////////////////////////////////////////////////////////////////
+
+/* This simulation treats state as a vector of 3-atom angles (a.k.a. internal
+angles). The rule is that the end-to-end distance must fall between lo and hi.
+*/
+
+/* These are the functions that need to be modified to change the monte carlo
+   simulation. In principle, the definition of "stateIsValid" completely
+   determines the simulation (in practice of course, other parts of the code
+   may need to be touched ) */
+inline double wrapAngle(double angle) {
+  double twoPi = 2.0 * M_PI;
+  return angle - twoPi * floor(angle / twoPi);
+}
+
+double computeEEDist(const VectorXd &angles) {
+  double angle = 0.0;
+  Eigen::Vector2d endpt;
+  endpt << 1.0, 0.0;
+
+  for (int i = 0; i < angles.rows(); ++i) {
+    angle += angles(i) + M_PI;
+    endpt(0) += cos(angle);
+    endpt(1) += sin(angle);
+  }
+
+  return endpt.norm();
+}
+
+// Tests the proposed state to see if it is valid. Returns true if the proposed
+// state is valid and false otherwise. Reminder: this function has access to the
+// scratchBuf class instance variable if needed.
+bool MCRunState::stateIsValid(const VectorXd &state) const {
+  double eedist = computeEEDist(state);
+  if (std::isnan(eedist)) {
+    std::cerr << "ERROR: NaN value arose in calculation of E2E distance"
+              << std::endl;
+    throw std::runtime_error("Got NaN while computing E2E");
+  }
+
+  double loe = this->settings.lo;
+  double hie = this->settings.hi;
+
+  return eedist >= loe && eedist <= hie;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 constexpr int64_t MAX_BUF_SIZE = 1'000'000L;
 
 void MCBuffer::recordState(const VectorXd &state, H5::DataSet &ds) {
@@ -80,59 +128,21 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   hsize_t maxdims[2] = {nS, nA};
   H5::DataSpace dataspace(2, maxdims);
 
-  // Set chunking properties. These are set so that each additional value of
-  // numAngles creates about 0.4MB of data. Under this regime, N=5 is about 2MB
-  // per chunk, N=20 is about 8MB per chunk.
+  // Set chunking properties. Used to allow partial I/O on the receiving end
   H5::DSetCreatPropList cparms;
   hsize_t chunkDims[2] = {OUTBUF_NSAMP, nA};
   cparms.setChunk(2, chunkDims);
 
   H5::FloatType f32Ty(H5::PredType::NATIVE_FLOAT);
   this->ds = this->outfile.createDataSet(this->datasetName, f32Ty,
-                                         dataspace); //, cparms);
+                                         dataspace);
 
-  // Finally, write the attributes we know about into the file. The final two
+  // Write the attributes we know about into the file. The final two
   // attributes (accept and reject) are not known until after the simulation
   // runs, so they can only be stored in finalize()
   this->settings.tagDataset(this->ds);
 }
 
-inline double wrapAngle(double angle) {
-  double twoPi = 2.0 * M_PI;
-  return angle - twoPi * floor(angle / twoPi);
-}
-
-/// Compute the end-to-end distance using a caller-provided scratch buffer to
-/// compute cumulative angles.
-double computeEEDist(const VectorXd &angles) {
-  double angle = 0.0;
-  Eigen::Vector2d endpt;
-  endpt << 1.0, 0.0;
-
-  for (int i = 0; i < angles.rows(); ++i) {
-    angle += angles(i) + M_PI;
-    endpt(0) += cos(angle);
-    endpt(1) += sin(angle);
-  }
-
-  return endpt.norm();
-}
-
-// Tests the proposed state to see if it is valid. Returns true if the proposed
-// state is valid and false otherwise.
-bool MCRunState::stateIsValid(const VectorXd &state) const {
-  double eedist = computeEEDist(state);
-  if (std::isnan(eedist)) {
-    std::cerr << "ERROR: NaN value arose in calculation of E2E distance"
-              << std::endl;
-    throw std::runtime_error("Got NAaN while computing E2E");
-  }
-
-  double loe = this->settings.lo;
-  double hie = this->settings.hi;
-
-  return eedist >= loe && eedist <= hie;
-}
 
 bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
                           xoroshiro128plus &randEngine,
@@ -191,8 +201,6 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
 void MCRunState::runSimulation() {
   this->curState = find_init_state(this->settings.numAngles, this->settings.lo,
                                    this->settings.hi);
-  Eigen::VectorXf floatState = Eigen::VectorXf::Zero(this->curState.rows());
-
   assert(computeEEDist(this->curState) >= this->settings.lo);
   assert(computeEEDist(this->curState) <= this->settings.hi);
 
