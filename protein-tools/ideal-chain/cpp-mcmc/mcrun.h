@@ -6,11 +6,13 @@
 #include <Eigen/Dense>
 
 #include "H5Cpp.h"
-#include "xoroshiro128plus.h"
+#include "pcg_random.hpp"
 
 using Eigen::MatrixXd;
 using Eigen::MatrixXf;
 using Eigen::VectorXd;
+
+using RandAlgo = pcg32;
 
 struct MCRunSettings {
   double lo;
@@ -74,14 +76,14 @@ public:
   // Variables used for random number generation
   std::random_device r;
   uint64_t seed{r()};
-  xoroshiro128plus e2;
+  RandAlgo e2;
   std::normal_distribution<double> normal_dist;
 
   MCRunState(const MCRunSettings &settings, const std::string &filename);
   MCRunState(const std::string &filename);
 
   bool takeStep(VectorXd &curstate, VectorXd &scratch,
-                xoroshiro128plus &randEngine,
+                RandAlgo &randEngine,
                 std::normal_distribution<double> &dist);
   bool stateIsValid(const VectorXd &state) const;
 

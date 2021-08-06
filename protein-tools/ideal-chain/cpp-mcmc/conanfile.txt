@@ -1,6 +1,7 @@
 [requires]
 eigen/3.3.9
 hdf5/1.12.0
+pcg-cpp/cci.20210406
 
 [generators]
 cmake

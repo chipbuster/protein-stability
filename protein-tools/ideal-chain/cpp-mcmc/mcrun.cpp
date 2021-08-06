@@ -145,7 +145,7 @@ MCRunState::MCRunState(const MCRunSettings &settings,
 
 
 bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
-                          xoroshiro128plus &randEngine,
+                          RandAlgo &randEngine,
                           std::normal_distribution<double> &dist) {
   scratch = curState;
   // In principle, we could take no arguments and just use the class state. In
