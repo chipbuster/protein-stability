@@ -39,12 +39,12 @@ class MCBuffer {
 
   // Used to record which column in outBuf we're recording. Updates when
   // a new column is written into the outBuf, points to first unwritten column
-  int bufIndex = 0;
+  uint64_t bufIndex = 0;
 
   // Used to record the next location for a write from outBuf to the HDF5 file.
   // A write will be of size (nAngles, bufIndex) and run from fileIndex to
   // minimum(dataset.maxcols(), fileIndex + outBuf.cols())
-  int fileIndex = 0;
+  uint64_t fileIndex = 0;
 
 public:
   MCBuffer(int64_t nrow, int64_t ncol) : buffer(nrow, ncol) {}

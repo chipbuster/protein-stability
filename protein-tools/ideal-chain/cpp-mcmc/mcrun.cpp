@@ -13,7 +13,7 @@
 constexpr int64_t MAX_BUF_SIZE = 1'000'000L;
 
 void MCBuffer::recordState(const VectorXd &state, H5::DataSet &ds) {
-  if (this->bufIndex == this->buffer.cols()) {
+  if (this->bufIndex >= static_cast<uint64_t>(this->buffer.cols())) {
     this->flush(ds);
     // Flush updates bufIndex so that buffer is effectively empty
   }
@@ -72,27 +72,8 @@ MCRunState::MCRunState(const MCRunSettings &settings,
 
   hsize_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numSteps);
 
-  // We have to set the chunk cache or we'll get terrible performance
-  // (like 3x slower). Unfortunately, there is no C++ wrapper to do this--we'll
-  // need to fall back to the C API to set the chunk cache. Details of args at
-  // https://support.hdfgroup.org/HDF5/doc/RM/RM_H5P.html#Property-SetChunkCache
-  // Note: in C++ API, this needs to be passed in at file creation, so we do
-  // the math up here. This needs to be synced with the chunksizes below or
-  // things may get screwy.
-  size_t size_per_chunk = sizeof(float) * settings.numAngles * OUTBUF_NSAMP;
-  size_t total_buf_nbytes = 10 * size_per_chunk; // Fit 10 chunks into buffer
-  size_t num_hash_slots = 997; // A prime number about 100 times larger than 10
-  std::cout << "Using " << size_per_chunk << " bytes per chunk for a total of "
-            << total_buf_nbytes / 1'000'000.0 << "MB in chunk cache for "
-            << num_hash_slots << " slots" << std::endl;
-  double w0 = 0.75;
-  H5::FileAccPropList plist = H5::FileAccPropList::DEFAULT;
-  // First value (mdc_nelmts) is ignored
-  plist.setCache(0, num_hash_slots, total_buf_nbytes, w0);
-
   // Initialize HDF5 datasets
-  this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL,
-                             H5::FileCreatPropList::DEFAULT, plist);
+  this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL);
 
   auto nA = static_cast<hsize_t>(this->settings.numAngles);
   auto nS = static_cast<hsize_t>(this->settings.numSteps);

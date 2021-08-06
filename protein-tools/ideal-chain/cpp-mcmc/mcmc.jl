@@ -20,6 +20,6 @@ e2e_dist(ϕs) = gen_end_point(ϕs) |> norm
 
 function read_sim_file(filename)
     h5open(filename) do f
-        f["angles"]
+        read(f,"angles")
     end
 end
