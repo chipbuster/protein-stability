@@ -21,8 +21,8 @@ struct MCRunSettings {
   int64_t skipPerStep;
 
   MCRunSettings(int numAngles, int64_t numSteps, int64_t skipsPerStep,
-                double lo, double hi)
-      : lo{lo}, hi{hi}, gaussWidth{(hi - lo) / (numAngles * numAngles)},
+                double lo, double hi, double gW)
+      : lo{lo}, hi{hi}, gaussWidth{gW},
         numAngles{numAngles}, numSteps{numSteps}, skipPerStep{skipsPerStep} {}
 
   // Tag the given HDF5 dataset with these attributes

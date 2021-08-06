@@ -45,6 +45,8 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   this->curState = VectorXd::Zero(settings.numAngles);
   this->scratchBuf = VectorXd::Zero(settings.numAngles);
 
+  int64_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numAngles);
+
   // We have to set the chunk cache or we'll get terrible performance
   // (like 3x slower). Unfortunately, there is no C++ wrapper to do this--we'll
   // need to fall back to the C API to set the chunk cache. Details of args at
@@ -103,7 +105,7 @@ double computeEEDist(const VectorXd &angles) {
     endpt(1) += sin(angle);
   }
 
-  return endpt.squaredNorm();
+  return endpt.norm();
 }
 
 // Tests the proposed state to see if it is valid. Returns true if the proposed
@@ -116,10 +118,10 @@ bool MCRunState::stateIsValid(const VectorXd &state) const {
     throw std::runtime_error("Got NAaN while computing E2E");
   }
 
-  double losq = this->settings.lo * this->settings.lo;
-  double hisq = this->settings.hi * this->settings.hi;
+  double loe = this->settings.lo;
+  double hie = this->settings.hi;
 
-  return eedist >= losq && eedist <= hisq;
+  return eedist >= loe && eedist <= hie;
 }
 
 bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
@@ -151,13 +153,13 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
   double target_e2e = (r_lo + r_hi) / 2.0F;
 
   double hi = M_PI;
-  double lo = M_PI - 2.0F * M_PI / (nangles + 1);
+  double lo = 0.0;
   double guess = (hi + lo) / 2.0F;
 
   Eigen::VectorXd guessVec = Eigen::VectorXd::Constant(nangles, guess);
-  double dist = computeEEDist(guessVec);
+  double dist = sqrt(computeEEDist(guessVec));
   int guesscounter = 0;
-  while (dist > r_hi*r_hi || dist < r_lo*r_lo) {
+  while (dist > r_hi || dist < r_lo) {
     if (dist > target_e2e) {
       hi = guess;
     } else {
@@ -202,7 +204,7 @@ void MCRunState::runSimulation() {
 
   for (int step = 0; step < this->settings.numSteps; ++step) {
     if (step % 10'000 == 0) {
-      std::cout << step << '\n';
+      // std::cout << step << '\n';
     }
     for (int _unused = 0; _unused < this->settings.skipPerStep; ++_unused) {
       if (this->takeStep(this->curState, this->scratchBuf, this->e2,
@@ -216,7 +218,8 @@ void MCRunState::runSimulation() {
     // this->recordState(curState, step);
   }
 
-  std::cout << "Accepted " << accept << " and rejected " << reject << std::endl;
+  float pct = (100.0 * accept) / (accept + reject);
+  std::cout << "Accepted " << pct << "% of all updates" << std::endl;
 
   this->finalize();
 }
