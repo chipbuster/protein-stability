@@ -45,7 +45,7 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   this->curState = VectorXd::Zero(settings.numAngles);
   this->scratchBuf = VectorXd::Zero(settings.numAngles);
 
-  int64_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numAngles);
+  int64_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numSteps);
 
   // We have to set the chunk cache or we'll get terrible performance
   // (like 3x slower). Unfortunately, there is no C++ wrapper to do this--we'll
@@ -57,6 +57,9 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   size_t size_per_chunk = sizeof(float) * settings.numAngles * OUTBUF_NSAMP;
   size_t total_buf_nbytes = 10 * size_per_chunk; // Fit 10 chunks into buffer
   size_t num_hash_slots = 997; // A prime number about 100 times larger than 10
+  std::cout << "Using " << size_per_chunk << " bytes per chunk for a total of "
+            << total_buf_nbytes / 1'000'000.0 << "MB in chunk cache for " << num_hash_slots
+            << " slots" << std::endl;
   double w0 = 0.75;
   H5::FileAccPropList plist = H5::FileAccPropList::DEFAULT;
   plist.setCache(100, num_hash_slots, total_buf_nbytes, w0);
