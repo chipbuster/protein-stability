@@ -10,8 +10,32 @@
 #include "hdf5.h"
 #include "mcrun.h"
 
-// Results in 4MB per nAangle (e.g. nAngles = 5 results in 20MB buffers)
-constexpr int OUTBUF_NSAMP = 1'000'000;
+constexpr int64_t MAX_BUF_SIZE = 1'000'000L;
+
+void MCBuffer::recordState(const VectorXd &state, H5::DataSet &ds) {
+  if (this->bufIndex == this->buffer.cols()) {
+    this->flush(ds);
+    // Flush updates bufIndex so that buffer is effectively empty
+  }
+  this->buffer.col(this->bufIndex) = state;
+  ++this->bufIndex;
+}
+
+void MCBuffer::flush(H5::DataSet &ds) {
+  H5::DataSpace fspace = ds.getSpace();
+  auto nA = static_cast<hsize_t>(this->buffer.rows());
+  hsize_t slice_size[2] = {this->bufIndex, nA};
+  hsize_t slice_loc[2] = {this->fileIndex, 0};
+  fspace.selectHyperslab(H5S_SELECT_SET, slice_size, slice_loc);
+
+  hsize_t mem_size[1] = {nA * bufIndex};
+  H5::DataSpace mspace(1, mem_size);
+
+  ds.write(this->buffer.data(), H5::PredType::NATIVE_DOUBLE, mspace, fspace);
+
+  this->fileIndex += this->bufIndex;
+  this->bufIndex = 0; // Wrote the entire buffer, so entire buffer can be reused
+}
 
 void MCRunSettings::tagDataset(H5::DataSet &dset) const {
   H5::IntType i64Ty(H5::PredType::NATIVE_INT64);
@@ -39,13 +63,14 @@ void MCRunSettings::tagDataset(H5::DataSet &dset) const {
 
 MCRunState::MCRunState(const MCRunSettings &settings,
                        const std::string &filename)
-    : settings{settings}, accept{0}, reject{0}, hdf5Filename{filename},
+    : outBuf(settings.numAngles, std::min(1'000'000L, settings.numSteps)),
+      settings{settings}, accept{0}, reject{0}, hdf5Filename{filename},
       e2(seed), normal_dist(0.0, settings.gaussWidth) {
   // Set internal buffer state
   this->curState = VectorXd::Zero(settings.numAngles);
   this->scratchBuf = VectorXd::Zero(settings.numAngles);
 
-  int64_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numSteps);
+  hsize_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numSteps);
 
   // We have to set the chunk cache or we'll get terrible performance
   // (like 3x slower). Unfortunately, there is no C++ wrapper to do this--we'll
@@ -58,11 +83,12 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   size_t total_buf_nbytes = 10 * size_per_chunk; // Fit 10 chunks into buffer
   size_t num_hash_slots = 997; // A prime number about 100 times larger than 10
   std::cout << "Using " << size_per_chunk << " bytes per chunk for a total of "
-            << total_buf_nbytes / 1'000'000.0 << "MB in chunk cache for " << num_hash_slots
-            << " slots" << std::endl;
+            << total_buf_nbytes / 1'000'000.0 << "MB in chunk cache for "
+            << num_hash_slots << " slots" << std::endl;
   double w0 = 0.75;
   H5::FileAccPropList plist = H5::FileAccPropList::DEFAULT;
-  plist.setCache(100, num_hash_slots, total_buf_nbytes, w0);
+  // First value (mdc_nelmts) is ignored
+  plist.setCache(0, num_hash_slots, total_buf_nbytes, w0);
 
   // Initialize HDF5 datasets
   this->outfile = H5::H5File(this->hdf5Filename.c_str(), H5F_ACC_EXCL,
@@ -70,19 +96,19 @@ MCRunState::MCRunState(const MCRunSettings &settings,
 
   auto nA = static_cast<hsize_t>(this->settings.numAngles);
   auto nS = static_cast<hsize_t>(this->settings.numSteps);
-  hsize_t maxdims[2] = {nA, nS};
+  hsize_t maxdims[2] = {nS, nA};
   H5::DataSpace dataspace(2, maxdims);
 
   // Set chunking properties. These are set so that each additional value of
   // numAngles creates about 0.4MB of data. Under this regime, N=5 is about 2MB
   // per chunk, N=20 is about 8MB per chunk.
   H5::DSetCreatPropList cparms;
-  hsize_t chunkDims[2] = {nA, OUTBUF_NSAMP};
+  hsize_t chunkDims[2] = {OUTBUF_NSAMP, nA};
   cparms.setChunk(2, chunkDims);
 
   H5::FloatType f32Ty(H5::PredType::NATIVE_FLOAT);
-  this->ds =
-      this->outfile.createDataSet(this->datasetName, f32Ty, dataspace, cparms);
+  this->ds = this->outfile.createDataSet(this->datasetName, f32Ty,
+                                         dataspace); //, cparms);
 
   // Finally, write the attributes we know about into the file. The final two
   // attributes (accept and reject) are not known until after the simulation
@@ -181,22 +207,6 @@ Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
   return guessVec;
 }
 
-// Records the given vector state into the `step`-th column of the HDF5 dataset
-// Buffers internally within
-void MCRunState::recordState(const VectorXd &state, int step) {
-  H5::DataSpace fspace = this->ds.getSpace();
-  auto nA = static_cast<hsize_t>(this->settings.numAngles);
-  auto s = static_cast<hsize_t>(step);
-  hsize_t slice_size[2] = {nA, 1};
-  hsize_t slice_loc[2] = {0, s};
-  fspace.selectHyperslab(H5S_SELECT_SET, slice_size, slice_loc);
-
-  hsize_t mem_size[1] = {nA};
-  H5::DataSpace mspace(1, mem_size);
-
-  this->ds.write(state.data(), H5::PredType::NATIVE_DOUBLE, mspace, fspace);
-}
-
 void MCRunState::runSimulation() {
   this->curState = find_init_state(this->settings.numAngles, this->settings.lo,
                                    this->settings.hi);
@@ -218,7 +228,7 @@ void MCRunState::runSimulation() {
       }
     }
 
-    this->recordState(curState, step);
+    this->outBuf.recordState(curState, this->ds);
   }
 
   float pct = (100.0 * accept) / (accept + reject);
@@ -228,6 +238,10 @@ void MCRunState::runSimulation() {
 }
 
 void MCRunState::finalize() {
+  // We might have partial results stored in our buffer class. Make sure they
+  // get written to file before we proceed.
+  this->outBuf.flush(this->ds);
+
   H5::IntType i64Ty(H5::PredType::NATIVE_INT64);
   H5::DataSpace attSpace(H5S_SCALAR);
 

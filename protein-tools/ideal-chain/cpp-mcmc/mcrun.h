@@ -55,9 +55,9 @@ public:
 class MCRunState {
   // Local buffers: none of this data should ever make it into outputs (except
   // for scratchBuf, which is used to buffer output as an implementation detail)
+  MCBuffer outBuf;
   VectorXd curState;
   VectorXd scratchBuf; // Used when internal computations require scratch
-  int bufIndex = 0;
 
 public:
   // Settings which are written into the output as attributes
@@ -85,7 +85,6 @@ public:
                 std::normal_distribution<double> &dist);
   bool stateIsValid(const VectorXd &state) const;
 
-  void recordState(const VectorXd &state, int step);
   void runSimulation();
   void finalize();
 };
