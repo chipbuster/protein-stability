@@ -17,21 +17,6 @@ end
 
 accept_frac(simmetadata) = simmetadata.accepted / (simmetadata.accepted + simmetadata.rejected)
 
-function gen_points(ϕs)
-    pts = Matrix{Float64}(undef, 2, length(ϕs) + 2)
-    pts[:,1] = [0.0,0.0]
-    pts[:,2] = [1.0,0.0]
-    θs = ϕs .+ π |> cumsum .|> mod2pi
-    for (i, θ) in enumerate(θs)
-        pts[:,i + 2] = pts[:,i + 1] + [ cos(θ), sin(θ) ]
-    end
-    pts
-end
-
-gen_end_point(ϕs) = gen_points(ϕs)[:,end]
-
-e2e_dist(ϕs) = gen_end_point(ϕs) |> norm
-
 function load_sim_angles(filename)
     h5open(filename) do f
         read(f, "angles")
@@ -44,11 +29,11 @@ function load_sim_metadata(filename)
 
         accepted = read_attribute(dset, "accepted")
         rejected = read_attribute(dset, "rejected")
-        p1 = read_attribute(dset, "p1")
-        p2 = read_attribute(dset, "p2")
-        p3 = read_attribute(dset, "p3")
+        p1 = read_attribute(dset, "param1")
+        p2 = read_attribute(dset, "param2")
+        p3 = read_attribute(dset, "param3")
         numAngles = read_attribute(dset, "numAngles")
-        numSteps = read_attribute(dset, "numsteps")
+        numSteps = read_attribute(dset, "numSteps")
         skips = read_attribute(dset, "skips")
         gaussWidth = read_attribute(dset, "gaussWidth")
 
