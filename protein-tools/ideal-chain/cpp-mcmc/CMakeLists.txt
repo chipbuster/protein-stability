@@ -10,7 +10,7 @@ conan_basic_setup()
 
 find_package(OpenMP)
 
-add_executable(mcmc-run mcrun.cpp main.cpp)
+add_executable(mcmc-run mcrun.cpp mcsimtypes.cpp main.cpp)
 target_link_libraries(mcmc-run PUBLIC ${CONAN_LIBS})
 
 if(OpenMP_CXX_FOUND)

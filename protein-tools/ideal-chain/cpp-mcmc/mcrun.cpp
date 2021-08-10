@@ -16,46 +16,6 @@
 angles). The rule is that the end-to-end distance must fall between lo and hi.
 */
 
-/* These are the functions that need to be modified to change the monte carlo
-   simulation. In principle, the definition of "stateIsValid" completely
-   determines the simulation (in practice of course, other parts of the code
-   may need to be touched ) */
-inline double wrapAngle(double angle) {
-  double twoPi = 2.0 * M_PI;
-  return angle - twoPi * floor(angle / twoPi);
-}
-
-double computeEEDist(const VectorXd &angles) {
-  double angle = 0.0;
-  Eigen::Vector2d endpt;
-  endpt << 1.0, 0.0;
-
-  for (int i = 0; i < angles.rows(); ++i) {
-    angle += angles(i) + M_PI;
-    endpt(0) += cos(angle);
-    endpt(1) += sin(angle);
-  }
-
-  return endpt.norm();
-}
-
-// Tests the proposed state to see if it is valid. Returns true if the proposed
-// state is valid and false otherwise. Reminder: this function has access to the
-// scratchBuf class instance variable if needed.
-bool MCRunState::stateIsValid(const VectorXd &state) const {
-  double eedist = computeEEDist(state);
-  if (std::isnan(eedist)) {
-    std::cerr << "ERROR: NaN value arose in calculation of E2E distance"
-              << std::endl;
-    throw std::runtime_error("Got NaN while computing E2E");
-  }
-
-  double loe = this->settings.lo;
-  double hie = this->settings.hi;
-
-  return eedist >= loe && eedist <= hie;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr int64_t MAX_BUF_SIZE = 1'000'000L;
@@ -90,11 +50,14 @@ void MCRunSettings::tagDataset(H5::DataSet &dset) const {
   H5::FloatType f64Ty(H5::PredType::NATIVE_DOUBLE);
   H5::DataSpace attSpace(H5S_SCALAR);
 
-  H5::Attribute attLo = dset.createAttribute("lo", f64Ty, attSpace);
-  attLo.write(f64Ty, &this->lo);
+  H5::Attribute attP1 = dset.createAttribute("param1", f64Ty, attSpace);
+  attP1.write(f64Ty, &this->param1);
 
-  H5::Attribute attHi = dset.createAttribute("hi", f64Ty, attSpace);
-  attHi.write(f64Ty, &this->hi);
+  H5::Attribute attP2 = dset.createAttribute("param2", f64Ty, attSpace);
+  attP2.write(f64Ty, &this->param2);
+
+  H5::Attribute attP3 = dset.createAttribute("param3", f64Ty, attSpace);
+  attP3.write(f64Ty, &this->param3);
 
   H5::Attribute attGW = dset.createAttribute("gaussWidth", f64Ty, attSpace);
   attGW.write(f64Ty, &this->gaussWidth);
@@ -116,6 +79,7 @@ MCRunState::MCRunState(const MCRunSettings &settings,
       e2(seed), normal_dist(0.0, settings.gaussWidth) {
   // Set internal buffer state
   this->curState = VectorXd::Zero(settings.numAngles);
+  this->prevState = VectorXd::Zero(settings.numAngles);
   this->scratchBuf = VectorXd::Zero(settings.numAngles);
 
   hsize_t OUTBUF_NSAMP = std::min(1'000'000L, settings.numSteps);
@@ -134,8 +98,7 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   cparms.setChunk(2, chunkDims);
 
   H5::FloatType f32Ty(H5::PredType::NATIVE_FLOAT);
-  this->ds = this->outfile.createDataSet(this->datasetName, f32Ty,
-                                         dataspace);
+  this->ds = this->outfile.createDataSet(this->datasetName, f32Ty, dataspace);
 
   // Write the attributes we know about into the file. The final two
   // attributes (accept and reject) are not known until after the simulation
@@ -143,11 +106,9 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   this->settings.tagDataset(this->ds);
 }
 
-
-bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
-                          RandAlgo &randEngine,
+bool MCRunState::takeStep(VectorXd &curState, RandAlgo &randEngine,
                           std::normal_distribution<double> &dist) {
-  scratch = curState;
+  prevState = curState;
   // In principle, we could take no arguments and just use the class state. In
   // practice, probably wiser to decouple simulation advancement from a class.
   // Instead, call this function using class members as arguments.
@@ -164,53 +125,20 @@ bool MCRunState::takeStep(VectorXd &curState, VectorXd &scratch,
     }
     return true;
   } else {
-    std::swap(curState, scratch); // Reject step by restoring previous state
+    std::swap(curState, prevState); // Reject step by restoring previous state
     return false;
   }
 }
 
-Eigen::VectorXd find_init_state(int64_t nangles, double r_lo, double r_hi) {
-  double target_e2e = (r_lo + r_hi) / 2.0F;
-
-  double hi = M_PI;
-  double lo = 0.0;
-  double guess = (hi + lo) / 2.0F;
-
-  Eigen::VectorXd guessVec = Eigen::VectorXd::Constant(nangles, guess);
-  double dist = sqrt(computeEEDist(guessVec));
-  int guesscounter = 0;
-  while (dist > r_hi || dist < r_lo) {
-    if (dist > target_e2e) {
-      hi = guess;
-    } else {
-      lo = guess;
-    }
-    guess = (hi + lo) / 2.0;
-
-    ++guesscounter;
-    guessVec = Eigen::VectorXd::Constant(nangles, guess);
-    dist = computeEEDist(guessVec);
-
-    if (guesscounter > 150) {
-      throw std::runtime_error("Couldn't find valid initial state for chain");
-    }
-  }
-  return guessVec;
-}
-
 void MCRunState::runSimulation() {
-  this->curState = find_init_state(this->settings.numAngles, this->settings.lo,
-                                   this->settings.hi);
-  assert(computeEEDist(this->curState) >= this->settings.lo);
-  assert(computeEEDist(this->curState) <= this->settings.hi);
+  this->curState = this->findInitState();
 
   for (int step = 0; step < this->settings.numSteps; ++step) {
     if (step % 10'000 == 0) {
       // std::cout << step << '\n';
     }
     for (int _unused = 0; _unused < this->settings.skipPerStep; ++_unused) {
-      if (this->takeStep(this->curState, this->scratchBuf, this->e2,
-                         normal_dist)) {
+      if (this->takeStep(this->curState, this->e2, normal_dist)) {
         this->accept += 1;
       } else {
         this->reject += 1;
