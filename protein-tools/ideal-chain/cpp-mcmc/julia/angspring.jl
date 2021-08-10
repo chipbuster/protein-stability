@@ -11,6 +11,12 @@ function points_from_angles(angles)
     pts
 end
 
+function compute_energy(k, angles)
+    mapreduce(+, angles) do a
+        k * (a - π)^2
+    end
+end
+
 function write_points(infile, outfile, nbins, nskip)
     ang = load_sim_angles(infile)
     binedges = range(0.0,2π, length=nbins+1)

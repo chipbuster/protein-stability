@@ -28,6 +28,8 @@ int main(int argc, char **argv) {
               << "\n SimArgs for EE are: <lo> <hi>"
               << "\n SimArgs for VOL are: <wallDist>"
               << "\n SimArgs for ANG are: <springStrength>" << std::endl;
+    std::cout << "In addition, MC_SIM_TYPE must be set to one of \"EE\", "
+                 "\"VOL\" or \"ANG\" to specify the simtype\n";
     std::exit(1);
   }
 
@@ -38,8 +40,8 @@ int main(int argc, char **argv) {
   double gaussWidth = std::stod(argv[4]);
   std::string outf = argv[5];
 
-  char* type_ptr = std::getenv("MC_SIM_TYPE");
-  if (!type_ptr){
+  char *type_ptr = std::getenv("MC_SIM_TYPE");
+  if (!type_ptr) {
     std::cerr << "The envar MC_SIM_TYPE was not specified. Please specify "
               << " one of EE, VOL, or ANG and rerun the sim" << std::endl;
     exit(1);
@@ -72,9 +74,9 @@ int main(int argc, char **argv) {
     params << springK, 0.0, 0.0;
 
     MCRunSettings settings(natom, nstep, nskip, params, gaussWidth);
-    // AngSpringRunState simState(settings, outf);
+    AngSpringRunState simState(settings, outf);
 
-    // REPORT_TIME(simState.runSimulation());
+    REPORT_TIME(simState.runSimulation());
   } else {
     std::cerr << "The envar MC_SIM_TYPE was invalid. Please specify "
               << " one of EE, VOL, or ANG and rerun the sim" << std::endl;

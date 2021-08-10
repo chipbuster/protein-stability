@@ -2,7 +2,6 @@
 # param2 = hi
 
 include("mcmc-lib.jl")
-using StatsPlots
 using Discretizers
 
 # WORKDIR=ENV["SCRATCH"]
