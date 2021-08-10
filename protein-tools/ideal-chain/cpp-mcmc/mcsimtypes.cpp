@@ -19,7 +19,7 @@ double computeEEDist(const VectorXd &angles) {
 // Tests the proposed state to see if it is valid. Returns true if the proposed
 // state is valid and false otherwise. Reminder: this function has access to the
 // scratchBuf class instance variable if needed.
-bool EEConsRunState::stateIsValid(const VectorXd &state) {
+bool EEConsRunState::acceptProposal(const VectorXd &state) {
   double eedist = computeEEDist(state);
   if (std::isnan(eedist)) {
     std::cerr << "ERROR: NaN value arose in calculation of E2E distance"
@@ -83,7 +83,7 @@ These two facts combined mean that to get an N-atom chain, the user needs to
 specify "numAngles" = N on the command line (unlike the other sims here, where
 the user specifies numAngles = N-2; */
 
-bool VolConsRunState::stateIsValid(const VectorXd &state) {
+bool VolConsRunState::acceptProposal(const VectorXd &state) {
   // For volume-excluded chain, we check if any point's x-position lies in the
   // excluded region. Since our state is two-atom-angles, this is fairly
   // straightforward.
@@ -115,7 +115,7 @@ double VolConsRunState::getWallDist() const { return this->settings.param1; }
 
 ////////////////// Code for angular spring ////////////////////////
 
-bool AngSpringRunState::stateIsValid(const VectorXd&) {
+bool AngSpringRunState::acceptProposal(const VectorXd&) {
   double k = this->getSpringK();
   double curEnergy = 0.0;
   double prevEnergy = 0.0;

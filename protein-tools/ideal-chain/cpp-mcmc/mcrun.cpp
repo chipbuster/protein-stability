@@ -106,27 +106,23 @@ MCRunState::MCRunState(const MCRunSettings &settings,
   this->settings.tagDataset(this->ds);
 }
 
-bool MCRunState::takeStep(VectorXd &curState, RandAlgo &randEngine,
-                          std::normal_distribution<double> &dist) {
-  prevState = curState;
-  // In principle, we could take no arguments and just use the class state. In
-  // practice, probably wiser to decouple simulation advancement from a class.
-  // Instead, call this function using class members as arguments.
-  for (int i = 0; i < curState.rows(); ++i) {
-    auto d = dist(randEngine);
-    // std::cout << "Propose update on " << i << " of " << d << std::endl;
-    curState(i) += d;
-  }
+bool MCRunState::takeStep() {
+  this->prevState = this->curState;
+  this->proposeUpdate(); // Places proposed update in curState
 
-  if (stateIsValid(curState)) {
-    // Accept the step, but apply wrapping to prevent overflows
-    for (int i = 0; i < curState.rows(); ++i) {
-      curState(i) = wrapAngle(curState(i));
-    }
+  if (acceptProposal(this->curState)) {
     return true;
   } else {
     std::swap(curState, prevState); // Reject step by restoring previous state
     return false;
+  }
+}
+
+void MCRunState::proposeUpdate() {
+  for (int i = 0; i < curState.rows(); ++i) {
+    auto d = this->normal_dist(this->e2);
+    curState(i) += d;
+    curState(i) = wrapAngle(curState(i));
   }
 }
 
@@ -138,7 +134,7 @@ void MCRunState::runSimulation() {
       // std::cout << step << '\n';
     }
     for (int _unused = 0; _unused < this->settings.skipPerStep; ++_unused) {
-      if (this->takeStep(this->curState, this->e2, normal_dist)) {
+      if (this->takeStep()) {
         this->accept += 1;
       } else {
         this->reject += 1;

@@ -89,9 +89,9 @@ public:
   MCRunState(const std::string &filename);
   virtual ~MCRunState(){}
 
-  bool takeStep(VectorXd &curstate, RandAlgo &randEngine,
-                std::normal_distribution<double> &dist);
-  virtual bool stateIsValid(const VectorXd &state) = 0;
+  void proposeUpdate();
+  bool takeStep();
+  virtual bool acceptProposal(const VectorXd &state) = 0;
   virtual VectorXd findInitState() const = 0;
 
   void runSimulation();
@@ -99,7 +99,7 @@ public:
 };
 
 class EEConsRunState : public MCRunState {
-  bool stateIsValid(const VectorXd &state) override;
+  bool acceptProposal(const VectorXd &state) override;
   VectorXd findInitState() const override;
 
 public:
@@ -110,7 +110,7 @@ public:
 };
 
 class VolConsRunState : public MCRunState {
-  bool stateIsValid(const VectorXd &state) override;
+  bool acceptProposal(const VectorXd &state) override;
   VectorXd findInitState() const override;
 
 public:
@@ -120,7 +120,7 @@ public:
 };
 
 class AngSpringRunState : public MCRunState {
-  bool stateIsValid(const VectorXd &state) override;
+  bool acceptProposal(const VectorXd &state) override;
   VectorXd findInitState() const override;
 
   public:

@@ -38,7 +38,13 @@ int main(int argc, char **argv) {
   double gaussWidth = std::stod(argv[4]);
   std::string outf = argv[5];
 
-  std::string simType = std::getenv("MC_SIM_TYPE");
+  char* type_ptr = std::getenv("MC_SIM_TYPE");
+  if (!type_ptr){
+    std::cerr << "The envar MC_SIM_TYPE was not specified. Please specify "
+              << " one of EE, VOL, or ANG and rerun the sim" << std::endl;
+    exit(1);
+  }
+  std::string simType = type_ptr;
   if (simType == "EE") {
     double lo_e = std::stod(argv[6]);
     double hi_e = std::stod(argv[7]);
@@ -70,7 +76,8 @@ int main(int argc, char **argv) {
 
     // REPORT_TIME(simState.runSimulation());
   } else {
-    std::cerr << "The variable MC_SIM_TYPE was not specified. Please specify "
+    std::cerr << "The envar MC_SIM_TYPE was invalid. Please specify "
               << " one of EE, VOL, or ANG and rerun the sim" << std::endl;
+    exit(1);
   }
 }
