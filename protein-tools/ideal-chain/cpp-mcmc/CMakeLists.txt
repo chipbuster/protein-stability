@@ -16,3 +16,5 @@ target_link_libraries(mcmc-run PUBLIC ${CONAN_LIBS})
 if(OpenMP_CXX_FOUND)
     target_link_libraries(mcmc-run PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+set_property(TARGET mcmc-run PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)

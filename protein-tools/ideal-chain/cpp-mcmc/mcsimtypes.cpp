@@ -135,6 +135,7 @@ bool AngSpringRunState::acceptProposal(const VectorXd&) {
   } else {
     // Compute acceptance ratios for MH-sampling
     double alpha = exp(prevEnergy - curEnergy);
+    assert(alpha > 0.0 && alpha <= 1.0);
     double u = this->unif_dist(this->e2);
     return u <= alpha;
   }
