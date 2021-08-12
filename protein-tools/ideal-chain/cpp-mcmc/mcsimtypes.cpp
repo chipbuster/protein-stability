@@ -41,7 +41,7 @@ Eigen::VectorXd EEConsRunState::findInitState() const {
   double target_e2e = (r_lo + r_hi) / 2.0F;
 
   double hi = M_PI;
-  double lo = 0.0;
+  double lo = M_PI - 2.0 * M_PI / (nangles + 1);
   double guess = (hi + lo) / 2.0F;
 
   Eigen::VectorXd guessVec = Eigen::VectorXd::Constant(nangles, guess);
