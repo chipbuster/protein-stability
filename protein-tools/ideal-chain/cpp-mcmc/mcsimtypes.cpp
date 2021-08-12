@@ -45,7 +45,7 @@ Eigen::VectorXd EEConsRunState::findInitState() const {
   double guess = (hi + lo) / 2.0F;
 
   Eigen::VectorXd guessVec = Eigen::VectorXd::Constant(nangles, guess);
-  double dist = sqrt(computeEEDist(guessVec));
+  double dist = computeEEDist(guessVec);
   int guesscounter = 0;
   while (dist > r_hi || dist < r_lo) {
     if (dist > target_e2e) {
@@ -60,6 +60,7 @@ Eigen::VectorXd EEConsRunState::findInitState() const {
     dist = computeEEDist(guessVec);
 
     if (guesscounter > 150) {
+      std::cerr << "Failed to find initial EE state for " << r_lo << " " << r_hi << '\n';
       throw std::runtime_error("Couldn't find valid initial state for chain");
     }
   }
