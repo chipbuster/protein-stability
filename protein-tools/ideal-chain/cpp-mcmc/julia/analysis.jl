@@ -1,3 +1,6 @@
+using Base.Threads
+using Statistics
+
 function sim_autocov(mydat)
     (nangles, nsteps) = size(mydat)
 
