@@ -107,6 +107,7 @@ impl GZFlags {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct GZExtraRecord {
   si1: u8,
   si2: u8,
@@ -115,6 +116,7 @@ struct GZExtraRecord {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct GZExtra {
   xlen: u16,
   data: [u8], // Unsafe to access directly--should use member functions
@@ -129,7 +131,7 @@ pub struct GzipData {
   mtime: Option<NonZeroU32>,
   xfl: GZXFlags,
   os: OSType,
-  fextra: (),
+  _fextra: (),
   fname: Option<String>,
   comment: Option<String>,
   crc16: Option<u16>,
@@ -155,7 +157,7 @@ impl GzipData {
       mtime: None,
       xfl: GZXFlags::empty(),
       os: OSType::Unknown,
-      fextra: (),
+      _fextra: (),
       fname: None,
       comment: None,
       crc16: None,

@@ -1,12 +1,12 @@
 use std::collections::HashSet;
-use std::{env, num::NonZeroU64};
+use std::env;
 
 //use compressor::deflate::DeflateStream;
 use compressor::deflate::{
   lz77::encoder::{LZMaximums, LZRules},
   *,
 };
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Mode {
@@ -110,8 +110,8 @@ fn main() {
         .max()
         .unwrap();
       let logn = u64_to_f64(opts.num_syms).unwrap().log2();
-      let Ln = u64_to_f64(longest_backref).unwrap();
-      println!("{}", logn / Ln)
+      let l_n = u64_to_f64(longest_backref).unwrap();
+      println!("{}", logn / l_n)
     }
     Mode::EncSize => {
       let mut num_bits = 0f64;

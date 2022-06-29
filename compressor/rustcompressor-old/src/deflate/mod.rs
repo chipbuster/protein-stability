@@ -30,8 +30,6 @@ pub mod proto;
 mod codepoints;
 mod deflate_header;
 
-use std::convert::TryFrom;
-
 use bitstream_io::huffman::{ReadHuffmanTree, WriteHuffmanTree};
 use bitstream_io::LittleEndian;
 

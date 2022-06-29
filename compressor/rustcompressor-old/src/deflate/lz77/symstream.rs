@@ -1,8 +1,7 @@
 use super::super::{BlockData, DeflateStream, DeflateSym, LZ77SymStream, LZSym};
 use super::encoder::{do_lz77, LZRules};
 use super::proto::deflatesym_to_proto;
-use num::Bounded;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 
 impl LZ77SymStream {
   pub fn from_deflatestream(stream: &DeflateStream) -> Self {
