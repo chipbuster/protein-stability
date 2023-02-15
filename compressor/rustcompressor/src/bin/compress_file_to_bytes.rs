@@ -1,7 +1,6 @@
 use std::env;
 use std::process;
 
-//use compressor::deflate::DeflateStream;
 use compressor::{deflate::*, gzip::GzipData};
 
 fn main() {
@@ -18,15 +17,10 @@ fn main() {
 
   let infilename = &args[1];
   let outfilename = &args[2];
-  let method = args.get(3).map(|x| &x[..]).unwrap_or("deflate");
-  let gzip = args.get(4).map(|x| &x[..]).unwrap_or("true") == "true";
+  let gzip = args.get(3).map(|x| &x[..]).unwrap_or("true") == "true";
 
   let bytes = std::fs::read(infilename).unwrap();
-
-  let stream = match method {
-    "deflate" => DeflateStream::new_from_raw_bytes_deflate(&bytes),
-    _ => panic!("Unknown stream type"),
-  };
+  let stream = DeflateStream::new_from_raw_bytes_deflate(&bytes);
 
   let z: Vec<u8> = Vec::new();
   let out = stream.write_to_bitstream(z).unwrap();

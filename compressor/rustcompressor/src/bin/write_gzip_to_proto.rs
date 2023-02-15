@@ -15,7 +15,7 @@ fn main() -> Result<(), std::io::Error> {
 
   if args.len() != 3 {
     println!("Usage: {} <compressed-in> <out>", &args[0]);
-    println!("\tDumps a JSON representation of a compressed file to disk for further examination");
+    println!("\tDumps a proto representation of a compressed file to disk for further examination");
     println!("\t<compressed-in> can be either a GZIP file or raw DEFLATE data");
     process::exit(1);
   }
