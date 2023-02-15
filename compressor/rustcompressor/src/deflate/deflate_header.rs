@@ -175,7 +175,7 @@ pub fn write_header<W: Write>(
   let last_rco_index: u16 = last_rco_index.try_into().unwrap();
 
   /* These values come from the RFC 1951 rules (see module docs). We dont' check
-  the max range because it differs based on offset-encodings and will be panic-ed
+  the max range because it used to differ based on offset-encodings and will be panic-ed
   on if it exceeds the range of bits in the BitWriter */
   let hlit = largest_length_code + 1 - 257;
   let hdist = largest_dist_code + 1 - 1;

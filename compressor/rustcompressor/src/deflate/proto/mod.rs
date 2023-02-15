@@ -1,6 +1,8 @@
-use crate::deflate::codepoints::{MAX_DIST_CODE, MIN_DIST_CODE, OFFSET_SIGIL};
+use crate::deflate::codepoints::{MAX_DIST_CODE, MIN_DIST_CODE};
 use crate::deflate::*;
 use std::{convert::TryFrom, unimplemented};
+
+use super::codepoints::MAX_LENGTH_CODE;
 
 pub mod proto {
   pub type TEST = i32;
@@ -126,7 +128,7 @@ impl proto::CompressedBlock {
   fn validate_lenlit_code(code: &std::collections::HashMap<u32, u32>) -> String {
     let mut log = String::new();
     for key in code.keys() {
-      if !(0..=OFFSET_SIGIL).contains(&u16::try_from(*key).unwrap()) {
+      if !(0..=MAX_LENGTH_CODE).contains(&u16::try_from(*key).unwrap()) {
         log.push_str(&format!("Invalid lenlit code {}", &key));
       }
     }

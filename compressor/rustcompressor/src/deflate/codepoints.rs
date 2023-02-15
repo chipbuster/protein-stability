@@ -35,24 +35,12 @@ previously handled separately (leading to a fair amount of code duplication). */
            8   3  17-24   18   8    513-768   28   13 16385-24576
            9   3  25-32   19   8   769-1024   29   13 24577-32768
 
-    Additionally, the offset-backreference encoder uses length codepoint
-    286 to indicate the presence of an offset-backreference. (The maximum
-    length codepoint as restricted by the max size of HLIT for specifying codes
-    is 287.)
-
-    The format for this type of backreference is:
-
-    286 (encoded with the length/literal tree)
-    Literal offset (encoded with the length/literal tree)
-    Length (as encoded by a codepoint)
-    Distance (as encoded by a codepoint)
 */
 
 use bitstream_io::{
   BitRead, BitReader, BitWrite, BitWriter, HuffmanRead, HuffmanWrite, LittleEndian,
 };
 use once_cell::sync::Lazy;
-use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::vec::Vec;
 
@@ -64,7 +52,6 @@ pub const MIN_DIST_CODE: u16 = 0;
 pub const MAX_DIST_CODE: u16 = 29;
 pub const MIN_LENGTH_CODE: u16 = 257;
 pub const MAX_LENGTH_CODE: u16 = 285;
-pub const OFFSET_SIGIL: u16 = 286;
 pub const EOF_CODE: u16 = 256;
 
 pub static DEFAULT_CODEPOINTS: Lazy<CodepointEncoder> = Lazy::new(CodepointEncoder::new);
@@ -114,7 +101,6 @@ impl Codepoint {
 pub struct CodepointEncoder {
   length_codepoints: Vec<Codepoint>,
   dist_codepoints: Vec<Codepoint>,
-  _offset_codepoint: Codepoint,
 }
 
 impl CodepointEncoder {
@@ -187,12 +173,9 @@ impl CodepointEncoder {
     len_pts.push(Codepoint::new(284, 5, 227));
     len_pts.push(Codepoint::new(285, 0, 258));
 
-    let offsetcp = Codepoint::new(259, 0, 259);
-
     Self {
       length_codepoints: len_pts,
       dist_codepoints: dist_pts,
-      _offset_codepoint: offsetcp,
     }
   }
 
@@ -201,8 +184,6 @@ impl CodepointEncoder {
       self.dist_codepoints[code as usize]
     } else if (MIN_LENGTH_CODE..=MAX_LENGTH_CODE).contains(&code) {
       self.length_codepoints[(code - MIN_LENGTH_CODE) as usize]
-    } else if code == OFFSET_SIGIL {
-      self._offset_codepoint
     } else {
       panic!("Invalid code passed to get_codepoint: {}", code);
     }
@@ -256,25 +237,12 @@ impl CodepointEncoder {
     Ok(())
   }
 
-  pub fn write_offset<W: Write>(
-    &self,
-    offset: u8,
-    tree: &DeflateWriteTree,
-    bit_sink: &mut BitWriter<W, LittleEndian>,
-  ) -> Result<(), DeflateWriteError> {
-    // We could look up the codepoint for this, but it's a formality.
-    bit_sink.write_huffman(tree, OFFSET_SIGIL)?;
-    bit_sink.write_huffman(tree, offset as u16)?;
-    Ok(())
-  }
-
   pub fn read_sym<R: Read>(
     &self,
     bit_src: &mut BitReader<R, LittleEndian>,
     length_tree: &[DeflateReadTree],
     dist_tree: &[DeflateReadTree],
     code: Option<u16>,
-    use_offset: bool,
   ) -> Result<DeflateSym, DeflateReadError> {
     let code = match code {
       None => bit_src.read_huffman(length_tree)?,
@@ -290,35 +258,6 @@ impl CodepointEncoder {
       }
       too_high => Err(DeflateReadError::CodeOutOfRange(too_high)),
     }
-  }
-
-  /* The following three functions read the appropriate type of codepoint-based
-  info out of the provided bitstream. In some cases, it is impossible to call
-  this function without already having read the first code out of the stream--in
-  these cases, the code argument is provided to indicate that the first code
-  has already been partially read. If the argument is None, it is assumed that
-  no data from this sym has been read yet. */
-
-  fn read_offset<R: Read>(
-    &self,
-    bit_src: &mut BitReader<R, LittleEndian>,
-    length_tree: &[DeflateReadTree],
-    code: Option<u16>,
-  ) -> Result<u16, DeflateReadError> {
-    if let Some(val) = code {
-      assert_eq!(
-        val, OFFSET_SIGIL,
-        "Attempted to read offset with non-offset code."
-      );
-    } else {
-      let val = bit_src.read_huffman(length_tree)?;
-      assert_eq!(
-        val, OFFSET_SIGIL,
-        "Attempted to read offset with non-offset code."
-      );
-    };
-    // Need to read offset here
-    Ok(bit_src.read_huffman(length_tree)?)
   }
 
   fn read_length<R: Read>(

@@ -2,25 +2,6 @@
 1951 (https://tools.ietf.org/html/rfc1951). Includes the reference
 implementation of the compressor suggested at the end of the RFC. */
 
-/* Note: this implements a custom DEFLATE extension: an offset backref. This is
-similar to a DEFLATE backref, but the entire sequence is offset by a fixed
-amount, modulo 255.
-
-That is, to compute the expansion of an offset backref <off, length, dist>, do
-the same thing with the <length, dist> values as you would for an ordinary DEFLATE
-backreference, then add offset (mod 255) to every element of the new sequence.
-
-The presence of an offset backref is indicated in the compressed sequence by
-the symbol value 286 in the length/literal encoding. This is followed by the
-offset value encoded directly in the length/literal encoding, then the
-length and distance as is found in the standard DEFLATE encoding. We use 286
-because it is invalid in normal DEFLATE (thus there is no possibility of confusing
-it with a standard DEFLATE file), but it can still be specified by the HLIT tree
-encodings specified in RFC 1951.
-
-For simplicity, offset encoding is always used with a dynamic huffman code.
-*/
-
 pub mod decoder;
 pub mod default_data;
 pub mod encoder;

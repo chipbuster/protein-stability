@@ -1,6 +1,6 @@
 //! Contains the functions, types, and aliases necessary to do the nasty work of
 /// actually generating lz77 streams (ve)
-use crate::deflate::codepoints::{DEFAULT_CODEPOINTS, OFFSET_SIGIL};
+use crate::deflate::codepoints::DEFAULT_CODEPOINTS;
 use crate::deflate::default_data::default_huffcode::DEFAULT_DIST_CODE;
 use crate::deflate::{CodeDict, DeflateSym, LZSym};
 use crate::huff_tree::huffcode_from_freqs;

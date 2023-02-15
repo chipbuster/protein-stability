@@ -30,8 +30,6 @@ pub enum DeflateReadError {
   UnexpectedEndOfData,
   #[error("The input stream was not completely consumed")]
   StreamNotConsumed,
-  #[error("Attempted to decode an offset DEFLATE block with offsets turned off")]
-  UnexpectedOffsetSigil,
   #[error("Tried to go back {0} symbols, but the stream is only {1} large")]
   BackrefPastStart(u16, usize),
   #[error("Value out of range of valid encoded values: {0}")]
@@ -78,7 +76,6 @@ fn compressed_block_from_stream<R: Read>(
   bit_src: &mut BitReader<R, LittleEndian>,
   length_codes: CodeDict<u16>,
   dist_codes: CodeDict<u16>,
-  use_offset: bool,
 ) -> Result<CompressedBlock, DeflateReadError> {
   let mut contents = Vec::new();
 
@@ -94,13 +91,7 @@ fn compressed_block_from_stream<R: Read>(
   .expect("Could not compile a dist tree");
 
   loop {
-    let sym = DEFAULT_CODEPOINTS.read_sym(
-      bit_src,
-      length_tree.as_ref(),
-      dist_tree.as_ref(),
-      None,
-      use_offset,
-    );
+    let sym = DEFAULT_CODEPOINTS.read_sym(bit_src, length_tree.as_ref(), dist_tree.as_ref(), None);
     match sym {
       Ok(DeflateSym::EndOfBlock) => {
         return Ok(CompressedBlock {
@@ -158,7 +149,6 @@ fn fixed_block_from_stream<R: Read>(
     bit_src,
     DEFAULT_LENGTH_CODE.clone(),
     DEFAULT_DIST_CODE.clone(),
-    false,
   )
 }
 
@@ -169,44 +159,20 @@ fn dynamic_block_from_stream<R: Read>(
   debug_log!("Decompressing dynamic block\n");
   let (length_dict, dist_dict) = read_header(bit_src)?;
 
-  compressed_block_from_stream(bit_src, length_dict, dist_dict, false)
-}
-
-/// Reads a DEFLATE block encoded with custom trees and potentially using OFFSET
-/// encoding out of the given bitstream
-fn offset_block_from_stream<R: Read>(
-  bit_src: &mut BitReader<R, LittleEndian>,
-) -> Result<CompressedBlock, DeflateReadError> {
-  debug_log!("Decompressing offset block\n");
-  let (length_dict, dist_dict) = read_header(bit_src)?;
-
-  compressed_block_from_stream(bit_src, length_dict, dist_dict, true)
+  compressed_block_from_stream(bit_src, length_dict, dist_dict)
 }
 
 impl BlockData {
   pub fn new_from_compressed_stream<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
-    use_offset: bool,
   ) -> Result<Self, DeflateReadError> {
     let btype = bit_src.read::<u8>(2)?;
     debug_log!("Block type is {}\n", btype);
-    if use_offset {
-      assert!(
-        btype == 0b10,
-        "Requested to decode with offset-backreferences, but block is not dynamically encoded!"
-      );
-    }
 
     match btype {
       0b00 => Ok(Self::Raw(uncompressed_block_from_stream(bit_src)?)),
       0b01 => Ok(Self::Fix(fixed_block_from_stream(bit_src)?)),
-      0b10 => {
-        if use_offset {
-          Ok(Self::Dyn(offset_block_from_stream(bit_src)?))
-        } else {
-          Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?))
-        }
-      }
+      0b10 => Ok(Self::Dyn(dynamic_block_from_stream(bit_src)?)),
       0b11 => Err(DeflateReadError::ReservedValueUsed),
       _ => {
         println!("type = {}", btype);
@@ -219,11 +185,10 @@ impl BlockData {
 impl Block {
   pub fn new_from_compressed_stream<R: Read>(
     bit_src: &mut BitReader<R, LittleEndian>,
-    use_offset: bool,
   ) -> Result<Self, DeflateReadError> {
     let final_block = bit_src.read_bit()?;
     debug_log!("Got final block bit {}\n", final_block);
-    let data = BlockData::new_from_compressed_stream(bit_src, use_offset)?;
+    let data = BlockData::new_from_compressed_stream(bit_src)?;
     Ok(Block {
       bfinal: final_block,
       data,
@@ -242,19 +207,16 @@ impl CompressedBlock {
 }
 
 impl DeflateStream {
-  pub fn new_from_offset_encoded_bits<R: Read>(src: R) -> Result<Self, DeflateReadError> {
-    Self::new_from_encoded_bits(src, true)
-  }
   pub fn new_from_deflate_encoded_bits<R: Read>(src: R) -> Result<Self, DeflateReadError> {
-    Self::new_from_encoded_bits(src, false)
+    Self::new_from_encoded_bits(src)
   }
 
-  fn new_from_encoded_bits<R: Read>(src: R, use_offset: bool) -> Result<Self, DeflateReadError> {
+  fn new_from_encoded_bits<R: Read>(src: R) -> Result<Self, DeflateReadError> {
     let mut bit_src = BitReader::<R, LittleEndian>::new(src);
     let mut blocks = Vec::new();
     let mut has_more_blocks = true;
     while has_more_blocks {
-      let res = Block::new_from_compressed_stream(&mut bit_src, use_offset)?;
+      let res = Block::new_from_compressed_stream(&mut bit_src)?;
       has_more_blocks = !res.bfinal;
       blocks.push(res);
     }

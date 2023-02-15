@@ -56,14 +56,6 @@ impl CompressedBlock {
     Self::from_lz77_stream(data)
   }
 
-  /// Generate a new CompressedBlock by performing LZ77 factorization with the
-  /// custom offset protocol described above.
-  pub fn bytes_to_lz77_offset(data: &[u8]) -> Self {
-    let rules = LZRules::new(LZMaximums::default());
-    let data = do_lz77(data, &rules);
-    Self::from_lz77_stream(data)
-  }
-
   /// A variant that allows exact controls over the parameters passed to do_lz77
   pub fn bytes_to_lz77_control(data: &[u8], lzrules: &LZRules) -> Self {
     let data = do_lz77(data, lzrules);
@@ -157,15 +149,6 @@ impl DeflateStream {
     }
   }
 
-  pub fn new_from_raw_bytes_offset(data: &[u8]) -> Self {
-    Self {
-      blocks: vec![Block {
-        bfinal: true,
-        data: BlockData::Dyn(CompressedBlock::bytes_to_lz77_offset(&data)),
-      }],
-    }
-  }
-
   /// Exposes the internal options used by the bytes_to_lz77_control method on
   /// CompressedBlock, allowing for manual control of LZ77 parameters.
   pub fn new_from_bytes_control(data: &[u8], lzrules: &LZRules) -> Self {
@@ -213,28 +196,6 @@ mod tests {
     let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
     let data = init_str.to_owned().into_bytes();
     let comp = CompressedBlock::bytes_to_lz77(&data);
-    let mut rt = Vec::new();
-    comp.into_decompressed_bytes(&mut rt).unwrap();
-    let fini_str = std::str::from_utf8(&rt).unwrap();
-    assert_eq!(init_str, fini_str);
-  }
-
-  #[test]
-  fn round_trip_offset_1() {
-    let init_str = "hellohellohelloIamGeronimohello";
-    let data = init_str.to_owned().into_bytes();
-    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let mut rt = Vec::new();
-    comp.into_decompressed_bytes(&mut rt).unwrap();
-    let fini_str = std::str::from_utf8(&rt).unwrap();
-    assert_eq!(init_str, fini_str);
-  }
-
-  #[test]
-  fn round_trip_offset_2() {
-    let init_str = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.";
-    let data = init_str.to_owned().into_bytes();
-    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
     let mut rt = Vec::new();
     comp.into_decompressed_bytes(&mut rt).unwrap();
     let fini_str = std::str::from_utf8(&rt).unwrap();
