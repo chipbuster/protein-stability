@@ -50,7 +50,6 @@ impl LZ77SymStream {
         match x {
           LZSym::Literal(_) => 1u64,
           LZSym::Backreference(l, _) => (*l).try_into().ok().unwrap(),
-          LZSym::OffsetBackref(_, l, _) => (*l).try_into().ok().unwrap(),
           LZSym::EndOfBlock => 0,
         }
       })
@@ -68,6 +67,5 @@ fn deflatesym_to_u64sym(x: DeflateSym) -> LZSym<u64> {
     LZSym::EndOfBlock => LZSym::EndOfBlock,
     LZSym::Literal(x) => LZSym::Literal(x),
     LZSym::Backreference(l, d) => LZSym::Backreference(u64::from(l), u64::from(d)),
-    LZSym::OffsetBackref(o, l, d) => LZSym::OffsetBackref(o, u64::from(l), u64::from(d)),
   }
 }

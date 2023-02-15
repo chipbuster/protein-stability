@@ -46,9 +46,6 @@ pub fn decode_lz77(data: &[DeflateSym], decoded: &mut Vec<u8>) -> Result<(), Def
       DeflateSym::Backreference(length, distance) => {
         expand_backref(*length, *distance, decoded, 0)?;
       }
-      DeflateSym::OffsetBackref(offset, length, distance) => {
-        expand_backref(*length, *distance, decoded, *offset)?;
-      }
       DeflateSym::EndOfBlock => break,
     }
   }

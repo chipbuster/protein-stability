@@ -52,7 +52,6 @@ pub enum LZSym<T> {
   EndOfBlock,
   Literal(u8),
   Backreference(T, T),
-  OffsetBackref(u8, T, T),
 }
 
 type DeflateSym = LZSym<u16>;
@@ -106,34 +105,18 @@ mod test {
     decoded.into_byte_stream().unwrap()
   }
 
-  #[cfg(test)]
-  // Take some string of bytes and roundtrip it down to the bit level
-  fn roundtrip_bitlevel_offset(data: &Vec<u8>) -> Vec<u8> {
-    let symbols = DeflateStream::new_from_raw_bytes_offset(data);
-    let sink = Vec::new();
-    let encoded = symbols.write_to_bitstream(sink).unwrap();
-    let decoded = DeflateStream::new_from_offset_encoded_bits(&encoded[..]).unwrap();
-    decoded.into_byte_stream().unwrap()
-  }
-
   #[test]
   pub fn toplevel_roundtrip_1() {
     let data = "hellohellohelloIamGeronimohello".into();
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
     assert_eq!(rt_deflate, data);
-
-    let rt_offset = roundtrip_bitlevel_offset(&data);
-    assert_eq!(rt_offset, data);
   }
 
   #[test]
   pub fn toplevel_roundtrip_2() {
     let data = "Entire any had depend and figure winter. Change stairs and men likely wisdom new happen piqued six. Now taken him timed sex world get. Enjoyed married an feeling delight pursuit as offered. As admire roused length likely played pretty to no. Means had joy miles her merry solid order.".into();
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
-    let rt_offset = roundtrip_bitlevel_offset(&data);
-
     assert_eq!(rt_deflate, data);
-    assert_eq!(rt_offset, data);
   }
 
   #[test]
@@ -142,10 +125,7 @@ mod test {
       0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
     ];
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
-    let rt_offset = roundtrip_bitlevel_offset(&data);
-
     assert_eq!(rt_deflate, data);
-    assert_eq!(rt_offset, data);
   }
 
   #[test]
@@ -156,9 +136,6 @@ mod test {
     }
     data.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let rt_deflate = roundtrip_bitlevel_deflate(&data);
-    let rt_offset = roundtrip_bitlevel_offset(&data);
-
     assert_eq!(rt_deflate, data);
-    assert_eq!(rt_offset, data);
   }
 }

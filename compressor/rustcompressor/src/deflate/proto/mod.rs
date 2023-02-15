@@ -11,16 +11,11 @@ pub mod proto {
 impl DeflateSym {
   fn underlying(self) -> proto::deflate_sym::Sym {
     use proto::deflate_sym::Sym;
-    use proto::{Backref, Literal, OffsetBackref};
+    use proto::{Backref, Literal};
     match self {
       Self::EndOfBlock => Sym::Lit(Literal { value: 255 }),
       Self::Literal(v) => Sym::Lit(Literal { value: v.into() }),
       Self::Backreference(length, dist) => Sym::Backref(Backref {
-        length: length.into(),
-        distance: dist.into(),
-      }),
-      Self::OffsetBackref(off, length, dist) => Sym::Offset(OffsetBackref {
-        offset: off.into(),
         length: length.into(),
         distance: dist.into(),
       }),
@@ -114,19 +109,12 @@ impl proto::Backref {
   }
 }
 
-impl proto::OffsetBackref {
-  pub fn validate(&self) -> String {
-    unimplemented!()
-  }
-}
-
 impl proto::DeflateSym {
   pub fn validate(&self) -> String {
     if let Some(x) = &self.sym {
       match x {
         proto::deflate_sym::Sym::Lit(x) => x.validate(),
         proto::deflate_sym::Sym::Backref(x) => x.validate(),
-        proto::deflate_sym::Sym::Offset(x) => x.validate(),
       }
     } else {
       "DeflateSym enum not valid".to_owned()

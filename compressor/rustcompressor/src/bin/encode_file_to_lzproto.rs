@@ -71,7 +71,7 @@ three values:
     .open(outfilename)
     .unwrap_or_else(|_| panic!("Could not open output file {}", outfilename));
 
-  let rules = LZRules::new(false, maxmatch);
+  let rules = LZRules::new(maxmatch);
 
   let stream = LZ77SymStream::from_uncompressed_bytes(&bytes[..], &rules);
   let protomsg = stream.to_cmsg();

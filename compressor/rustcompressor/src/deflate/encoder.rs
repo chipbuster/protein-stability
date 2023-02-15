@@ -33,11 +33,6 @@ impl DeflateSym {
         DEFAULT_CODEPOINTS.write_length(*len, length_tree, bit_sink)?;
         DEFAULT_CODEPOINTS.write_dist(*dist, dist_tree, bit_sink)?;
       }
-      DeflateSym::OffsetBackref(offset, len, dist) => {
-        DEFAULT_CODEPOINTS.write_offset(*offset, length_tree, bit_sink)?;
-        DEFAULT_CODEPOINTS.write_length(*len, length_tree, bit_sink)?;
-        DEFAULT_CODEPOINTS.write_dist(*dist, dist_tree, bit_sink)?;
-      }
     }
     Ok(())
   }
@@ -56,7 +51,7 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization on a given data block
   /// using the procedure presented in Section 4 of RFC 1951
   pub fn bytes_to_lz77(data: &[u8]) -> Self {
-    let rules = LZRules::new(false, LZMaximums::default());
+    let rules = LZRules::new(LZMaximums::default());
     let data = do_lz77(data, &rules);
     Self::from_lz77_stream(data)
   }
@@ -64,7 +59,7 @@ impl CompressedBlock {
   /// Generate a new CompressedBlock by performing LZ77 factorization with the
   /// custom offset protocol described above.
   pub fn bytes_to_lz77_offset(data: &[u8]) -> Self {
-    let rules = LZRules::new(true, LZMaximums::default());
+    let rules = LZRules::new(LZMaximums::default());
     let data = do_lz77(data, &rules);
     Self::from_lz77_stream(data)
   }
@@ -247,72 +242,6 @@ mod tests {
   }
 
   #[test]
-  fn offset_should_create_offsetbr_1() {
-    let data = vec![
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-    ];
-    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let symstream = comp.data;
-    let answer = [
-      DeflateSym::Literal(0),
-      DeflateSym::Literal(1),
-      DeflateSym::Literal(2),
-      DeflateSym::Literal(3),
-      DeflateSym::Literal(4),
-      DeflateSym::Literal(5),
-      DeflateSym::Literal(6),
-      DeflateSym::Literal(7),
-      DeflateSym::Literal(8),
-      DeflateSym::OffsetBackref(9, 8, 8),
-      DeflateSym::Literal(18),
-      DeflateSym::EndOfBlock,
-    ];
-    assert_eq!(symstream, answer);
-  }
-
-  #[test]
-  fn simple_offsetbr_roundtrip() {
-    let data = vec![
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-    ];
-    let comp = CompressedBlock::bytes_to_lz77_offset(&data);
-    let mut rt = Vec::new();
-    comp.into_decompressed_bytes(&mut rt).unwrap();
-    assert_eq!(data, rt);
-  }
-
-  #[test]
-  fn round_trip_offset() {
-    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
-    for i in 0..10 {
-      testvec.push(i);
-    }
-    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
-    let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
-    println!("{:?}", comp.data);
-    assert!(comp.data.iter().any(|x| match x {
-      DeflateSym::OffsetBackref(_, _, _) => true,
-      _ => false,
-    }));
-    let mut rt = Vec::new();
-    comp.into_decompressed_bytes(&mut rt).unwrap();
-
-    if rt != testvec {
-      println!(
-        "Compressed block: {:?}",
-        CompressedBlock::bytes_to_lz77_offset(&testvec)
-      );
-      println!("Result: {:?}", rt);
-      assert_eq!(rt, testvec);
-    }
-    let mut rng = rand::thread_rng();
-    let mut testvec = Vec::new();
-    for _ in 0..1024 {
-      testvec.push(rng.gen::<u8>());
-    }
-  }
-
-  #[test]
   fn round_trip_randomlike_deflate() {
     let mut rng = rand::thread_rng();
     let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
@@ -322,35 +251,6 @@ mod tests {
     testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
     let comp = CompressedBlock::bytes_to_lz77(&testvec);
 
-    let mut rt = Vec::new();
-    comp.into_decompressed_bytes(&mut rt).unwrap();
-
-    if rt != testvec {
-      println!(
-        "Compressed block: {:?}",
-        CompressedBlock::bytes_to_lz77(&testvec)
-      );
-      println!("Result: {:?}", rt);
-      assert_eq!(rt, testvec);
-    }
-  }
-
-  #[test]
-  /// Make sure that, even past a huge glob of claptrap, we're still triggering
-  /// the offset detector.
-  fn round_trip_randomlike_offset() {
-    let mut rng = rand::thread_rng();
-    let mut testvec = vec![1, 2, 3, 4, 3, 2, 1];
-    for _ in 0..100 {
-      testvec.push(rng.gen::<u8>());
-    }
-    testvec.append(&mut vec![15, 16, 17, 18, 17, 16, 15]);
-    let comp = CompressedBlock::bytes_to_lz77_offset(&testvec);
-
-    assert!(comp.data.iter().any(|x| match x {
-      DeflateSym::OffsetBackref(_, _, _) => true,
-      _ => false,
-    }));
     let mut rt = Vec::new();
     comp.into_decompressed_bytes(&mut rt).unwrap();
 

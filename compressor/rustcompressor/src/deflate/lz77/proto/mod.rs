@@ -9,18 +9,13 @@ pub mod proto {
 
 fn deflatesym_to_underlying(s: &LZSym<u64>) -> proto::deflate_sym::Sym {
   use proto::deflate_sym::Sym;
-  use proto::{Backref, Literal, OffsetBackref};
+  use proto::{Backref, Literal};
   match s {
     LZSym::EndOfBlock => Sym::Lit(Literal { value: 255 }),
     LZSym::Literal(v) => Sym::Lit(Literal {
       value: u64::from(*v),
     }),
     LZSym::Backreference(length, dist) => Sym::Backref(Backref {
-      length: *length,
-      distance: *dist,
-    }),
-    LZSym::OffsetBackref(off, length, dist) => Sym::Offset(OffsetBackref {
-      offset: u64::from(*off),
       length: *length,
       distance: *dist,
     }),
@@ -33,12 +28,6 @@ pub fn deflatesym_to_proto<T: TryInto<u64> + Copy>(s: &LZSym<T>) -> Option<proto
       let ln = TryInto::<u64>::try_into(*l).ok()?;
       let dn = TryInto::<u64>::try_into(*d).ok()?;
       LZSym::Backreference(ln, dn)
-    }
-    LZSym::OffsetBackref(o, l, d) => {
-      let on = *o;
-      let ln = TryInto::<u64>::try_into(*l).ok()?;
-      let dn = TryInto::<u64>::try_into(*d).ok()?;
-      LZSym::OffsetBackref(on, ln, dn)
     }
     // Have to write these explicitly to perform type conversions
     LZSym::EndOfBlock => LZSym::EndOfBlock,

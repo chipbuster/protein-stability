@@ -61,13 +61,12 @@ impl Default for LZMaximums {
 /// A collection of arguments that controls how the
 #[derive(Debug)]
 pub struct LZRules {
-  use_offset: bool,
   limits: LZMaximums,
 }
 
 impl LZRules {
-  pub fn new(use_offset: bool, limits: LZMaximums) -> Self {
-    Self { use_offset, limits }
+  pub fn new(limits: LZMaximums) -> Self {
+    Self { limits }
   }
 }
 
@@ -139,12 +138,7 @@ fn find_longest_match(
 
   for m in match_indices {
     let i = **m;
-    let len = if lzrules.use_offset {
-      let offset = data[start].wrapping_sub(data[i]);
-      longest_match_at_index(data, start, i, offset, lzrules)
-    } else {
-      longest_match_at_index(data, start, i, 0, lzrules)
-    };
+    let len = longest_match_at_index(data, start, i, 0, lzrules);
     if len > max_len {
       max_len = len;
       max_index = i;
@@ -243,52 +237,16 @@ where
   };
 
   debug_assert!(mdist <= max_dist);
-  if lzrules.use_offset {
-    let offset = data[index].wrapping_sub(data[index - mdist]);
-    debug_assert_eq!(data[index], data[index - mdist].wrapping_add(offset));
-    output.push(LZSym::<SizeTy>::OffsetBackref(
-      offset,
-      unwrap_convert(mlen),
-      unwrap_convert(mdist),
-    ))
-  } else {
-    debug_assert_eq!(
-      data[index - mdist..index - mdist + mlen],
-      data[index..index + mlen]
-    );
-    output.push(LZSym::<SizeTy>::Backreference(
-      unwrap_convert(mlen),
-      unwrap_convert(mdist),
-    ));
-  }
+  debug_assert_eq!(
+    data[index - mdist..index - mdist + mlen],
+    data[index..index + mlen]
+  );
+  output.push(LZSym::<SizeTy>::Backreference(
+    unwrap_convert(mlen),
+    unwrap_convert(mdist),
+  ));
 
   Some((n_consumed, output))
-}
-
-/// Find an offset backref for this location in the input. These are custom backrefs:
-/// <offset, length, distance> pairs. Returns a tuple containing the symbol(s) to add
-/// to the output along with a usize indicating how far to advance the input stream.
-// This function is similar to find_deflate_backref, but the differences are fairly crucial
-fn find_offset_backref<SizeTy: TryFrom<usize>>(
-  match_table: &mut BackrefMap<(u8, u8)>,
-  data: &[u8],
-  index: usize,
-  lzrules: &LZRules,
-) -> Option<(usize, Vec<LZSym<SizeTy>>)> {
-  let compute_match_stem = |data: &[u8], index: usize| {
-    let base = data[index];
-    (
-      data[index + 1].wrapping_sub(base),
-      data[index + 2].wrapping_sub(base),
-    )
-  };
-
-  let myrules = LZRules {
-    use_offset: true,
-    limits: lzrules.limits,
-  };
-
-  find_backref(match_table, data, index, compute_match_stem, &myrules)
 }
 
 /// Find a DEFLATE backref for this location in the input. These are the backrefs used
@@ -303,7 +261,6 @@ fn find_deflate_backref<'a, SizeTy: TryFrom<usize>>(
   let compute_match_stem = |d: &[u8], i: usize| (d[i], d[i + 1], d[i + 2]);
 
   let myrules = LZRules {
-    use_offset: false,
     limits: lzrules.limits,
   };
 
@@ -398,22 +355,9 @@ where
 
     let (deflate_len, deflate_syms) =
       find_deflate_backref(&mut deflate_match_table, &data, index, lzrules);
-    let offset_match = if lzrules.use_offset {
-      find_offset_backref(&mut offset_match_table, &data, index, lzrules)
-    } else {
-      None
-    };
 
     // Select the match to use based on input options and match lengths
-    let (match_len, mut match_syms) = if let Some((off_len, off_syms)) = offset_match {
-      if off_len > deflate_len + 3 {
-        (off_len, off_syms)
-      } else {
-        (deflate_len, deflate_syms)
-      }
-    } else {
-      (deflate_len, deflate_syms)
-    };
+    let (match_len, mut match_syms) = (deflate_len, deflate_syms);
 
     index += match_len;
     output.append(&mut match_syms);
@@ -440,12 +384,6 @@ fn compute_lengthlit_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
         let lc = &DEFAULT_CODEPOINTS.get_codepoint_for_length(*length).code();
         *freqs.entry(*lc).or_default() += 1;
       }
-      DeflateSym::OffsetBackref(offset, length, _) => {
-        let lc = &DEFAULT_CODEPOINTS.get_codepoint_for_length(*length).code();
-        *freqs.entry(*lc).or_default() += 1;
-        *freqs.entry(*offset as u16).or_default() += 1;
-        *freqs.entry(OFFSET_SIGIL).or_default() += 1;
-      }
     }
   }
   freqs
@@ -456,7 +394,7 @@ fn compute_dist_freq(data: &[DeflateSym]) -> HashMap<u16, usize> {
   for x in data.iter() {
     match x {
       DeflateSym::Literal(_) | DeflateSym::EndOfBlock => continue,
-      DeflateSym::Backreference(_, dist) | DeflateSym::OffsetBackref(_, _, dist) => {
+      DeflateSym::Backreference(_, dist) => {
         let dc = &DEFAULT_CODEPOINTS.get_codepoint_for_dist(*dist).code();
         *freqs.entry(*dc).or_default() += 1;
       }
@@ -484,24 +422,9 @@ pub fn compute_codes(data: &[DeflateSym]) -> (CodeDict<u16>, CodeDict<u16>) {
 // More tests for encoding can be found in deflate::encoder
 #[cfg(test)]
 mod tests {
-  use std::iter::FromIterator;
-  use std::ops::Not;
-
   #[allow(unused_imports)]
   use super::*;
-  #[test]
-  fn simple_offset_backref() {
-    let data = vec![
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-    ];
-    let mut match_table = HashMap::new();
-    match_table.insert((1, 2), VecDeque::from_iter(vec![4, 2, 1, 0].into_iter()));
-
-    let rules = LZRules::new(true, LZMaximums::default());
-
-    find_offset_backref::<u16>(&mut match_table, &data, 4, &rules)
-      .expect("Did not find offset in an input where there should have been one!");
-  }
+  use std::ops::Not;
 
   #[test]
   fn check_unbounded_max_dist() {
@@ -517,7 +440,7 @@ mod tests {
     data.append(&mut vec![NOMATCH_SYM; MATCH_DIST]);
     data.append(&mut vec![MATCH_SYM; MATCH_LEN]);
 
-    let rules = LZRules::new(true, LZMaximums::max());
+    let rules = LZRules::new(LZMaximums::max());
     let syms = do_lz77::<usize>(&data, &rules);
 
     // Find a backref within syms that exceeds the default length/distance.

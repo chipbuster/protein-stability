@@ -288,17 +288,6 @@ impl CodepointEncoder {
         let dist = self.read_dist(bit_src, dist_tree, None)?;
         Ok(DeflateSym::Backreference(length, dist))
       }
-      OFFSET_SIGIL => {
-        if use_offset {
-          let offset = self.read_offset(bit_src, length_tree, Some(code))?;
-          let length = self.read_length(bit_src, length_tree, None)?;
-          let dist = self.read_dist(bit_src, dist_tree, None)?;
-          let ofs: u8 = offset.try_into().expect("Offset does not fit in u8");
-          Ok(DeflateSym::OffsetBackref(ofs, length, dist))
-        } else {
-          Err(DeflateReadError::UnexpectedOffsetSigil)
-        }
-      }
       too_high => Err(DeflateReadError::CodeOutOfRange(too_high)),
     }
   }

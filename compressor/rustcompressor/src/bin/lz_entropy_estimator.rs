@@ -87,7 +87,7 @@ fn main() {
 
   let maxmatch = LZMaximums::max();
   log::info!("Using maxmatch of {:?}", maxmatch);
-  let rules = LZRules::new(false, maxmatch);
+  let rules = LZRules::new(maxmatch);
   let stream = LZ77SymStream::from_uncompressed_bytes(&opts.data[..], &rules);
 
   let mut unique_syms = HashSet::new();

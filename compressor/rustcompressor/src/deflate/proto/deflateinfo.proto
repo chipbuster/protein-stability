@@ -11,17 +11,10 @@ message Backref {
     uint32 distance = 2;
 }
 
-message OffsetBackref {
-    uint32 offset = 1;
-    uint32 length = 2;
-    uint32 distance = 3;
-}
-
 message DeflateSym {
     oneof sym {
         Literal lit = 1;
         Backref backref = 2;
-        OffsetBackref offset = 3;
     }
 }
 
