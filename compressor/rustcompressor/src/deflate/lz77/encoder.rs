@@ -72,20 +72,14 @@ impl LZRules {
 
 /// Assuming a match of size `length-1` succeeded at this index, does a match of `length` succeed?
 #[inline]
-fn check_match_valid(
-  data: &[u8],
-  data_start: Index,
-  match_start: Index,
-  length: Len,
-  offset: u8,
-) -> bool {
+fn check_match_valid(data: &[u8], data_start: Index, match_start: Index, length: Len) -> bool {
   assert!(data_start > match_start); // Assert that we're looking back, not forwards
   let no_data_overrun = data_start + length < data.len();
   let match_no_overlap = match_start + length <= data_start;
   if !no_data_overrun || !match_no_overlap {
     return false;
   }
-  data[data_start + length - 1] == data[match_start + length - 1].wrapping_add(offset)
+  data[data_start + length - 1] == data[match_start + length - 1]
 }
 
 /// Given a match of length three at the given indices, attempt to expand this to the
@@ -94,27 +88,15 @@ fn longest_match_at_index(
   data: &[u8],
   data_start: Index,
   match_start: Index,
-  offset: u8,
   lzrules: &LZRules,
 ) -> Len {
   let mut len = 3;
-  assert_eq!(len, 3); // If the min match length changes, the offset code will need to change
-  if offset == 0 {
-    assert_eq!(
-      data[data_start..data_start + len],
-      data[match_start..match_start + len]
-    );
-  } else {
-    let data_init = (data[data_start], data[data_start + 1], data[data_start + 2]);
-    let match_init = (
-      data[match_start].wrapping_add(offset),
-      data[match_start + 1].wrapping_add(offset),
-      data[match_start + 2].wrapping_add(offset),
-    );
-    assert_eq!(data_init, match_init);
-  }
-  while len < lzrules.limits.max_length
-    && check_match_valid(data, data_start, match_start, len + 1, offset)
+  assert_eq!(len, 3);
+  assert_eq!(
+    data[data_start..data_start + len],
+    data[match_start..match_start + len]
+  );
+  while len < lzrules.limits.max_length && check_match_valid(data, data_start, match_start, len + 1)
   {
     len += 1;
   }
@@ -138,7 +120,7 @@ fn find_longest_match(
 
   for m in match_indices {
     let i = **m;
-    let len = longest_match_at_index(data, start, i, 0, lzrules);
+    let len = longest_match_at_index(data, start, i, lzrules);
     if len > max_len {
       max_len = len;
       max_index = i;
@@ -150,7 +132,7 @@ fn find_longest_match(
   (start - max_index, max_len)
 }
 
-/// Find an offset backref for this location in the input. Returns a tuple
+/// Find a backref for this location in the input. Returns a tuple
 /// containing the symbol(s) to add to the output along with a usize indicating
 /// how far to advance the input stream.
 ///
@@ -310,7 +292,6 @@ where
   assert!(valid_range.contains(&lzrules.limits.max_length));
 
   let mut deflate_match_table = HashMap::<(u8, u8, u8), VecDeque<Index>>::new();
-  let mut offset_match_table = HashMap::<(u8, u8), VecDeque<Index>>::new();
   let mut output: Vec<LZSym<T>> = Vec::new();
 
   let mut index = 0usize;
@@ -348,10 +329,6 @@ where
       log::debug!("Finished {}/{}, {}%", index, data.len(), percent);
       let _ = checkpoints.pop();
     }
-
-    // The style here is not great: we re-use lzrules internally to tell the core
-    // compression algorithm what we want to do, conflating its usage with whether
-    // the user wants offset compression or not.
 
     let (deflate_len, deflate_syms) =
       find_deflate_backref(&mut deflate_match_table, &data, index, lzrules);

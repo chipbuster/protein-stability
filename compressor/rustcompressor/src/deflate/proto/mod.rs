@@ -1,6 +1,6 @@
 use crate::deflate::codepoints::{MAX_DIST_CODE, MIN_DIST_CODE};
 use crate::deflate::*;
-use std::{convert::TryFrom, unimplemented};
+use std::convert::TryFrom;
 
 use super::codepoints::MAX_LENGTH_CODE;
 
